@@ -12,11 +12,36 @@ Markdown note in your vault — nothing is locked in a database, and nothing lea
 
 ## Screenshots
 
-<!-- screenshot: plot grid with scene cards -->
-<!-- screenshot: Story Codex character gallery + guided sheet -->
-<!-- screenshot: Writers Panel outline + typewriter writing -->
-<!-- screenshot: Social Map of character relationships -->
-<!-- screenshot: project dashboard with word goals and sprint timer -->
+All pictures show *Saltmarch*, the sample story that comes with Plotverk — open it from the
+Welcome page with **Look at a sample demo first**.
+
+**Plot grid** — scenes laid out against beats, characters and plotlines.
+
+![Plot grid with scene cards](screenshots/plot-grid.png)
+
+**Story Codex** — every character, place and faction in one searchable gallery.
+
+![Story Codex character gallery](screenshots/codex.png)
+
+**Writing** — your chapters in order beside a calm, distraction-free page.
+
+![Writers Panel and typewriter writing](screenshots/typewriter.png)
+
+**Family tree** — drawn from the relationships on your character sheets.
+
+![Family tree](screenshots/family-tree.png)
+
+**Connections map** — who knows whom, who hates whom, and what ties them together.
+
+![Connections map](screenshots/connections-map.png)
+
+**Timeline** — your world's history in eras and events.
+
+![Timeline with eras and events](screenshots/timeline.png)
+
+**Dashboard** — word goals, progress and a look across the whole book.
+
+![Project dashboard](screenshots/dashboard.png)
 
 ## Plan your plot on a grid
 
