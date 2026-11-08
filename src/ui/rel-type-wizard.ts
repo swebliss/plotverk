@@ -201,7 +201,7 @@ export function mountRelTypeWizard(host: HTMLElement, plugin: StorygridPlugin, o
 	setPhosphorIcon(moreToggle, 'plus', '+');
 
 	const more = root.createDiv({ cls: 'sg-rtw-more' });
-	more.style.display = 'none';
+	more.setCssStyles({ display: 'none' });
 
 	const intensityRow = more.createDiv({ cls: 'sg-rtw-row' });
 	intensityRow.createEl('label', { text: t('relWizard.bondStrength'), attr: { for: `sg-rtw-intensity-${uid}` } });

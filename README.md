@@ -113,7 +113,7 @@ that you can drag to reorder or nest, plus quick access to your notes, goals, an
    places, with your first plot grid open and ready.
 4. Double-click any empty cell to add your first scene card.
 
-Requires Obsidian 1.4.4 or later. Works on desktop and on the Obsidian mobile apps. The
+Requires Obsidian 1.7.2 or later. Works on desktop and on the Obsidian mobile apps. The
 interface is in English, with Spanish and French translations in progress.
 
 <details>

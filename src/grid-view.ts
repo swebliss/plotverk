@@ -273,8 +273,8 @@ export class StorygridView extends ItemView {
 			this._panelClickOutsideHandler = null;
 		}
 	// Safety: restore body styles in case a resize drag was interrupted
-		document.body.style.userSelect = '';
-		document.body.style.cursor = '';
+		document.body.setCssStyles({ userSelect: '' });
+		document.body.setCssStyles({ cursor: '' });
 		// Flush any pending panel edits before the final save
 		this.cancelDraftTimer();
 		if (this._panelDraft) {
@@ -685,7 +685,7 @@ export class StorygridView extends ItemView {
 		cols.forEach((col, colIndex) => {
 			const th = headerRow.createEl('th', { cls: 'sg-col-header' });
 			th.setAttribute('data-col-id', col.id);
-			th.style.cursor = 'grab';
+			th.setCssStyles({ cursor: 'grab' });
 
 			const colW = col.width ?? DEFAULT_COL_W;
 			this.pinWidth(th, colW);
@@ -724,9 +724,9 @@ export class StorygridView extends ItemView {
 				rowHeader.addClass('sg-axis-tinted');
 				rowHeader.style.setProperty('--sg-axis-line', axisLineColor([row.color]));
 				if (row.color.includes('gradient(')) {
-					rowHeader.style.borderLeft = 'none';
+					rowHeader.setCssStyles({ borderLeft: 'none' });
 					rowHeader.style.backgroundImage = row.color;
-					rowHeader.style.backgroundSize = 'cover';
+					rowHeader.setCssStyles({ backgroundSize: 'cover' });
 				} else {
 					rowHeader.style.borderLeft = `4px solid ${row.color}`;
 					// Fill the whole header cell with the writer's own colour (see axisTint).
@@ -777,7 +777,7 @@ export class StorygridView extends ItemView {
 				} else if (hasRowGradient || hasColGradient) {
 					// Palette gradients → the gradient at full strength
 					td.style.backgroundImage = (hasRowGradient ? row.color : col.color)!;
-					td.style.backgroundSize = 'cover';
+					td.setCssStyles({ backgroundSize: 'cover' });
 				}
 				// A filled cell needs a dark divider — the default faint line vanishes on it.
 				if (row.color || col.color) {
@@ -948,7 +948,7 @@ export class StorygridView extends ItemView {
 						if (preview) {
 							this.renderCardText(notesEl, preview);
 						} else {
-							notesEl.style.display = 'none';
+							notesEl.setCssStyles({ display: 'none' });
 						}
 					});
 			}
@@ -1593,11 +1593,11 @@ export class StorygridView extends ItemView {
 			liveSwapEl.style.transition = animate
 				? 'transform 0.45s cubic-bezier(0.25, 1, 0.5, 1)'
 				: 'none';
-			liveSwapEl.style.transform = '';
-			liveSwapEl.style.zIndex    = '';
-			liveSwapEl.style.boxShadow = '';
+			liveSwapEl.setCssStyles({ transform: '' });
+			liveSwapEl.setCssStyles({ zIndex: '' });
+			liveSwapEl.setCssStyles({ boxShadow: '' });
 			const prev = liveSwapEl;
-			if (animate) setTimeout(() => { prev.style.transition = ''; }, 220);
+			if (animate) setTimeout(() => { prev.setCssStyles({ transition: '' }); }, 220);
 			liveSwapEl = null;
 		};
 
@@ -1612,8 +1612,8 @@ export class StorygridView extends ItemView {
 			this.dragCardId = null;
 			this.dragType = null;
 			isDragging = false;
-			document.body.style.userSelect = '';
-			document.body.style.cursor = '';
+			document.body.setCssStyles({ userSelect: '' });
+			document.body.setCssStyles({ cursor: '' });
 		};
 
 		const onPointerMove = (e: PointerEvent) => {
@@ -1627,8 +1627,8 @@ export class StorygridView extends ItemView {
 				dragScale = this.measureGridScale();
 				this.dragType = 'card';
 				this.dragCardId = card.id;
-				document.body.style.userSelect = 'none';
-				document.body.style.cursor = 'grabbing';
+				document.body.setCssStyles({ userSelect: 'none' });
+				document.body.setCssStyles({ cursor: 'grabbing' });
 
 				// Collapse before cloning — must also reset inline minHeight or ghost inherits expanded size
 				el.classList.remove('sg-card--expanded');
@@ -1695,9 +1695,9 @@ export class StorygridView extends ItemView {
 							const srcRect = sourceCell.getBoundingClientRect();
 							const dx = toLayoutPx(srcRect.left - occRect.left, dragScale);
 							const dy = toLayoutPx(srcRect.top  - occRect.top,  dragScale);
-							occupant.style.zIndex     = '1';
-							occupant.style.boxShadow  = 'none'; // slide flat, not lifted
-							occupant.style.transition = 'transform 0.45s cubic-bezier(0.25, 1, 0.5, 1)';
+							occupant.setCssStyles({ zIndex: '1' });
+							occupant.setCssStyles({ boxShadow: 'none' }); // slide flat, not lifted
+							occupant.setCssStyles({ transition: 'transform 0.45s cubic-bezier(0.25, 1, 0.5, 1)' });
 							occupant.style.transform  = `translate(${dx}px, ${dy}px)`;
 							liveSwapEl = occupant;
 						}
@@ -1745,8 +1745,8 @@ export class StorygridView extends ItemView {
 			this.dragCardId = null;
 			this.dragType   = null;
 			isDragging = false;
-			document.body.style.userSelect = '';
-			document.body.style.cursor     = '';
+			document.body.setCssStyles({ userSelect: '' });
+			document.body.setCssStyles({ cursor: '' });
 			if (!cell) {
 				ghost?.remove();
 				el.classList.remove('sg-dragging');
@@ -1774,14 +1774,14 @@ export class StorygridView extends ItemView {
 					const dy = toLayoutPx(ghostRect.top  - nr.top,  dragScale);
 					// Flat slide into place — same easing/duration as the displaced-card
 					// slide, no scale/opacity pop, so it settles smoothly (no snap).
-					droppedCard.style.transition = 'none';
+					droppedCard.setCssStyles({ transition: 'none' });
 					droppedCard.style.transform  = `translate(${dx}px, ${dy}px)`;
 					droppedCard.offsetHeight;
-					droppedCard.style.transition = 'transform 0.45s cubic-bezier(0.25, 1, 0.5, 1)';
-					droppedCard.style.transform  = '';
+					droppedCard.setCssStyles({ transition: 'transform 0.45s cubic-bezier(0.25, 1, 0.5, 1)' });
+					droppedCard.setCssStyles({ transform: '' });
 					setTimeout(() => {
-						droppedCard.style.transition = '';
-						droppedCard.style.transform  = '';
+						droppedCard.setCssStyles({ transition: '' });
+						droppedCard.setCssStyles({ transform: '' });
 					}, 470);
 				} else {
 					droppedCard?.classList.add('sg-card--just-dropped');
@@ -1797,14 +1797,14 @@ export class StorygridView extends ItemView {
 						const mr = movedCard.getBoundingClientRect();
 						const dx = toLayoutPx(swapRect.left - mr.left, dragScale);
 						const dy = toLayoutPx(swapRect.top  - mr.top,  dragScale);
-						movedCard.style.transition = 'none';
+						movedCard.setCssStyles({ transition: 'none' });
 						movedCard.style.transform  = `translate(${dx}px, ${dy}px)`;
 						movedCard.offsetHeight;
-						movedCard.style.transition = 'transform 0.45s cubic-bezier(0.25, 1, 0.5, 1)';
-						movedCard.style.transform  = '';
+						movedCard.setCssStyles({ transition: 'transform 0.45s cubic-bezier(0.25, 1, 0.5, 1)' });
+						movedCard.setCssStyles({ transform: '' });
 						setTimeout(() => {
-							movedCard.style.transition = '';
-							movedCard.style.transform  = '';
+							movedCard.setCssStyles({ transition: '' });
+							movedCard.setCssStyles({ transform: '' });
 						}, 470);
 					}
 				}
@@ -1951,12 +1951,12 @@ export class StorygridView extends ItemView {
 		};
 
 		const resetAll = () => {
-			rowTrs.forEach(tr => { tr.style.transition = 'none'; });
+			rowTrs.forEach(tr => { tr.setCssStyles({ transition: 'none' }); });
 			void this.contentEl.offsetHeight; // one reflow to flush transition:none
 			rowTrs.forEach(tr => {
-				tr.style.transform = '';
-				tr.style.willChange = '';
-				tr.style.transition = '';
+				tr.setCssStyles({ transform: '' });
+				tr.setCssStyles({ willChange: '' });
+				tr.setCssStyles({ transition: '' });
 			});
 			el.classList.remove('sg-header--lifted');
 			rowTrs.clear();
@@ -1969,8 +1969,8 @@ export class StorygridView extends ItemView {
 				isDragging = true;
 				this.dragType = 'row';
 				this.dragRowIndex = rowIndex;
-				document.body.style.userSelect = 'none';
-				document.body.style.cursor = 'grabbing';
+				document.body.setCssStyles({ userSelect: 'none' });
+				document.body.setCssStyles({ cursor: 'grabbing' });
 
 				// Build <tr> map and snapshot mid-Y — scoped to this contentEl only
 				rows.forEach((r, i) => {
@@ -1986,15 +1986,15 @@ export class StorygridView extends ItemView {
 
 				const dragTr = rowTrs.get(row.id)!;
 				rowHeight = dragTr.offsetHeight;
-				dragTr.style.transition = 'none';
-				dragTr.style.willChange = 'transform';
+				dragTr.setCssStyles({ transition: 'none' });
+				dragTr.setCssStyles({ willChange: 'transform' });
 
 				rows.forEach((r, i) => {
 					if (i === rowIndex) return;
 					const tr = rowTrs.get(r.id);
 					if (tr) {
-						tr.style.transition = 'transform 0.45s cubic-bezier(0.25, 1, 0.5, 1)';
-						tr.style.willChange = 'transform';
+						tr.setCssStyles({ transition: 'transform 0.45s cubic-bezier(0.25, 1, 0.5, 1)' });
+						tr.setCssStyles({ willChange: 'transform' });
 					}
 				});
 
@@ -2033,8 +2033,8 @@ export class StorygridView extends ItemView {
 			isDragging = false;
 			hoverIndex = rowIndex;
 			lastHoverIndex = -1;
-			document.body.style.userSelect = '';
-			document.body.style.cursor = '';
+			document.body.setCssStyles({ userSelect: '' });
+			document.body.setCssStyles({ cursor: '' });
 			resetAll();
 		};
 
@@ -2050,8 +2050,8 @@ export class StorygridView extends ItemView {
 			isDragging = false;
 			hoverIndex = rowIndex;
 			lastHoverIndex = -1;
-			document.body.style.userSelect = '';
-			document.body.style.cursor = '';
+			document.body.setCssStyles({ userSelect: '' });
+			document.body.setCssStyles({ cursor: '' });
 			resetAll();
 
 			if (!didDrag || toIndex === rowIndex || !this.gridData) return;
@@ -2105,15 +2105,15 @@ export class StorygridView extends ItemView {
 		};
 
 		const resetAll = () => {
-			colElems.forEach(elems => elems.forEach(e => { e.style.transition = 'none'; }));
+			colElems.forEach(elems => elems.forEach(e => { e.setCssStyles({ transition: 'none' }); }));
 			void this.contentEl.offsetHeight;
 			colElems.forEach(elems => elems.forEach(e => {
-				e.style.transform = '';
-				e.style.willChange = '';
-				e.style.transition = '';
+				e.setCssStyles({ transform: '' });
+				e.setCssStyles({ willChange: '' });
+				e.setCssStyles({ transition: '' });
 			}));
 			el.classList.remove('sg-header--lifted');
-			el.style.pointerEvents = '';
+			el.setCssStyles({ pointerEvents: '' });
 			colElems.clear();
 		};
 
@@ -2124,8 +2124,8 @@ export class StorygridView extends ItemView {
 				isDragging = true;
 				this.dragType = 'col';
 				this.dragColIndex = colIndex;
-				document.body.style.userSelect = 'none';
-				document.body.style.cursor = 'grabbing';
+				document.body.setCssStyles({ userSelect: 'none' });
+				document.body.setCssStyles({ cursor: 'grabbing' });
 
 				// Snapshot column mid-X and build element map — scoped to this contentEl only
 				cols.forEach((c, i) => {
@@ -2144,16 +2144,16 @@ export class StorygridView extends ItemView {
 				colWidth = el.offsetWidth;
 				const dragElems = colElems.get(col.id) ?? [];
 				dragElems.forEach(e => {
-					e.style.transition = 'none';
-					e.style.willChange = 'transform';
+					e.setCssStyles({ transition: 'none' });
+					e.setCssStyles({ willChange: 'transform' });
 				});
-				el.style.pointerEvents = 'none';
+				el.setCssStyles({ pointerEvents: 'none' });
 
 				cols.forEach((c, i) => {
 					if (i === colIndex) return;
 					(colElems.get(c.id) ?? []).forEach(e => {
-						e.style.transition = 'transform 0.45s cubic-bezier(0.25, 1, 0.5, 1)';
-						e.style.willChange = 'transform';
+						e.setCssStyles({ transition: 'transform 0.45s cubic-bezier(0.25, 1, 0.5, 1)' });
+						e.setCssStyles({ willChange: 'transform' });
 					});
 				});
 
@@ -2192,8 +2192,8 @@ export class StorygridView extends ItemView {
 			isDragging = false;
 			hoverIndex = colIndex;
 			lastHoverIndex = -1;
-			document.body.style.userSelect = '';
-			document.body.style.cursor = '';
+			document.body.setCssStyles({ userSelect: '' });
+			document.body.setCssStyles({ cursor: '' });
 			resetAll();
 		};
 
@@ -2209,8 +2209,8 @@ export class StorygridView extends ItemView {
 			isDragging = false;
 			hoverIndex = colIndex;
 			lastHoverIndex = -1;
-			document.body.style.userSelect = '';
-			document.body.style.cursor = '';
+			document.body.setCssStyles({ userSelect: '' });
+			document.body.setCssStyles({ cursor: '' });
 			resetAll();
 
 			if (!didDrag || toIndex === colIndex || !this.gridData) return;
@@ -2275,7 +2275,7 @@ export class StorygridView extends ItemView {
 			const rect = th.getBoundingClientRect();
 			th.style.cursor = (e.clientX >= rect.right - this.EDGE_PX) ? 'col-resize' : 'grab';
 		});
-		th.addEventListener('mouseleave', () => { th.style.cursor = 'grab'; });
+		th.addEventListener('mouseleave', () => { th.setCssStyles({ cursor: 'grab' }); });
 
 		th.addEventListener('pointerdown', (e) => {
 			if (e.button !== 0) return;
@@ -2292,8 +2292,8 @@ export class StorygridView extends ItemView {
 		const startX = e.clientX;
 		const startWidth = th.offsetWidth;
 		th.classList.add('sg-col-header--resizing');
-		document.body.style.userSelect = 'none';
-		document.body.style.cursor = 'col-resize';
+		document.body.setCssStyles({ userSelect: 'none' });
+		document.body.setCssStyles({ cursor: 'col-resize' });
 
 		// Cache cells once so pointermove doesn't query DOM every frame
 		const cells = Array.from(
@@ -2307,8 +2307,8 @@ export class StorygridView extends ItemView {
 			done = true;
 			cancelAnimationFrame(rafId);
 			th.classList.remove('sg-col-header--resizing');
-			document.body.style.userSelect = '';
-			document.body.style.cursor = '';
+			document.body.setCssStyles({ userSelect: '' });
+			document.body.setCssStyles({ cursor: '' });
 			document.removeEventListener('pointermove',   onMove);
 			document.removeEventListener('pointerup',     onUp);
 			document.removeEventListener('pointercancel', onUp);
@@ -2363,14 +2363,14 @@ export class StorygridView extends ItemView {
 		rowHeader.addEventListener('mousemove', (e) => {
 			const rect = rowHeader.getBoundingClientRect();
 			if (e.clientX >= rect.right - this.EDGE_PX) {
-				rowHeader.style.cursor = 'col-resize';
+				rowHeader.setCssStyles({ cursor: 'col-resize' });
 			} else if (e.clientY >= rect.bottom - this.EDGE_PX) {
-				rowHeader.style.cursor = 'row-resize';
+				rowHeader.setCssStyles({ cursor: 'row-resize' });
 			} else {
-				rowHeader.style.cursor = 'grab';
+				rowHeader.setCssStyles({ cursor: 'grab' });
 			}
 		});
-		rowHeader.addEventListener('mouseleave', () => { rowHeader.style.cursor = 'grab'; });
+		rowHeader.addEventListener('mouseleave', () => { rowHeader.setCssStyles({ cursor: 'grab' }); });
 
 		rowHeader.addEventListener('pointerdown', (e) => {
 			if (e.button !== 0) return;
@@ -2392,8 +2392,8 @@ export class StorygridView extends ItemView {
 		const startX = e.clientX;
 		const startWidth = rowHeader.offsetWidth;
 		rowHeader.classList.add('sg-row-header--resizing');
-		document.body.style.userSelect = 'none';
-		document.body.style.cursor = 'col-resize';
+		document.body.setCssStyles({ userSelect: 'none' });
+		document.body.setCssStyles({ cursor: 'col-resize' });
 
 		// Get all row headers and the corner cell
 		const allRowHeaders = Array.from(
@@ -2408,8 +2408,8 @@ export class StorygridView extends ItemView {
 			done = true;
 			cancelAnimationFrame(rafId);
 			rowHeader.classList.remove('sg-row-header--resizing');
-			document.body.style.userSelect = '';
-			document.body.style.cursor = '';
+			document.body.setCssStyles({ userSelect: '' });
+			document.body.setCssStyles({ cursor: '' });
 			document.removeEventListener('pointermove',   onMove);
 			document.removeEventListener('pointerup',     onUp);
 			document.removeEventListener('pointercancel', onUp);
@@ -2453,8 +2453,8 @@ export class StorygridView extends ItemView {
 		const startY = e.clientY;
 		const startHeight = tr.offsetHeight;
 		rowHeader.classList.add('sg-row-header--resizing');
-		document.body.style.userSelect = 'none';
-		document.body.style.cursor = 'row-resize';
+		document.body.setCssStyles({ userSelect: 'none' });
+		document.body.setCssStyles({ cursor: 'row-resize' });
 
 		let rafId = 0;
 		let done = false;
@@ -2463,8 +2463,8 @@ export class StorygridView extends ItemView {
 			done = true;
 			cancelAnimationFrame(rafId);
 			rowHeader.classList.remove('sg-row-header--resizing');
-			document.body.style.userSelect = '';
-			document.body.style.cursor = '';
+			document.body.setCssStyles({ userSelect: '' });
+			document.body.setCssStyles({ cursor: '' });
 			document.removeEventListener('pointermove',   onMove);
 			document.removeEventListener('pointerup',     onUp);
 			document.removeEventListener('pointercancel', onUp);
@@ -2855,13 +2855,13 @@ export class StorygridView extends ItemView {
 	private readonly LIGHT_DEFAULT_COLORS = ['#fafafa', '#f5f4f2', '#f0f4ff', '#f5f7ff', '#ffffff'];
 
 	applyCardBackground(el: HTMLElement, color: string): void {
-		el.style.backgroundColor = '';
+		el.setCssStyles({ backgroundColor: '' });
 		if (this.LIGHT_DEFAULT_COLORS.includes(color.toLowerCase())) {
-			el.style.background = 'var(--sg-default-card-bg)';
+			el.setCssStyles({ background: 'var(--sg-default-card-bg)' });
 		} else if (color.includes('gradient(')) {
 			el.style.background = color;
 		} else {
-			el.style.background = '';
+			el.setCssStyles({ background: '' });
 			el.style.backgroundColor = color;
 		}
 	}
@@ -3409,7 +3409,7 @@ export class StorygridView extends ItemView {
 						placeholder: i18n('grid.panel.searchScene'),
 					});
 					const suggest = searchWrap.createDiv({ cls: 'sg-panel-suggest' });
-					suggest.style.display = 'none';
+					suggest.setCssStyles({ display: 'none' });
 					// The "Create new scene page" row (built below) sits right under the search box, where the
 					// floating file list opens: hide it while the list is open so a tap can't land on a file instead.
 					let actionRow: HTMLElement | null = null;
@@ -3426,8 +3426,8 @@ export class StorygridView extends ItemView {
 								&& (!query || f.path.toLowerCase().includes(lower)))
 							.sort((a, b) => b.stat.mtime - a.stat.mtime)
 							.slice(0, 10);
-						if (!files.length) { suggest.style.display = 'none'; syncActionRow(); return; }
-						suggest.style.display = 'block';
+						if (!files.length) { suggest.setCssStyles({ display: 'none' }); syncActionRow(); return; }
+						suggest.setCssStyles({ display: 'block' });
 						syncActionRow();
 						files.forEach((f) => {
 							const item = suggest.createDiv({ cls: 'sg-panel-suggest-item', text: f.basename });
@@ -3435,7 +3435,7 @@ export class StorygridView extends ItemView {
 							item.addEventListener('mousedown', (e) => {
 								e.preventDefault();
 								draft.linkedDocPath = f.path;
-								suggest.style.display = 'none';
+								suggest.setCssStyles({ display: 'none' });
 								if (!draft.synopsis.trim()) {
 									const docSynopsis = this.app.metadataCache.getFileCache(f)?.frontmatter?.['synopsis'];
 									if (typeof docSynopsis === 'string' && docSynopsis.trim()) {
@@ -3451,7 +3451,7 @@ export class StorygridView extends ItemView {
 					};
 					input.addEventListener('input', () => showSuggestions(input.value));
 					input.addEventListener('focus', () => showSuggestions(input.value));
-					input.addEventListener('blur', () => { setTimeout(() => { suggest.style.display = 'none'; syncActionRow(); }, 150); });
+					input.addEventListener('blur', () => { setTimeout(() => { suggest.setCssStyles({ display: 'none' }); syncActionRow(); }, 150); });
 
 					// "Create new scene page" — the same form as right-click → Create scene document, with the
 					// card's title filled in. Nothing is created unless the writer confirms the form.
@@ -3552,7 +3552,7 @@ export class StorygridView extends ItemView {
 					const name = entityPath.split('/').pop()?.replace(/\.md$/, '') || entityPath;
 					const chip = eventChips.createDiv({ cls: 'sg-chip sg-chip--entity' });
 					chip.title = i18n('grid.panel.openDocTooltip');
-					chip.style.cursor = 'pointer';
+					chip.setCssStyles({ cursor: 'pointer' });
 					chip.createSpan({ text: `⚡ ${name}` });
 					chip.addEventListener('click', (e) => {
 						if ((e.target as HTMLElement).classList.contains('sg-chip-remove')) return;
@@ -3617,7 +3617,7 @@ export class StorygridView extends ItemView {
 					const name = charFilePath.split('/').pop()?.replace(/\.md$/, '') || charFilePath;
 					const chip = charContainer.createDiv({ cls: 'sg-chip sg-chip--character' });
 					chip.title = i18n('grid.panel.openCharacterTooltip');
-					chip.style.cursor = 'pointer';
+					chip.setCssStyles({ cursor: 'pointer' });
 					chip.createSpan({ text: name });
 					chip.addEventListener('click', (e) => {
 						if ((e.target as HTMLElement).classList.contains('sg-chip-remove')) return;
@@ -3697,7 +3697,7 @@ export class StorygridView extends ItemView {
 						const name = entityPath.split('/').pop()?.replace(/\.md$/, '') || entityPath;
 						const chip = chipContainer.createDiv({ cls: 'sg-chip sg-chip--entity' });
 						chip.title = i18n('grid.panel.openDocTooltip');
-						chip.style.cursor = 'pointer';
+						chip.setCssStyles({ cursor: 'pointer' });
 						chip.createSpan({ text: `${emoji} ${name}` });
 						chip.addEventListener('click', (e) => {
 							if ((e.target as HTMLElement).classList.contains('sg-chip-remove')) return;
@@ -3836,7 +3836,7 @@ export class StorygridView extends ItemView {
 				const clr = row.createEl('button', { cls: 'sg-panel-btn-small', text: i18n('grid.panel.clearFrame'), title: i18n('grid.panel.removeFrameColorTooltip') });
 				clr.addEventListener('click', () => {
 					draft.frameColor = undefined;
-					swatch.style.background = '#cccccc';
+					swatch.setCssStyles({ background: '#cccccc' });
 					framePicker?.close();
 					swatch.classList.remove('sg-panel-color-swatch--active');
 					autoSaveNow();

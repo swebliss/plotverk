@@ -1,8 +1,8 @@
 {
   "id": "plotverk",
   "name": "Plotverk",
-  "version": "1.0.0",
-  "minAppVersion": "1.4.4",
+  "version": "1.0.1",
+  "minAppVersion": "1.7.2",
   "description": "A simple, all-in-one novel-writing suite. Plan your book on a story grid, write your chapters, and build your world — all in one place, inside the privacy of your vault.",
   "author": "Emma",
   "authorUrl": "https://twitch.tv/swebliss",

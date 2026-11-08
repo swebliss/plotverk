@@ -1133,7 +1133,7 @@ export class EntityModal extends Modal {
 			const sentenceEl = relAdd.createDiv({ cls: 'sg-sheet-rel-add-sentence' });
 			const previewEl = relAdd.createDiv({ cls: 'sg-sheet-rel-add-preview' });
 			const relWizardHost = row.createDiv({ cls: 'sg-rtw-host' });
-			relWizardHost.style.display = 'none';
+			relWizardHost.setCssStyles({ display: 'none' });
 
 			// Relationship-type dropdown (custom types first, then common words,
 			// then — when a plugin reference is available — a way to define a new one).
@@ -1258,7 +1258,7 @@ export class EntityModal extends Modal {
 			const openTypeWizard = (): void => {
 				if (!this.plugin) return;
 				const plugin = this.plugin;
-				relWizardHost.style.display = '';
+				relWizardHost.setCssStyles({ display: '' });
 				mountRelTypeWizard(relWizardHost, plugin, {
 					onCreated: (created) => {
 						this.relationChoices = relationChoices(plugin.settings.customRelationshipTypes);
@@ -1267,13 +1267,13 @@ export class EntityModal extends Modal {
 						wordIndex = idx >= 0 ? idx : 0;
 						relSelect.value = String(wordIndex);
 						relWizardHost.empty();
-						relWizardHost.style.display = 'none';
+						relWizardHost.setCssStyles({ display: 'none' });
 						setPending(otherName());
 						renderAdder();
 					},
 					onCancel: () => {
 						relWizardHost.empty();
-						relWizardHost.style.display = 'none';
+						relWizardHost.setCssStyles({ display: 'none' });
 						relSelect.value = String(wordIndex);
 						renderAdder();
 					},

@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf } from 'obsidian';
+import { EventRef, ItemView, WorkspaceLeaf } from 'obsidian';
 import type StorygridPlugin from './main';
 import { RelGraphController } from './rel-graph-view';
 import { StoryTreeController } from './story-tree-view';
@@ -88,8 +88,9 @@ export class SocialMapsView extends ItemView {
 		document.addEventListener('storygrid:project-changed', onProjectChanged);
 		this.register(() => document.removeEventListener('storygrid:project-changed', onProjectChanged));
 		// Series mode on/off changes which projects exist (series vs books) without a project change.
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		this.registerEvent((this.app.workspace as any).on('storygrid:settings-changed', () => {
+		// A custom event name, so it goes through a narrow type rather than Workspace's own overloads.
+		const workspace = this.app.workspace as unknown as { on(name: string, callback: () => void): EventRef };
+		this.registerEvent(workspace.on('storygrid:settings-changed', () => {
 			if (this.setRequestedRoot(this.explicitRoot)) this.remount(false);
 		}));
 	}

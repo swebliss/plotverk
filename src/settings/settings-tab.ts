@@ -463,29 +463,29 @@ export class StorygridSettingsTab extends PluginSettingTab {
 		});
 		const addSeriesBtn = addSeriesRow.createEl('button', { cls: 'sg-series-mgr-btn', text: t('settings.projects.addSeries.button') });
 		const newSeriesNameErr = parent.createDiv({ cls: 'sg-series-mgr-err-msg', attr: { 'aria-live': 'polite' } });
-		newSeriesNameErr.style.display = 'none';
-		newSeriesNameErr.style.color = 'var(--text-error)';
-		newSeriesNameErr.style.fontSize = '12px';
-		newSeriesNameErr.style.marginTop = '4px';
+		newSeriesNameErr.setCssStyles({ display: 'none' });
+		newSeriesNameErr.setCssStyles({ color: 'var(--text-error)' });
+		newSeriesNameErr.setCssStyles({ fontSize: '12px' });
+		newSeriesNameErr.setCssStyles({ marginTop: '4px' });
 		addSeriesBtn.addEventListener('click', async () => {
 			const name = newSeriesName.value.trim();
 			const rootPath = newSeriesRoot.value.trim();
 			if (!name) {
 				newSeriesName.addClass('sg-series-mgr-err');
 				newSeriesNameErr.setText('Enter a series name');
-				newSeriesNameErr.style.display = '';
+				newSeriesNameErr.setCssStyles({ display: '' });
 				return;
 			}
 			newSeriesName.removeClass('sg-series-mgr-err');
-			newSeriesNameErr.style.display = 'none';
+			newSeriesNameErr.setCssStyles({ display: 'none' });
 			if (!rootPath) {
 				newSeriesRoot.addClass('sg-series-mgr-err');
 				newSeriesNameErr.setText('Enter a folder path');
-				newSeriesNameErr.style.display = '';
+				newSeriesNameErr.setCssStyles({ display: '' });
 				return;
 			}
 			newSeriesRoot.removeClass('sg-series-mgr-err');
-			newSeriesNameErr.style.display = 'none';
+			newSeriesNameErr.setCssStyles({ display: 'none' });
 			const sid = 'series_' + generateId().slice(0, 8);
 			this.plugin.settings.seriesRegistry![sid] = { name, rootPath };
 			this.plugin.settings.activeSeriesId = sid;
@@ -965,15 +965,15 @@ export class StorygridSettingsTab extends PluginSettingTab {
 				.setButtonText(t('settings.relTypes.createButton'))
 				.setCta()
 				.onClick(() => {
-					wizardBtnRow.settingEl.style.display = 'none';
-					wizardHost.style.display = '';
+					wizardBtnRow.settingEl.setCssStyles({ display: 'none' });
+					wizardHost.setCssStyles({ display: '' });
 					mountRelTypeWizard(wizardHost, this.plugin, {
 						onCreated: () => this.display(),
 						onCancel: () => this.display(),
 					});
 				}));
 		const wizardHost = sec.createDiv({ cls: 'sg-rtw-host' });
-		wizardHost.style.display = 'none';
+		wizardHost.setCssStyles({ display: 'none' });
 	}
 
 	// ── Writing ───────────────────────────────────────────────────────────────
@@ -1436,7 +1436,7 @@ export class StorygridSettingsTab extends PluginSettingTab {
 		});
 
 		const formEl = wrapper.createDiv({ cls: 'sg-custom-template-form-body' });
-		formEl.style.display = 'none';
+		formEl.setCssStyles({ display: 'none' });
 
 		const refresh = () => {
 			formEl.empty();
@@ -1458,7 +1458,7 @@ export class StorygridSettingsTab extends PluginSettingTab {
 					type: 'text', value: label, cls: 'sg-character-field-label',
 					attr: { 'aria-label': `Row ${i + 1} label` },
 				});
-				input.style.flex = '1';
+				input.setCssStyles({ flex: '1' });
 				input.addEventListener('input', () => { rowLabels[i] = input.value; });
 				const del = row.createEl('button', { text: '✕', cls: 'sg-character-field-delete' });
 				del.addEventListener('click', () => { rowLabels.splice(i, 1); refresh(); });
@@ -1474,7 +1474,7 @@ export class StorygridSettingsTab extends PluginSettingTab {
 					type: 'text', value: label, cls: 'sg-character-field-label',
 					attr: { 'aria-label': `Column ${i + 1} label` },
 				});
-				input.style.flex = '1';
+				input.setCssStyles({ flex: '1' });
 				input.addEventListener('input', () => { colLabels[i] = input.value; });
 				const del = row.createEl('button', { text: '✕', cls: 'sg-character-field-delete' });
 				del.addEventListener('click', () => { colLabels.splice(i, 1); refresh(); });
@@ -1484,7 +1484,7 @@ export class StorygridSettingsTab extends PluginSettingTab {
 
 			// Save / Cancel
 			const actions = formEl.createDiv({ cls: 'sg-modal-actions' });
-			actions.style.marginTop = '12px';
+			actions.setCssStyles({ marginTop: '12px' });
 
 			const saveBtn = actions.createEl('button', { cls: 'sg-modal-btn sg-modal-btn-primary', text: t('settings.customTemplateForm.save') });
 			saveBtn.addEventListener('click', async () => {
@@ -1503,8 +1503,8 @@ export class StorygridSettingsTab extends PluginSettingTab {
 			const cancelBtn = actions.createEl('button', { cls: 'sg-modal-btn', text: t('settings.customTemplateForm.cancel') });
 			cancelBtn.addEventListener('click', () => {
 				expanded = false;
-				formEl.style.display = 'none';
-				addBtn.style.display = '';
+				formEl.setCssStyles({ display: 'none' });
+				addBtn.setCssStyles({ display: '' });
 			});
 		};
 
@@ -1568,7 +1568,7 @@ export class StorygridSettingsTab extends PluginSettingTab {
 					btn.setIcon(active ? 'check-circle' : 'lock');
 					btn.setTooltip(active ? t('settings.pro.features.active') : t('settings.pro.features.requiresPro'));
 					btn.extraSettingsEl.addClass(active ? 'sg-pro-feature-active' : 'sg-pro-feature-locked');
-					btn.extraSettingsEl.style.cursor = 'default';
+					btn.extraSettingsEl.setCssStyles({ cursor: 'default' });
 				});
 		}
 	}

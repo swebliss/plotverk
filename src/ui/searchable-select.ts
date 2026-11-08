@@ -91,7 +91,7 @@ export function renderSearchableSelect(
 	const empty = document.createElement('div');
 	empty.className = 'sg-select-empty';
 	empty.textContent = 'Nothing matches that.';
-	empty.style.display = 'none';
+	empty.setCssStyles({ display: 'none' });
 	panel.appendChild(empty);
 	document.body.appendChild(panel);
 
@@ -255,10 +255,10 @@ export function renderSearchableSelect(
 		const openUp = spaceBelow < panelHeight + 8 && rect.top > spaceBelow;
 		panel.classList.toggle('sg-select-panel--up', openUp);
 		if (openUp) {
-			panel.style.top = '';
+			panel.setCssStyles({ top: '' });
 			panel.style.bottom = `${window.innerHeight - rect.top + 6}px`;
 		} else {
-			panel.style.bottom = '';
+			panel.setCssStyles({ bottom: '' });
 			panel.style.top = `${rect.bottom + 6}px`;
 		}
 	}

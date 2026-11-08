@@ -177,7 +177,7 @@ function renderTextareaWidget(container: HTMLElement, field: CharacterField, mod
 	ta.value = field.value;
 	ta.setAttr('aria-label', field.label);
 	const grow = () => {
-		ta.style.height = 'auto';
+		ta.setCssStyles({ height: 'auto' });
 		ta.style.height = `${Math.min(ta.scrollHeight + 2, 360)}px`;
 	};
 	ta.addEventListener('input', () => { callbacks.onChange(ta.value); grow(); });
@@ -560,7 +560,7 @@ function renderColorWidget(container: HTMLElement, field: CharacterField, mode: 
 			swatch.removeClass('is-empty');
 			picker.value = v;
 		} else {
-			swatch.style.background = '';
+			swatch.setCssStyles({ background: '' });
 			swatch.addClass('is-empty');
 		}
 	};

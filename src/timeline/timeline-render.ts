@@ -152,7 +152,7 @@ function makeIconGlyph(icon: EventIconEntry, x: number, y: number, size: number,
 		width: String(size), height: String(size),
 		viewBox: '0 0 256 256',
 	}) as SVGSVGElement;
-	svg.style.pointerEvents = 'none';
+	svg.setCssStyles({ pointerEvents: 'none' });
 	// The glyph sits on a fill the WRITER chose, where a fixed light color
 	// disappears the moment that fill is a pastel — so the caller passes
 	// glyphColorOn()'s dark-or-light pick (the same rule that keeps grid card
@@ -1107,7 +1107,7 @@ export class TimelineController {
 			this.panClientStart = { x: e.clientX, y: e.clientY };
 			this.panTxStart = this.tx;
 			this.panTyStart = this.ty;
-			svg.style.cursor = 'grabbing';
+			svg.setCssStyles({ cursor: 'grabbing' });
 		});
 
 		svg.addEventListener('pointermove', (e: PointerEvent) => {
@@ -1166,13 +1166,13 @@ export class TimelineController {
 					this.panClientStart = { x: pt.x, y: pt.y };
 					this.panTxStart = this.tx;
 					this.panTyStart = this.ty;
-					svg.style.cursor = 'grabbing';
+					svg.setCssStyles({ cursor: 'grabbing' });
 				} else {
 					// Gesture over, and it ended as a pinch: the 'grabbing' cursor set
 					// back when it began as a pan was never cleared, and the zoom that
 					// just happened needs the same off-screen-culling refresh a
 					// finished pan gets — neither used to run on this path.
-					svg.style.cursor = '';
+					svg.setCssStyles({ cursor: '' });
 					this.scheduleCullRefresh();
 				}
 			}
@@ -1183,7 +1183,7 @@ export class TimelineController {
 			if (this.panning && e.pointerId === this.panPointerId) {
 				this.panning = false;
 				this.panPointerId = null;
-				svg.style.cursor = '';
+				svg.setCssStyles({ cursor: '' });
 				this.scheduleCullRefresh();
 			}
 
@@ -1488,8 +1488,8 @@ export class TimelineController {
 				}) as SVGLineElement;
 				edge.style.stroke = color;
 				edge.style.strokeOpacity = eraOpacity(0.45);
-				edge.style.strokeWidth = '1px';
-				edge.style.pointerEvents = 'none';
+				edge.setCssStyles({ strokeWidth: '1px' });
+				edge.setCssStyles({ pointerEvents: 'none' });
 				bandLayer.appendChild(edge);
 			}
 			// The name: a dot in the era's colour and its name, in plain screen
@@ -1500,8 +1500,8 @@ export class TimelineController {
 			if (Platform.isMobile) {
 				// The name is small; a finger gets a 44pt-tall target along it (sized once measured, below).
 				const hit = makeSvg('rect', { class: 'sg-tl-era-label-hit', x: '-6', y: String(-TOUCH_HIT_RADIUS), height: String(2 * TOUCH_HIT_RADIUS), width: '0' }) as SVGRectElement;
-				hit.style.fill = 'transparent';
-				hit.style.pointerEvents = 'all';
+				hit.setCssStyles({ fill: 'transparent' });
+				hit.setCssStyles({ pointerEvents: 'all' });
 				k.appendChild(hit);
 			}
 			const dot = makeSvg('circle', { cx: '4', cy: '0', r: '4' }) as SVGCircleElement;
@@ -1510,9 +1510,9 @@ export class TimelineController {
 			const text = makeSvg('text', { class: 'sg-tl-era-name', x: '13', y: '0', 'dominant-baseline': 'central' }) as SVGTextElement;
 			text.textContent = truncate(era.name, NODE_LABEL_MAX + 4);
 			// Inline too (CSS adds only the halo): readable before a reloaded stylesheet, in the theme's own muted text colour.
-			text.style.fill = 'var(--text-muted)';
-			text.style.fontSize = '12px';
-			text.style.fontWeight = '600';
+			text.setCssStyles({ fill: 'var(--text-muted)' });
+			text.setCssStyles({ fontSize: '12px' });
+			text.setCssStyles({ fontWeight: '600' });
 			k.appendChild(text);
 			at.appendChild(k);
 			nameLayer.appendChild(at);
@@ -1780,12 +1780,12 @@ export class TimelineController {
 			if (Platform.isMobile) {
 				// Invisible, finger-sized target around a badge that may be smaller.
 				const hit = makeSvg('circle', { class: 'sg-tl-node-hit', r: String(Math.max(TOUCH_HIT_RADIUS, r + badgeHaloFor(r))) }) as SVGCircleElement;
-				hit.style.fill = 'transparent';
-				hit.style.pointerEvents = 'all';
+				hit.setCssStyles({ fill: 'transparent' });
+				hit.setCssStyles({ pointerEvents: 'all' });
 				k.appendChild(hit);
 			}
 			const halo = makeSvg('circle', { class: 'sg-tl-node-halo', r: String(r + badgeHaloFor(r)) }) as SVGCircleElement;
-			halo.style.fill = 'var(--background-primary)';
+			halo.setCssStyles({ fill: 'var(--background-primary)' });
 			k.appendChild(halo);
 			// The ring is the disc's own stroke, inset so the badge's outer edge sits at exactly r.
 			const ringWidth = badgeRingWidthFor(r);
@@ -1826,9 +1826,9 @@ export class TimelineController {
 			const arrow = makeSvg('polygon', { points: pts.map((p) => p.join(',')).join(' ') }) as SVGPolygonElement;
 			// The bar's gradient runs along time, so the arrow carries on in its LAST colour.
 			arrow.style.fill = solidFromColor(colorOf(evt.id), 'last');
-			arrow.style.stroke = 'var(--background-primary)';
-			arrow.style.strokeWidth = '1.5px';
-			arrow.style.strokeLinejoin = 'round';
+			arrow.setCssStyles({ stroke: 'var(--background-primary)' });
+			arrow.setCssStyles({ strokeWidth: '1.5px' });
+			arrow.setCssStyles({ strokeLinejoin: 'round' });
 			k.appendChild(arrow);
 			at.appendChild(k);
 			parent.appendChild(at);
@@ -2048,8 +2048,8 @@ export class TimelineController {
 					x: String(horizontal ? b.rect.x : b.rect.x - grow), y: String(horizontal ? b.rect.y - grow : b.rect.y),
 					width: String(horizontal ? b.rect.width : b.rect.width + 2 * grow), height: String(horizontal ? b.rect.height + 2 * grow : b.rect.height),
 				}) as SVGRectElement;
-				hit.style.fill = 'transparent';
-				hit.style.pointerEvents = 'all';
+				hit.setCssStyles({ fill: 'transparent' });
+				hit.setCssStyles({ pointerEvents: 'all' });
 				g.appendChild(hit);
 			}
 			if (b.ongoing) paintArrow(g, b.endCenter, horizontal ? b.rect.height : b.rect.width, evt);

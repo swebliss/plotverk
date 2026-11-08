@@ -26,7 +26,7 @@ export class EntityPopover {
 
 	constructor(private readonly plugin: StorygridPlugin) {
 		this.el = document.body.createDiv({ cls: 'sg-entity-popover' });
-		this.el.style.display = 'none';
+		this.el.setCssStyles({ display: 'none' });
 		this.el.addEventListener('mouseenter', () => this.cancelHide());
 		this.el.addEventListener('mouseleave', () => this.scheduleHide());
 	}
@@ -63,7 +63,7 @@ export class EntityPopover {
 	scheduleHide(): void {
 		this.cancelHide();
 		this.hideTimer = window.setTimeout(() => {
-			this.el.style.display = 'none';
+			this.el.setCssStyles({ display: 'none' });
 			this.currentEntityId = null;
 		}, HIDE_DELAY_MS);
 	}
@@ -119,8 +119,8 @@ export class EntityPopover {
 		}
 
 		// Show then measure for positioning
-		el.style.display = '';
-		el.style.visibility = 'hidden';
+		el.setCssStyles({ display: '' });
+		el.setCssStyles({ visibility: 'hidden' });
 	}
 
 	private position(anchorRect: DOMRect): void {
@@ -142,7 +142,7 @@ export class EntityPopover {
 
 		el.style.top = `${top}px`;
 		el.style.left = `${left}px`;
-		el.style.visibility = '';
+		el.setCssStyles({ visibility: '' });
 	}
 }
 

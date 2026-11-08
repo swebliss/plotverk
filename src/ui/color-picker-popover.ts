@@ -385,7 +385,7 @@ export class InlineColorPicker {
 		this._saveAsBtn.textContent = 'Save as palette';
 		this._saveAsBtn.title = 'Turn your saved colors into a reusable palette';
 		this._saveAsBtn.addEventListener('click', () => this._saveAsPalette());
-		if (!this._opts.onCreatePalette) this._saveAsBtn.style.display = 'none';
+		if (!this._opts.onCreatePalette) this._saveAsBtn.setCssStyles({ display: 'none' });
 
 		this._savedGrid = div('sg-cpick-saved-grid', controls);
 		this._renderSaved();
@@ -592,19 +592,19 @@ export class InlineColorPicker {
 			elm.style.maxHeight = `${elm.scrollHeight}px`;
 			void elm.offsetWidth;
 			elm.classList.add('sg-cpick-collapsed');
-			elm.style.maxHeight = '0px';
+			elm.setCssStyles({ maxHeight: '0px' });
 			window.setTimeout(() => {
-				if (elm.classList.contains('sg-cpick-collapsed')) elm.style.display = 'none';
+				if (elm.classList.contains('sg-cpick-collapsed')) elm.setCssStyles({ display: 'none' });
 			}, 260);
 		} else {
-			elm.style.display = '';
+			elm.setCssStyles({ display: '' });
 			elm.classList.remove('sg-cpick-collapsed');
 			const h = elm.scrollHeight;
-			elm.style.maxHeight = '0px';
+			elm.setCssStyles({ maxHeight: '0px' });
 			void elm.offsetWidth;
 			elm.style.maxHeight = `${h}px`;
 			window.setTimeout(() => {
-				if (!elm.classList.contains('sg-cpick-collapsed')) elm.style.maxHeight = '';
+				if (!elm.classList.contains('sg-cpick-collapsed')) elm.setCssStyles({ maxHeight: '' });
 			}, 260);
 		}
 	}

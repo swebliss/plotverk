@@ -508,12 +508,12 @@ export default class StorygridPlugin extends Plugin {
 		// Word count status bar chip — shows live word count of the open scene
 		this.wordCountStatusEl = this.addStatusBarItem();
 		this.wordCountStatusEl.addClass('sg-status-wordcount');
-		this.wordCountStatusEl.style.display = 'none';
+		this.wordCountStatusEl.setCssStyles({ display: 'none' });
 
 		// Sprint countdown chip — visible only during an active sprint
 		this.sprintEl = this.addStatusBarItem();
 		this.sprintEl.addClass('sg-status-sprint', 'mod-clickable');
-		this.sprintEl.style.display = 'none';
+		this.sprintEl.setCssStyles({ display: 'none' });
 		this.sprintEl.setAttribute('aria-label', 'Writing sprint — click for options');
 		this.sprintEl.addEventListener('click', (e) => {
 			const menu = new Menu();
@@ -1135,7 +1135,7 @@ export default class StorygridPlugin extends Plugin {
 	async refreshWordCountChip(): Promise<void> {
 		const file = this.app.workspace.getActiveFile();
 		if (!file || file.extension !== 'md') {
-			if (this.wordCountStatusEl) this.wordCountStatusEl.style.display = 'none';
+			if (this.wordCountStatusEl) this.wordCountStatusEl.setCssStyles({ display: 'none' });
 			return;
 		}
 		try {
@@ -1144,7 +1144,7 @@ export default class StorygridPlugin extends Plugin {
 			const goal = this.getWordGoalFor(file.path);
 			this.renderWordCountChip(wc, goal);
 		} catch {
-			if (this.wordCountStatusEl) this.wordCountStatusEl.style.display = 'none';
+			if (this.wordCountStatusEl) this.wordCountStatusEl.setCssStyles({ display: 'none' });
 		}
 	}
 
@@ -1162,7 +1162,7 @@ export default class StorygridPlugin extends Plugin {
 	/** Write the computed word count (and optional goal) into the status bar chip. */
 	private renderWordCountChip(words: number, goal: number | null): void {
 		if (!this.wordCountStatusEl) return;
-		this.wordCountStatusEl.style.display = '';
+		this.wordCountStatusEl.setCssStyles({ display: '' });
 		if (goal && goal > 0) {
 			const pct = Math.min(100, Math.round((words / goal) * 100));
 			this.wordCountStatusEl.setText(`${words.toLocaleString()} / ${goal.toLocaleString()}w · ${pct}%`);
@@ -1355,10 +1355,10 @@ export default class StorygridPlugin extends Plugin {
 	private updateSprintChip(remainingMs?: number): void {
 		if (!this.sprintEl) return;
 		if (remainingMs === undefined) {
-			this.sprintEl.style.display = 'none';
+			this.sprintEl.setCssStyles({ display: 'none' });
 			return;
 		}
-		this.sprintEl.style.display = '';
+		this.sprintEl.setCssStyles({ display: '' });
 		const totalSecs = Math.ceil(remainingMs / 1000);
 		const mins = Math.floor(totalSecs / 60);
 		const secs = totalSecs % 60;

@@ -1733,7 +1733,7 @@ export class StoryTreeController {
 				this.isPinching = true;
 				this.panning = false;
 				this.panPointerId = null;
-				svg.style.cursor = '';
+				svg.setCssStyles({ cursor: '' });
 				this.pinchPointerIds = [firstId, e.pointerId];
 				const a = this.activePointers.get(firstId);
 				const b = this.activePointers.get(e.pointerId);
@@ -1751,7 +1751,7 @@ export class StoryTreeController {
 			this.panClientStart = { x: e.clientX, y: e.clientY };
 			this.panTxStart = this.tx;
 			this.panTyStart = this.ty;
-			svg.style.cursor = 'grabbing';
+			svg.setCssStyles({ cursor: 'grabbing' });
 		});
 
 		svg.addEventListener('pointermove', (e: PointerEvent) => {
@@ -1803,7 +1803,7 @@ export class StoryTreeController {
 					this.panClientStart = { x: pt.x, y: pt.y };
 					this.panTxStart = this.tx;
 					this.panTyStart = this.ty;
-					svg.style.cursor = 'grabbing';
+					svg.setCssStyles({ cursor: 'grabbing' });
 				}
 			}
 
@@ -1826,7 +1826,7 @@ export class StoryTreeController {
 			if (this.panning && e.pointerId === this.panPointerId) {
 				this.panning = false;
 				this.panPointerId = null;
-				svg.style.cursor = '';
+				svg.setCssStyles({ cursor: '' });
 			}
 		};
 

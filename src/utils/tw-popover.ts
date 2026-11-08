@@ -77,14 +77,14 @@ export function showTypewriterPopover(anchor: HTMLElement, plugin: StorygridPlug
 
 	// ── Position above the anchor ─────────────────────────────────────────────
 	// First pass: measure at default position to get popover height
-	pop.style.visibility = 'hidden';
+	pop.setCssStyles({ visibility: 'hidden' });
 	const ar = anchor.getBoundingClientRect();
 	const pr = pop.getBoundingClientRect();
 	const top = ar.top - pr.height - 6;
 	const left = Math.min(ar.right - pr.width, window.innerWidth - pr.width - 8);
 	pop.style.top = `${Math.max(8, top)}px`;
 	pop.style.left = `${Math.max(8, left)}px`;
-	pop.style.visibility = '';
+	pop.setCssStyles({ visibility: '' });
 
 	// ── Close on outside click ────────────────────────────────────────────────
 	const close = (e: MouseEvent) => {

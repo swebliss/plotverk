@@ -539,7 +539,7 @@ export function renderFieldCreatorCard(container: HTMLElement, options: FieldCre
 	categorySelect.createEl('option', { text: '+ New group…', value: NEW_CATEGORY_SENTINEL });
 	const newCategoryInput = categoryRow.createEl('input', { cls: 'sg-sheet-field-input', type: 'text' });
 	newCategoryInput.placeholder = 'Group name';
-	newCategoryInput.style.display = 'none';
+	newCategoryInput.setCssStyles({ display: 'none' });
 	categorySelect.addEventListener('change', () => {
 		newCategoryInput.style.display = categorySelect.value === NEW_CATEGORY_SENTINEL ? '' : 'none';
 		if (categorySelect.value === NEW_CATEGORY_SENTINEL) newCategoryInput.focus();

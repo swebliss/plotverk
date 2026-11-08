@@ -1042,7 +1042,7 @@ export class RelGraphController {
 		if (!hoveredPath) {
 			this.edgeGroup.querySelectorAll<SVGPathElement>('.sg-rg-edge').forEach((path) => {
 				path.classList.remove('is-highlighted', 'is-dimmed');
-				path.style.stroke = '';
+				path.setCssStyles({ stroke: '' });
 			});
 			this.edgeGroup.querySelectorAll<SVGTextElement>('.sg-rg-edge-label').forEach((label) => {
 				label.classList.remove('is-highlighted', 'is-dimmed');
@@ -1074,7 +1074,7 @@ export class RelGraphController {
 				const outColor = hoveredPath === a ? path.dataset.colorA : path.dataset.colorB;
 				path.style.stroke = outColor ?? '';
 			} else {
-				path.style.stroke = '';
+				path.setCssStyles({ stroke: '' });
 			}
 		});
 
@@ -1210,7 +1210,7 @@ export class RelGraphController {
 				this.isPinching = true;
 				this.panning = false;
 				this.panPointerId = null;
-				svg.style.cursor = '';
+				svg.setCssStyles({ cursor: '' });
 				this.pinchPointerIds = [others[0], e.pointerId];
 				const a = this.activePointers.get(others[0]);
 				const b = this.activePointers.get(e.pointerId);
@@ -1232,7 +1232,7 @@ export class RelGraphController {
 				this.panClientStart = { x: e.clientX, y: e.clientY };
 				this.panTxStart = this.tx;
 				this.panTyStart = this.ty;
-				svg.style.cursor = 'grabbing';
+				svg.setCssStyles({ cursor: 'grabbing' });
 			}
 		});
 
@@ -1307,7 +1307,7 @@ export class RelGraphController {
 					this.panClientStart = { x: pt.x, y: pt.y };
 					this.panTxStart = this.tx;
 					this.panTyStart = this.ty;
-					svg.style.cursor = 'grabbing';
+					svg.setCssStyles({ cursor: 'grabbing' });
 				}
 			}
 
@@ -1331,7 +1331,7 @@ export class RelGraphController {
 			if (this.panning && e.pointerId === this.panPointerId) {
 				this.panning = false;
 				this.panPointerId = null;
-				svg.style.cursor = '';
+				svg.setCssStyles({ cursor: '' });
 			}
 		};
 
@@ -1781,8 +1781,8 @@ export class RelGraphController {
 		if (bare > 0) {
 			const item = legend.createDiv({ cls: 'sg-rg-legend-item' });
 			const swatch = item.createDiv({ cls: 'sg-rg-legend-swatch' });
-			swatch.style.background = 'var(--text-faint)';
-			swatch.style.height = '1px';
+			swatch.setCssStyles({ background: 'var(--text-faint)' });
+			swatch.setCssStyles({ height: '1px' });
 			item.createSpan({ cls: 'sg-rg-legend-label', text: `Unspecified (${bare})` });
 		}
 	}

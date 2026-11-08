@@ -1140,7 +1140,7 @@ export class StorygridOutlineView extends ItemView {
 	 * beforeId} on `this._treeDrop` for the row's dragend to apply.
 	 */
 	private setupTreeDrag(list: HTMLElement, tree: SceneTree): void {
-		list.style.position = 'relative';
+		list.setCssStyles({ position: 'relative' });
 		const line = list.createDiv({ cls: 'sg-outline-drop-line' });
 
 		const clearDropTargets = () => {
@@ -2274,7 +2274,7 @@ const list = body.createDiv({ cls: 'sg-outline-list' });
 					compileState.coverImagePath = file.path;
 					saveQuiet();
 					coverBtn.setText(coverName());
-					coverClear.style.display = '';
+					coverClear.setCssStyles({ display: '' });
 				}).open();
 			});
 			const coverClear = coverRow.createEl('button', { cls: 'sg-outline-scene-linkbtn', attr: { 'aria-label': i18n('outline.compile.removeCoverAria') } });
@@ -2284,7 +2284,7 @@ const list = body.createDiv({ cls: 'sg-outline-list' });
 				delete compileState.coverImagePath;
 				saveQuiet();
 				coverBtn.setText(coverName());
-				coverClear.style.display = 'none';
+				coverClear.setCssStyles({ display: 'none' });
 			});
 		}
 
@@ -2302,7 +2302,7 @@ const list = body.createDiv({ cls: 'sg-outline-list' });
 		fmtToggle.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleFmt(); } });
 
 		const fmtGroup = body.createDiv({ cls: 'sg-outline-fmt-group' });
-		if (!this._compileOptsOpen) fmtGroup.style.display = 'none';
+		if (!this._compileOptsOpen) fmtGroup.setCssStyles({ display: 'none' });
 
 		// Title page details (author and contact persist with the workflow)
 		if (wf.titlePage !== 'none') {
