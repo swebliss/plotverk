@@ -1,0 +1,10 @@
+{
+  "id": "plotverk",
+  "name": "Plotverk",
+  "version": "1.0.0",
+  "minAppVersion": "1.4.4",
+  "description": "Plot your novel on a visual grid — map scenes and beats against characters, plotlines, or themes. Outline chapters, build a story codex, chart a timeline, track writing goals, and compile your manuscript.",
+  "author": "Emma",
+  "authorUrl": "https://twitch.tv/swebliss",
+  "isDesktopOnly": false
+}

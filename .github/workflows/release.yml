@@ -1,0 +1,59 @@
+# Plotverk public release: push a version tag (e.g. 1.0.0, the same as manifest.json)
+# and GitHub tests, builds and publishes main.js + manifest.json + styles.css.
+# A tag with a dash (1.0.1-beta.1) is a pre-release for BRAT testers: it must match
+# manifest-beta.json instead, so manifest.json (what every Obsidian user reads) never
+# points at a beta.
+name: Release
+
+on:
+  push:
+    tags: ['*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tag must match the manifest
+        run: |
+          case "$GITHUB_REF_NAME" in
+            *-*) file=manifest-beta.json ;;
+            *)   file=manifest.json ;;
+          esac
+          if [ ! -f "$file" ]; then echo "$file is missing"; exit 1; fi
+          v=$(node -p "require('./$file').version")
+          if [ "$v" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match $file version $v"
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+
+      - name: No Pro engine code in the built plugin
+        run: |
+          if grep -q -e 'blood ran cold' -e 'at this point in time' -e 'grab:grabbed:grabbing' -e 'CRUTCH_ALWAYS' main.js; then
+            echo "main.js contains Pro engine code — stopping."
+            exit 1
+          fi
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pre=""
+          manifest=manifest.json
+          case "$GITHUB_REF_NAME" in *-*) pre="--prerelease"; manifest=manifest-beta.json ;; esac
+          mkdir -p out && cp main.js styles.css out/ && cp "$manifest" out/manifest.json
+          gh release create "$GITHUB_REF_NAME" out/main.js out/manifest.json out/styles.css \
+            --title "$GITHUB_REF_NAME" --generate-notes $pre
