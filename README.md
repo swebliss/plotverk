@@ -40,7 +40,6 @@ Welcome page with **Look at a sample demo first**.
 ![Timeline with eras and events](screenshots/timeline.png)
 
 **Dashboard** — word goals, progress and a look across the whole book.
-*Crutch words, Pace and Who's gone quiet are part of Plotverk Pro — coming soon.*
 
 ![Project dashboard](screenshots/dashboard.png)
 
