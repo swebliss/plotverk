@@ -120,8 +120,8 @@ interface is in English, with Spanish and French translations in progress.
 <summary>Installing manually instead</summary>
 
 Download `main.js`, `manifest.json`, and `styles.css` from the latest release, put all three
-into `YourVault/.obsidian/plugins/plotverk/`, then reload Obsidian and enable Plotverk under
-**Settings → Community plugins**.
+into the `.obsidian/plugins/plotverk/` folder inside your vault, then reload Obsidian and enable
+Plotverk under **Settings → Community plugins**.
 
 </details>
 
