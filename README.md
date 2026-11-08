@@ -132,7 +132,7 @@ nothing that expires. Plotverk Pro is coming soon.
 
 ## Your writing stays yours
 
-**Version 1 makes no network calls at all.** Nothing is uploaded, no account is required, no
+**Plotverk makes no network calls at all.** Nothing is uploaded, no account is required, no
 sign-in exists, and the plugin works entirely offline. Your writing stays in your vault, on your
 own machine.
 
