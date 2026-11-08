@@ -722,7 +722,7 @@ export class StorygridOutlineView extends ItemView {
 
 		} else if (completion) {
 			banner.addClass('is-success');
-			banner.style.setProperty('--sprint-fill', '100%');
+			banner.setCssProps({ '--sprint-fill': '100%' });
 			const mins = Math.max(1, Math.round(completion.elapsedMs / 60_000));
 
 			main.createDiv({ cls: 'sg-sprint-banner-success-title', text: i18n('outline.sprint.completeTitle') });
