@@ -14,7 +14,7 @@ export const KIND_COLORS: Record<string, string> = {
 };
 
 export function makeSvg(tag: string, attrs: Record<string, string> = {}): Element {
-	const el = activeDocument.createElementNS('http://www.w3.org/2000/svg', tag);
+	const el = createSvg(tag as keyof SVGElementTagNameMap);
 	for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
 	return el;
 }

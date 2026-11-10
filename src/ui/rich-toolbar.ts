@@ -72,7 +72,7 @@ export function buildPanelRichToolbar(toolbar: HTMLElement, editor: HTMLElement,
 			block.remove();
 			restoreCaret(li);
 		} else if (block.tagName.toLowerCase() !== tag) {
-			const repl = editor.ownerDocument.createElement(tag);
+			const repl = createEl(tag as keyof HTMLElementTagNameMap);
 			while (block.firstChild) repl.appendChild(block.firstChild);
 			block.replaceWith(repl);
 			restoreCaret(repl);

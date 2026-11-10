@@ -588,7 +588,7 @@ export class InlineColorPicker {
 			elm.classList.toggle('sg-cpick-collapsed', collapsed);
 			elm.toggle(!collapsed);
 			elm.toggleClass('sg-cpick-shut', collapsed);
-			elm.style.maxHeight = '';
+			elm.style.removeProperty('max-height');
 			return;
 		}
 		if (collapsed) {
@@ -596,7 +596,7 @@ export class InlineColorPicker {
 			void elm.offsetWidth;
 			elm.classList.add('sg-cpick-collapsed');
 			elm.addClass('sg-cpick-shut');
-			elm.style.maxHeight = '';
+			elm.style.removeProperty('max-height');
 			window.setTimeout(() => {
 				if (elm.classList.contains('sg-cpick-collapsed')) elm.hide();
 			}, 260);
@@ -609,7 +609,7 @@ export class InlineColorPicker {
 			elm.style.maxHeight = `${h}px`;
 			window.setTimeout(() => {
 				if (!elm.classList.contains('sg-cpick-collapsed')) {
-					elm.style.maxHeight = '';
+					elm.style.removeProperty('max-height');
 					elm.removeClass('sg-cpick-shut');
 				}
 			}, 260);

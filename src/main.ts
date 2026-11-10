@@ -474,7 +474,7 @@ export default class StorygridPlugin extends Plugin {
 				contextFor: (view) => {
 					const file = view.state.field(editorInfoField, false)?.file ?? null;
 					if (!this.coachMarksOn(file, () => view.state.doc.toString())) return null;
-					return this.coachScanOptions((file as TFile).path);
+					return file instanceof TFile ? this.coachScanOptions(file.path) : null;
 				},
 				showCard: (view, f, group, rect, viaTap) => this.coachCard?.show(view, f, group, rect, viaTap),
 				leaveMark: () => this.coachCard?.leaveMark(),
