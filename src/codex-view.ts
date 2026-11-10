@@ -29,6 +29,7 @@ import {
 	listSheetImages,
 	removalFor,
 	removeSheetImage,
+	resolveImageField,
 	saveImageForSheet,
 	sheetDeletePlan,
 	trashSheet,
@@ -613,7 +614,7 @@ export class StorygridCodexView extends ItemView {
 		const hero = page.createDiv({ cls: 'sg-detail-hero' });
 		const imageField = fields.find((f) => f.type === 'image' && f.value.trim());
 		const portrait = hero.createDiv({ cls: 'sg-detail-portrait' });
-		const imgFile = imageField ? this.app.vault.getAbstractFileByPath(imageField.value.trim()) : null;
+		const imgFile = imageField ? resolveImageField(this.app, imageField.value, file.path) : null;
 		if (imgFile instanceof TFile) {
 			portrait.createEl('img', { attr: { src: this.app.vault.getResourcePath(imgFile), alt: parsed.name } });
 		} else {

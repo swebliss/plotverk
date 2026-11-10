@@ -6,6 +6,7 @@ import { kindForFile } from '../entities/entity-manager';
 import { isFieldEmpty } from '../entities/field-types';
 import { renderFieldWidget } from './field-widgets';
 import { setPhosphorIcon } from '../utils/icons';
+import { resolveImageField } from '../entities/sheet-images';
 
 /**
  * Read-only, single-column Codex entity card for narrow surfaces (the Writers
@@ -77,7 +78,7 @@ export async function renderEntityPreview(el: HTMLElement, opts: EntityPreviewOp
 	const hero = root.createDiv({ cls: 'sg-outline-preview-hero' });
 	const imageField = filled.find((f) => f.type === 'image');
 	if (imageField) {
-		const imgFile = opts.app.vault.getAbstractFileByPath(imageField.value.trim());
+		const imgFile = resolveImageField(opts.app, imageField.value, opts.file.path);
 		if (imgFile instanceof TFile) {
 			const portrait = hero.createDiv({ cls: 'sg-outline-preview-portrait' });
 			portrait.createEl('img', { attr: { src: opts.app.vault.getResourcePath(imgFile), alt: parsed.name } });

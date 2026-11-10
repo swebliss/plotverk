@@ -14,7 +14,7 @@ import {
 	fieldCatalogForKind,
 } from '../entities/entity-kinds';
 import { setPhosphorIcon } from '../utils/icons';
-import { adoptImagesIntoSheetFolder, saveImageForSheet, SheetImageTarget, targetForSheet } from '../entities/sheet-images';
+import { adoptImagesIntoSheetFolder, resolveImageField, saveImageForSheet, SheetImageTarget, targetForSheet } from '../entities/sheet-images';
 import { entityFolderPath, localizedDefaultName } from '../entities/entity-manager';
 import { TextPromptModal, ConfirmModal } from './prompt-modal';
 import { EntityPickerModal } from './entity-picker-modal';
@@ -624,7 +624,7 @@ export class EntityModal extends Modal {
 
 		const portrait = rail.createEl('button', { cls: 'sg-sheet-portrait', attr: { type: 'button' } });
 		const file = portraitField?.value
-			? this.app.vault.getAbstractFileByPath(portraitField.value.trim())
+			? resolveImageField(this.app, portraitField.value, this.sheetPath ?? '')
 			: null;
 		if (file instanceof TFile) {
 			const img = portrait.createEl('img', { cls: 'sg-sheet-portrait-img' });

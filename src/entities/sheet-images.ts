@@ -97,6 +97,21 @@ function linkPath(raw: string): string {
 	return raw.split('|')[0].split('#')[0].trim();
 }
 
+/**
+ * The picture file an image field points at. A sheet writes it as a link
+ * ("Halvard Crane.jpg"), which Obsidian looks up by name, the same way the
+ * Codex cards and the Family tree find it. A full vault path also works.
+ * Returns null when no picture file is found.
+ */
+export function resolveImageField(app: App, raw: string, sourcePath: string): TFile | null {
+	const link = linkPath(raw);
+	if (!link) return null;
+	const byLink = app.metadataCache.getFirstLinkpathDest(link, sourcePath);
+	if (byLink instanceof TFile) return byLink;
+	const byPath = app.vault.getAbstractFileByPath(link);
+	return byPath instanceof TFile ? byPath : null;
+}
+
 function kindFromFrontmatter(app: App, file: TFile): EntityKind | null {
 	const v = app.metadataCache.getFileCache(file)?.frontmatter?.['storygrid-type'];
 	return typeof v === 'string' && hasKind(v) ? (v as EntityKind) : null;

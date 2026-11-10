@@ -10068,6 +10068,12 @@ body {
 	color: color-mix(in srgb, var(--sg-sheet-accent) 45%, transparent);
 }
 .sg-detail-portrait-ph svg { width: 48px; height: 48px; }
+/* Characters get a round profile picture; the image fills the circle (cropped, never stretched). */
+.sg-detail--character .sg-detail-portrait {
+	aspect-ratio: 1 / 1;
+	border-radius: 50%;
+}
+.sg-detail--character .sg-detail-portrait img { object-position: center 25%; }
 .sg-detail-hero-info {
 	position: relative;
 	z-index: 1;
