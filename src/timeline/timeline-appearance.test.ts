@@ -9,7 +9,7 @@ import {
 import { DEFAULT_LAYOUT_SPEC } from './timeline-layout';
 
 describe('DEFAULT_TIMELINE_APPEARANCE', () => {
-	// The whole point of B1 being visually inert: the model's defaults must be
+	// The whole point of the appearance model being visually inert: the model's defaults must be
 	// the numbers the layout engine already shipped with.
 	it('matches the layout engine defaults for the geometry knobs', () => {
 		expect(DEFAULT_TIMELINE_APPEARANCE.spacing).toBe(DEFAULT_LAYOUT_SPEC.spacing);
@@ -47,7 +47,7 @@ describe('fanSpacingFor()', () => {
 	});
 });
 
-describe('clampKnob() — B2.1 per-event/per-track size overrides read seam', () => {
+describe('clampKnob() per-event/per-track size overrides read seam', () => {
 	it('passes through an in-range value unchanged', () => {
 		expect(clampKnob(15, APPEARANCE_LIMITS.markerSize)).toBe(15);
 	});
@@ -151,7 +151,7 @@ describe('resolveAppearance()', () => {
 	});
 });
 
-describe('resolveAppearance() — spineColor (B3)', () => {
+describe('resolveAppearance() — spineColor', () => {
 	it('stays undefined with no override at all — "whatever styles.css paints today"', () => {
 		expect(resolveAppearance().spineColor).toBeUndefined();
 		expect(resolveAppearance({}, {}).spineColor).toBeUndefined();

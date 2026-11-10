@@ -154,7 +154,7 @@ export function removeLinks(text: string, opts: { wikilinks?: boolean; external?
 	if (opts.wikilinks !== false) {
 		// ![[embeds]] are dropped entirely; [[target|display]] keeps the display text
 		out = out.replace(/!\[\[[^\]]*\]\]/g, '');
-		out = out.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_m, target, display) => display ?? target);
+		out = out.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_m: string, target: string, display: string | undefined) => display ?? target);
 	}
 	if (opts.external !== false) {
 		out = out.replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1');
@@ -245,14 +245,14 @@ export function applyCompileSteps(
 			case 'prepend-title': {
 				const title = (ctx.title ?? '').trim();
 				if (!title) break;
-				const fmt = typeof step.options['format'] === 'string' ? (step.options['format'] as string) : '$1';
-				const sep = typeof step.options['separator'] === 'string' ? (step.options['separator'] as string) : '\\n\\n';
+				const fmt = typeof step.options['format'] === 'string' ? step.options['format'] : '$1';
+				const sep = typeof step.options['separator'] === 'string' ? (step.options['separator']) : '\\n\\n';
 				const rendered = formatSceneTitle(fmt, title, ctx.number ?? '', ctx.depth ?? 0);
 				out = rendered + expandEscapes(sep) + out;
 				break;
 			}
 			case 'add-frontmatter': {
-				const yaml = typeof step.options['yaml'] === 'string' ? (step.options['yaml'] as string).trim() : '';
+				const yaml = typeof step.options['yaml'] === 'string' ? (step.options['yaml']).trim() : '';
 				if (yaml) out = `---\n${yaml}\n---\n\n${out}`;
 				break;
 			}
@@ -736,13 +736,13 @@ export function migrateLegacyWorkflow(legacy: unknown): CompileWorkflowSettings 
 		name: 'My workflow',
 		output: wasScreenplay ? 'fountain' : 'md',
 		includeHeadings: old['includeBeatHeadings'] !== false,
-		sceneSeparator: typeof old['sceneSeparator'] === 'string' ? (old['sceneSeparator'] as string) : '***',
+		sceneSeparator: typeof old['sceneSeparator'] === 'string' ? (old['sceneSeparator']) : '***',
 		steps,
 		titlePage: (['none', 'novel', 'fountain'] as const).includes(old['titlePage'] as TitlePageStyle)
 			? (old['titlePage'] as TitlePageStyle)
 			: 'none',
-		author: typeof old['author'] === 'string' ? (old['author'] as string) : '',
-		contact: typeof old['contact'] === 'string' ? (old['contact'] as string) : '',
-		endMark: typeof old['endMark'] === 'string' ? (old['endMark'] as string) : '',
+		author: typeof old['author'] === 'string' ? old['author'] : '',
+		contact: typeof old['contact'] === 'string' ? (old['contact']) : '',
+		endMark: typeof old['endMark'] === 'string' ? (old['endMark']) : '',
 	};
 }

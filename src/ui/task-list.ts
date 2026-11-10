@@ -1,8 +1,9 @@
 import { App, Menu, SuggestModal, TFile } from 'obsidian';
 import { TodoItem, TaskLink, generateId } from '../grid-data';
 import { setPhosphorIcon } from '../utils/icons';
+import { runSafely } from '../utils/report-error';
 import { isSafetyNetPath } from '../utils/safety-paths';
-import { isOverdue, isDueToday, sortTasks, formatDue, reorderTasks, moveTaskToEnd, subtaskProgress, applySubtaskRollup } from '../utils/tasks';
+import { isOverdue, isDueToday, sortTasks, formatDue, reorderTasks, moveTaskToEnd, applySubtaskRollup } from '../utils/tasks';
 import { getLocale, t } from '../i18n';
 
 export interface TaskListRenderOptions {
@@ -165,7 +166,7 @@ export class TaskListController {
 				if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
 
 				// Build a clean minimal ghost — prevents the browser capturing surrounding elements.
-				const ghost = document.createElement('div');
+				const ghost = createDiv();
 				ghost.textContent = todo.text;
 				Object.assign(ghost.style, {
 					position: 'fixed', top: '-9999px', left: '-9999px',
@@ -180,10 +181,10 @@ export class TaskListController {
 					pointerEvents: 'none',
 					boxSizing: 'border-box',
 				});
-				document.body.appendChild(ghost);
+				wrap.doc.body.appendChild(ghost);
 				e.dataTransfer?.setDragImage(ghost, e.offsetX || 20, e.offsetY || 12);
-				setTimeout(() => {
-					if (document.body.contains(ghost)) document.body.removeChild(ghost);
+				window.setTimeout(() => {
+					if (ghost.isConnected) ghost.remove();
 					wrap.addClass('is-dragging');
 				}, 0);
 			});
@@ -331,10 +332,9 @@ export class TaskListController {
 		const subtasks = todo.subtasks;
 		const isExpanded = this._expandedTodos.has(todo.id);
 		const hasSubtasks = subtasks.length > 0;
-		const { done: doneCount, total: totalCount } = subtaskProgress(todo);
 		const isEditingText = this._editingTodoId === todo.id;
 
-		const wrap = document.createElement('div');
+		const wrap = createDiv();
 		wrap.addClass('sg-todo-wrap');
 		wrap.dataset.todoId = todo.id;
 
@@ -424,7 +424,7 @@ export class TaskListController {
 			chip.createSpan({ cls: 'sg-todo-link-chip-label', text: todo.link.label });
 			chip.addEventListener('click', (e) => {
 				e.stopPropagation();
-				app.workspace.openLinkText(todo.link!.path, '', false);
+				runSafely(app.workspace.openLinkText(todo.link!.path, '', false));
 			});
 			chip.setAttribute('title', t('taskList.link.openTitle', { path: todo.link.path }));
 		}
@@ -706,9 +706,10 @@ export class TaskListController {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function openDuePicker(anchor: HTMLElement, current: string, onChange: (val: string) => void): void {
-	document.querySelectorAll('.sg-due-popover').forEach((el) => el.remove());
+	const doc = anchor.doc;
+	doc.querySelectorAll('.sg-due-popover').forEach((el) => el.remove());
 
-	const pop = document.body.createDiv({ cls: 'sg-due-popover' });
+	const pop = doc.body.createDiv({ cls: 'sg-due-popover' });
 
 	const dateInp = pop.createEl('input', { cls: 'sg-due-date', type: 'date' });
 	const timeInp = pop.createEl('input', { cls: 'sg-due-time', type: 'time' });
@@ -737,8 +738,8 @@ function openDuePicker(anchor: HTMLElement, current: string, onChange: (val: str
 
 	const close = () => {
 		pop.remove();
-		document.removeEventListener('mousedown', outside, true);
-		document.removeEventListener('keydown', onKeydown, true);
+		doc.removeEventListener('mousedown', outside, true);
+		doc.removeEventListener('keydown', onKeydown, true);
 	};
 
 	applyBtn.addEventListener('click', () => {
@@ -758,8 +759,8 @@ function openDuePicker(anchor: HTMLElement, current: string, onChange: (val: str
 		if (e.key === 'Escape') close();
 	};
 	window.setTimeout(() => {
-		document.addEventListener('mousedown', outside, true);
-		document.addEventListener('keydown', onKeydown, true);
+		doc.addEventListener('mousedown', outside, true);
+		doc.addEventListener('keydown', onKeydown, true);
 	}, 0);
 }
 

@@ -36,7 +36,7 @@ export function registerEntityLinkInterceptor(plugin: StorygridPlugin): void {
 			void (async () => {
 				// Convert the markdown leaf to a Codex view in-place (no new tab)
 				await activeLeaf.setViewState({ type: VIEW_TYPE_CODEX, active: true });
-				plugin.app.workspace.revealLeaf(activeLeaf);
+				void plugin.app.workspace.revealLeaf(activeLeaf);
 				const view = activeLeaf.view as StorygridCodexView;
 
 				await view.showProject(projectRoot);

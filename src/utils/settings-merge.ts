@@ -16,7 +16,7 @@ type Plain = Record<string, unknown>;
 
 function isPlainObject(v: unknown): v is Plain {
 	if (v === null || typeof v !== 'object' || Array.isArray(v)) return false;
-	const proto = Object.getPrototypeOf(v);
+	const proto: unknown = Object.getPrototypeOf(v);
 	return proto === Object.prototype || proto === null;
 }
 

@@ -118,7 +118,7 @@ export function mountRelationshipEditor(
 			const shape = sentenceShapeFor(rel.label, {
 				customTypes: opts.plugin?.settings.customRelationshipTypes ?? [],
 				ownerKind: opts.ownerKind,
-				targetKind: typeof kind === 'string' ? kind as EntityKind : null,
+				targetKind: typeof kind === 'string' ? kind : null,
 			});
 			const sentence = row.createSpan({ cls: 'sg-rel-row-sentence' });
 			const sentenceOpts = { isCharacter: opts.ownerKind === 'character', otherName: rel.target, shape };

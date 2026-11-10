@@ -1,5 +1,5 @@
 import { App, TAbstractFile, TFile, TFolder } from 'obsidian';
-import { FakeVault } from '../test-support/fake-vault';
+import { FakeVault } from '../test/fake-vault';
 import { buildEntityDocument } from './entity-doc';
 import { assignRoot } from './entity-index';
 import { instantiateFields, getKindSpec } from './entity-kinds';

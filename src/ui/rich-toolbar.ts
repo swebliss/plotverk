@@ -21,7 +21,7 @@ export function buildPanelRichToolbar(toolbar: HTMLElement, editor: HTMLElement,
 	// Chromium runtime; the codebase already relies on it (see known-quirk #6).
 	const exec = (cmd: string, val?: string) => {
 		editor.focus();
-		document.execCommand(cmd, false, val);
+		editor.doc.execCommand(cmd, false, val);
 		onChange();
 		updateActive();
 	};
@@ -42,7 +42,7 @@ export function buildPanelRichToolbar(toolbar: HTMLElement, editor: HTMLElement,
 		if (!sel || sel.rangeCount === 0) return null;
 		const node = sel.anchorNode;
 		if (!node || !editor.contains(node)) return null;
-		const el = node instanceof HTMLElement ? node : node.parentElement;
+		const el = node.instanceOf(HTMLElement) ? node : node.parentElement;
 		const block = el?.closest('h1,h2,p,div,li') as HTMLElement | null;
 		// Never treat the editor root itself as a line block.
 		return block && block !== editor ? block : null;
@@ -60,7 +60,7 @@ export function buildPanelRichToolbar(toolbar: HTMLElement, editor: HTMLElement,
 		editor.focus();
 		if (!block) {
 			// Bare, unwrapped line (e.g. the very first line) — let the browser wrap it.
-			document.execCommand('formatBlock', false, tag === 'div' ? 'p' : tag);
+			editor.doc.execCommand('formatBlock', false, tag === 'div' ? 'p' : tag);
 		} else if (block.tagName === 'LI') {
 			// A raw bullet has no heading to change, and headings can't live in a
 			// list in our markdown model — ignore heading requests on a bullet.
@@ -119,9 +119,9 @@ export function buildPanelRichToolbar(toolbar: HTMLElement, editor: HTMLElement,
 		const block = lineBlock();
 		sizeGlyph.setText(block && /^h[12]$/i.test(block.tagName) ? block.tagName.toUpperCase() : 'Aa');
 		try {
-			boldBtn.toggleClass('is-active', document.queryCommandState('bold'));
-			italicBtn.toggleClass('is-active', document.queryCommandState('italic'));
-			listBtn.toggleClass('is-active', document.queryCommandState('insertUnorderedList'));
+			boldBtn.toggleClass('is-active', editor.doc.queryCommandState('bold'));
+			italicBtn.toggleClass('is-active', editor.doc.queryCommandState('italic'));
+			listBtn.toggleClass('is-active', editor.doc.queryCommandState('insertUnorderedList'));
 		} catch { /* queryCommandState throws when nothing is focused */ }
 	}
 	// Scoped to the editor element so listeners die with the panel — no leaks.

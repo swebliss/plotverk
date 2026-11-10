@@ -42,7 +42,7 @@ export const LEGACY_INTENT_MAP: Record<string, IntentId> = {
 	plotWrite: 'novelist',
 	buildWorld: 'worldbuilder',
 	runCampaign: 'worldbuilder',
-	// Storyboards moved to the standalone Videoflow plugin (2026-07-25); the
+	// Storyboards moved to the standalone Videoflow plugin; the
 	// retired video-creator intent falls back to showing everything.
 	createVideos: 'everything',
 	videoCreator: 'everything',
@@ -200,7 +200,7 @@ export const WRITERS_PANEL_TABS: WritersPanelTab[] = ['writing', 'world', 'coach
  * mode chosen) show all.
  */
 export function writersPanelTabDefault(tab: WritersPanelTab, intent: IntentId | null | undefined): boolean {
-	// Emma approved 2026-11-06: Worldbuilder = Codex + Progress too; Script Writer has no prose Coach.
+	// Worldbuilders get Codex + Progress too; script writers get no prose Coach.
 	if (intent === 'creator' || intent === 'worldbuilder') return tab === 'world' || tab === 'dashboard';
 	if (intent === 'scriptwriter') return tab !== 'coach';
 	return true;

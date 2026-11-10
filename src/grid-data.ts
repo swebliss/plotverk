@@ -15,7 +15,7 @@ import type { ProseCoachSettings } from './prose/coach-settings';
 export type QuickLinkKey = 'codex' | 'grid' | 'dashboard' | 'connectionsMap' | 'timeline';
 /**
  * WHERE a quick-link shortcut appears. These are two genuinely different
- * places, not one slider between them (Emma, 2026-09-06):
+ * places, not one slider between them:
  *  - 'panel' — INSIDE the Writers Panel, in its own header row. The default.
  *  - 'top'   — ABOVE it, in Obsidian's sidebar tab strip beside the Writers
  *              Panel tab. NEVER a default; only ever a manual choice.
@@ -938,7 +938,7 @@ export function draftEdits(baseline: SceneCard, draft: SceneCard): Partial<Scene
 		if (key === 'id' || key === 'rowId' || key === 'colId') continue;
 		if (JSON.stringify(before[key]) !== JSON.stringify(after[key])) edits[key] = after[key];
 	}
-	return edits as Partial<SceneCard>;
+	return edits;
 }
 
 /**

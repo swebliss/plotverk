@@ -120,7 +120,7 @@ export class ReferenceIndex {
         const fm = cache?.frontmatter;
         const stampedId =
             typeof fm?.['storygrid-id'] === 'string' && fm['storygrid-id']
-                ? (fm['storygrid-id'] as string)
+                ? fm['storygrid-id']
                 : null;
 
         const existingId = this.pathToId.get(file.path);
@@ -221,7 +221,7 @@ export class ReferenceIndex {
 
     /** Read `aliases` frontmatter as a string array (handles string | string[] | absent). */
     private readAliases(file: TFile): string[] {
-        const raw = this.app.metadataCache.getFileCache(file)?.frontmatter?.['aliases'];
+        const raw: unknown = this.app.metadataCache.getFileCache(file)?.frontmatter?.['aliases'];
         if (!raw) return [];
         if (Array.isArray(raw)) return raw.filter((a): a is string => typeof a === 'string');
         if (typeof raw === 'string') return [raw];

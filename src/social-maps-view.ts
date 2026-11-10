@@ -1,4 +1,6 @@
-import { EventRef, ItemView, WorkspaceLeaf } from 'obsidian';
+import { plotverkEvents } from './utils/plotverk-events';
+import { ItemView, WorkspaceLeaf } from 'obsidian';
+import { onSettingsChanged } from './utils/obsidian-internals';
 import type StorygridPlugin from './main';
 import { RelGraphController } from './rel-graph-view';
 import { StoryTreeController } from './story-tree-view';
@@ -35,7 +37,7 @@ export class SocialMapsView extends ItemView {
 	private tabEls: Partial<Record<SocialMapsTab, HTMLElement>> = {};
 	private bodyEl: HTMLElement | null = null;
 
-	private refreshTimer: ReturnType<typeof setTimeout> | null = null;
+	private refreshTimer: number | null = null;
 
 	constructor(leaf: WorkspaceLeaf, plugin: StorygridPlugin) {
 		super(leaf);
@@ -85,12 +87,11 @@ export class SocialMapsView extends ItemView {
 
 		// The Dashboard is the one place that changes the project: follow it in both tabs.
 		const onProjectChanged = () => { if (this.setRequestedRoot(null)) this.remount(false); };
-		document.addEventListener('storygrid:project-changed', onProjectChanged);
-		this.register(() => document.removeEventListener('storygrid:project-changed', onProjectChanged));
+		plotverkEvents.addEventListener('storygrid:project-changed', onProjectChanged);
+		this.register(() => plotverkEvents.removeEventListener('storygrid:project-changed', onProjectChanged));
 		// Series mode on/off changes which projects exist (series vs books) without a project change.
-		// A custom event name, so it goes through a narrow type rather than Workspace's own overloads.
-		const workspace = this.app.workspace as unknown as { on(name: string, callback: () => void): EventRef };
-		this.registerEvent(workspace.on('storygrid:settings-changed', () => {
+		// A custom event name, so it goes through the typed helper in utils/obsidian-internals.
+		this.registerEvent(onSettingsChanged(this.app.workspace, () => {
 			if (this.setRequestedRoot(this.explicitRoot)) this.remount(false);
 		}));
 	}
@@ -98,7 +99,7 @@ export class SocialMapsView extends ItemView {
 	async onClose(): Promise<void> {
 		this.mapCtrl?.unmount();
 		this.treeCtrl?.unmount();
-		if (this.refreshTimer) clearTimeout(this.refreshTimer);
+		if (this.refreshTimer) window.clearTimeout(this.refreshTimer);
 	}
 
 	/** Called when `plugin.openSocialMaps()` reuses an already-open leaf instead of creating one. */
@@ -221,8 +222,8 @@ export class SocialMapsView extends ItemView {
 
 	private scheduleRefresh(...paths: string[]): void {
 		if (paths.length > 0 && !paths.some((p) => this.touchesScope(p))) return;
-		if (this.refreshTimer) clearTimeout(this.refreshTimer);
-		this.refreshTimer = setTimeout(() => {
+		if (this.refreshTimer) window.clearTimeout(this.refreshTimer);
+		this.refreshTimer = window.setTimeout(() => {
 			(this.activeTab === 'map' ? this.mapCtrl : this.treeCtrl).refresh();
 		}, 600);
 	}

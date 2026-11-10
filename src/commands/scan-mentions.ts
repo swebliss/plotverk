@@ -112,7 +112,7 @@ export class ScanMentionsModal extends Modal {
             if (!isChecked) row.addClass('sg-scan-row--unchecked');
 
             // Checkbox
-            const checkbox = row.createEl('input', { type: 'checkbox' } as DomElementInfo) as HTMLInputElement;
+            const checkbox = row.createEl('input', { type: 'checkbox' });
             checkbox.checked = isChecked;
             checkbox.addEventListener('change', () => {
                 if (checkbox.checked) {
@@ -178,7 +178,7 @@ export class ScanMentionsModal extends Modal {
         const cancelBtn = footer.createEl('button', { cls: 'sg-scan-cancel-btn', text: 'Cancel' });
         cancelBtn.addEventListener('click', () => this.close());
 
-        this.applyBtn = footer.createEl('button', { cls: 'sg-scan-apply-btn' }) as HTMLButtonElement;
+        this.applyBtn = footer.createEl('button', { cls: 'sg-scan-apply-btn' });
         this.updateApplyBtn();
         this.applyBtn.addEventListener('click', () => void this.apply());
     }

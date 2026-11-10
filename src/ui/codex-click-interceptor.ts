@@ -1,5 +1,6 @@
 import { MarkdownView } from 'obsidian';
 import type StorygridPlugin from '../main';
+import { editorView } from '../utils/obsidian-internals';
 import { VIEW_TYPE_OUTLINE, StorygridOutlineView } from '../outline-view';
 import { findProjects } from '../entities/entity-manager';
 
@@ -16,7 +17,7 @@ import { findProjects } from '../entities/entity-manager';
  * middle-click, hover preview, and "Open as note" are never touched.
  */
 export function registerCodexClickInterceptor(plugin: StorygridPlugin): void {
-	plugin.registerDomEvent(document, 'click', (evt: MouseEvent) => {
+	plugin.registerDomEvent(activeDocument, 'click', (evt: MouseEvent) => {
 		if (plugin.settings.openCodexLinksInPanel === false) return;
 		if (evt.defaultPrevented) return;
 		if (evt.button !== 0 || evt.ctrlKey || evt.metaKey || evt.shiftKey || evt.altKey) return;
@@ -27,7 +28,7 @@ export function registerCodexClickInterceptor(plugin: StorygridPlugin): void {
 
 		let linktext = '';
 
-		const readingLink = target.closest('a.internal-link') as HTMLAnchorElement | null;
+		const readingLink = target.closest<HTMLAnchorElement>('a.internal-link');
 		if (readingLink) {
 			linktext = readingLink.getAttribute('data-href') ?? readingLink.getAttribute('href') ?? '';
 		} else if (target.closest('.cm-underline, .cm-hmd-internal-link')) {
@@ -38,11 +39,12 @@ export function registerCodexClickInterceptor(plugin: StorygridPlugin): void {
 			// click handling, same as if this interceptor didn't exist.
 			try {
 				const mdView = plugin.app.workspace.getActiveViewOfType(MarkdownView);
-				const cm = (mdView?.editor as any)?.cm;
-				const pos = cm?.posAtCoords?.({ x: evt.clientX, y: evt.clientY });
+				const cm = editorView(mdView?.editor);
+				if (!cm) return;
+				const pos = cm.posAtCoords({ x: evt.clientX, y: evt.clientY });
 				if (pos == null) return;
 				const line = cm.state.doc.lineAt(pos);
-				const re = /\[\[([^\[\]]+)\]\]/g;
+				const re = /\[\[([^[\]]+)\]\]/g;
 				let m: RegExpExecArray | null;
 				while ((m = re.exec(line.text))) {
 					const from = line.from + m.index;

@@ -21,14 +21,17 @@ const LIFE_DECAY = 0.0075;
  * Two staggered bursts from the lower third, ~3 seconds total.
  */
 export function launchConfetti(): void {
-	if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+	if (activeWindow.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
-	const canvas = document.body.createEl('canvas', { cls: 'sg-confetti-canvas' });
+	const canvas = activeDocument.body.createEl('canvas', { cls: 'sg-confetti-canvas' });
+	// Size, timers and animation frames all come from the canvas's own window,
+	// so the confetti fits a popout window and keeps animating there.
+	const win = canvas.win;
 	const ctx = canvas.getContext('2d');
 	if (!ctx) { canvas.remove(); return; }
-	const dpr = window.devicePixelRatio || 1;
-	canvas.width = window.innerWidth * dpr;
-	canvas.height = window.innerHeight * dpr;
+	const dpr = win.devicePixelRatio || 1;
+	canvas.width = win.innerWidth * dpr;
+	canvas.height = win.innerHeight * dpr;
 	ctx.scale(dpr, dpr);
 
 	const particles: Particle[] = [];
@@ -50,10 +53,10 @@ export function launchConfetti(): void {
 		}
 	};
 
-	const W = window.innerWidth;
-	const H = window.innerHeight;
+	const W = win.innerWidth;
+	const H = win.innerHeight;
 	burst(W * (0.3 + Math.random() * 0.15), H * 0.62, 110);
-	window.setTimeout(() => burst(W * (0.6 + Math.random() * 0.15), H * 0.55, 110), 280);
+	win.setTimeout(() => burst(W * (0.6 + Math.random() * 0.15), H * 0.55, 110), 280);
 
 	let raf = 0;
 	const tick = () => {
@@ -76,14 +79,14 @@ export function launchConfetti(): void {
 			ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
 			ctx.restore();
 		}
-		if (alive > 0) raf = requestAnimationFrame(tick);
+		if (alive > 0) raf = win.requestAnimationFrame(tick);
 		else canvas.remove();
 	};
-	raf = requestAnimationFrame(tick);
+	raf = win.requestAnimationFrame(tick);
 
 	// Hard stop after 4s no matter what (tab switch pauses rAF etc.).
-	window.setTimeout(() => {
-		cancelAnimationFrame(raf);
+	win.setTimeout(() => {
+		win.cancelAnimationFrame(raf);
 		canvas.remove();
 	}, 4000);
 }

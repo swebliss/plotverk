@@ -1,13 +1,16 @@
-import { ItemView, WorkspaceLeaf, TFile, TAbstractFile, Notice, Menu, App, Platform, MarkdownView, ViewStateResult } from 'obsidian';
+import { plotverkEvents } from './utils/plotverk-events';
+import { ItemView, WorkspaceLeaf, TFile, TAbstractFile, Notice, Menu, Platform, MarkdownView, ViewStateResult } from 'obsidian';
 import type StorygridPlugin from './main';
+import { onSettingsChanged } from './utils/obsidian-internals';
 import { setPhosphorIcon, WRITERS_PANEL_ICON, DASHBOARD_ICON, CODEX_ICON } from './utils/icons';
 import { TaskListController } from './ui/task-list';
-import { GridData, SceneCard, createCard, createRow, createColumn, sortByOrder, generateId } from './grid-data';
+import { GridData, SceneCard, generateId } from './grid-data';
 import { ensureDashboard } from './dashboard-view';
 import { writeProjectMirror } from './utils/project-data-store';
 import { isSafetyNetPath } from './utils/safety-paths';
 import { debounce } from './utils/debounce';
-import { dayKey, startOfWeek, startOfMonth, startOfYear, sumSince } from './utils/stats';
+import { runSafely } from './utils/report-error';
+import { dayKey, startOfWeek, startOfMonth, sumSince } from './utils/stats';
 import {
 	ManuscriptOptions,
 	ManuscriptItem,
@@ -167,7 +170,7 @@ export class StorygridOutlineView extends ItemView {
 		const scheduleRefresh = (file?: TAbstractFile) => {
 			if (file && isSafetyNetPath(file.path)) return;
 			if (this.refreshTimer) window.clearTimeout(this.refreshTimer);
-			this.refreshTimer = window.setTimeout(() => this.renderAll(), 400);
+			this.refreshTimer = window.setTimeout(() => { void this.renderAll(); }, 400);
 		};
 		this.registerEvent(this.app.vault.on('modify', (file) => {
 			if (isSafetyNetPath(file.path)) return;
@@ -183,26 +186,26 @@ export class StorygridOutlineView extends ItemView {
 		// always exactly the doc in the focused editor.
 		this.registerEvent(this.app.workspace.on('file-open', () => scheduleRefresh()));
 		this.registerEvent(this.app.workspace.on('active-leaf-change', () => this.refreshActiveHighlight()));
-		this.registerEvent((this.app.workspace as any).on('storygrid:settings-changed', () => scheduleRefresh()));
+		this.registerEvent(onSettingsChanged(this.app.workspace, () => scheduleRefresh()));
 
 		this._sprintChangedHandler = () => void this.renderAll();
-		document.addEventListener('storygrid:sprint-changed', this._sprintChangedHandler);
+		plotverkEvents.addEventListener('storygrid:sprint-changed', this._sprintChangedHandler);
 
 		this._tasksChangedHandler = (e: Event) => {
 			if ((e as CustomEvent).detail === 'outline') return;
 			void this.renderAll();
 		};
-		document.addEventListener('storygrid:tasks-changed', this._tasksChangedHandler);
+		plotverkEvents.addEventListener('storygrid:tasks-changed', this._tasksChangedHandler);
 
 		this._projectChangedHandler = () => void this.renderAll();
-		document.addEventListener('storygrid:project-changed', this._projectChangedHandler);
+		plotverkEvents.addEventListener('storygrid:project-changed', this._projectChangedHandler);
 
 		this._wordsChangedHandler = () => {
 			// Cancel any pending full re-render so typing never triggers a flash
 			if (this.refreshTimer) { window.clearTimeout(this.refreshTimer); this.refreshTimer = null; }
 			this.refreshGoalNumbers();
 		};
-		document.addEventListener('storygrid:words-changed', this._wordsChangedHandler);
+		plotverkEvents.addEventListener('storygrid:words-changed', this._wordsChangedHandler);
 
 		// Debounced ~400ms after each edit by coachChangeNotifier (Step 8) — the
 		// Coach tab's whole-document counters can't rely on the editor's own
@@ -210,7 +213,7 @@ export class StorygridOutlineView extends ItemView {
 		this._coachChangedHandler = () => {
 			if (this.activeTab === 'coach') void this.renderAll();
 		};
-		document.addEventListener('storygrid:coach-doc-changed', this._coachChangedHandler);
+		plotverkEvents.addEventListener('storygrid:coach-doc-changed', this._coachChangedHandler);
 		// Switching to another scene: the Coach tab reads the new one.
 		this.registerEvent(this.app.workspace.on('active-leaf-change', () => {
 			if (this.activeTab !== 'coach') return;
@@ -260,23 +263,23 @@ export class StorygridOutlineView extends ItemView {
 		if (this._sprintTick) window.clearInterval(this._sprintTick);
 		if (this._bannerTick) { window.cancelAnimationFrame(this._bannerTick); this._bannerTick = null; }
 		if (this._sprintChangedHandler) {
-			document.removeEventListener('storygrid:sprint-changed', this._sprintChangedHandler);
+			plotverkEvents.removeEventListener('storygrid:sprint-changed', this._sprintChangedHandler);
 			this._sprintChangedHandler = null;
 		}
 		if (this._tasksChangedHandler) {
-			document.removeEventListener('storygrid:tasks-changed', this._tasksChangedHandler);
+			plotverkEvents.removeEventListener('storygrid:tasks-changed', this._tasksChangedHandler);
 			this._tasksChangedHandler = null;
 		}
 		if (this._projectChangedHandler) {
-			document.removeEventListener('storygrid:project-changed', this._projectChangedHandler);
+			plotverkEvents.removeEventListener('storygrid:project-changed', this._projectChangedHandler);
 			this._projectChangedHandler = null;
 		}
 		if (this._wordsChangedHandler) {
-			document.removeEventListener('storygrid:words-changed', this._wordsChangedHandler);
+			plotverkEvents.removeEventListener('storygrid:words-changed', this._wordsChangedHandler);
 			this._wordsChangedHandler = null;
 		}
 		if (this._coachChangedHandler) {
-			document.removeEventListener('storygrid:coach-doc-changed', this._coachChangedHandler);
+			plotverkEvents.removeEventListener('storygrid:coach-doc-changed', this._coachChangedHandler);
 			this._coachChangedHandler = null;
 		}
 	}
@@ -501,7 +504,7 @@ export class StorygridOutlineView extends ItemView {
 			}
 			const actions = empty.createDiv({ cls: 'sg-outline-empty-actions' });
 			const newBtn = actions.createEl('button', { cls: 'sg-outline-btn', text: i18n('outline.empty.createGrid') });
-			newBtn.addEventListener('click', () => this.plugin.createNewGrid());
+			newBtn.addEventListener('click', () => { runSafely(this.plugin.createNewGrid()); });
 			const openBtn = actions.createEl('button', { cls: 'sg-outline-btn', text: i18n('outline.empty.openProject') });
 			openBtn.addEventListener('click', () => void this.plugin.openGridPicker());
 			return;
@@ -633,7 +636,7 @@ export class StorygridOutlineView extends ItemView {
 								} else {
 									// Entire-series focus stays; only the desk changes book
 									await this.plugin.saveData(s);
-									document.dispatchEvent(new CustomEvent('storygrid:project-changed'));
+									plotverkEvents.dispatchEvent(new CustomEvent('storygrid:project-changed'));
 								}
 							}));
 					}
@@ -678,7 +681,7 @@ export class StorygridOutlineView extends ItemView {
 
 			// Top row: large timer + ghost Stop button
 			const row = main.createDiv({ cls: 'sg-sprint-banner-row' });
-			const timerEl = row.createEl('span', { cls: 'sg-sprint-banner-time' });
+			const timerEl = row.createSpan({ cls: 'sg-sprint-banner-time' });
 
 			const stopBtn = row.createEl('button', { cls: 'sg-sprint-banner-stop', attr: { 'aria-label': i18n('outline.sprint.stopAria') } });
 			stopBtn.createSpan({ cls: 'sg-sprint-banner-stop-icon', text: '■' });
@@ -969,7 +972,7 @@ export class StorygridOutlineView extends ItemView {
 			}
 			item.createSpan({ cls: 'sg-outline-scene-title', text: doc.basename });
 			const meta = item.createSpan({ cls: 'sg-outline-scene-words' });
-			docWordCount(this.app, doc.path, this._wordCache).then((w) => {
+			void docWordCount(this.app, doc.path, this._wordCache).then((w) => {
 				if (w === null || !meta.isConnected) return;
 				const goal = card?.wordGoal;
 				if (goal && goal > 0) {
@@ -1021,16 +1024,18 @@ export class StorygridOutlineView extends ItemView {
 			menu.addItem((m) =>
 				m.setTitle(i18n('outline.menu.rename')).setIcon('pencil').onClick(() => {
 					const currentName = isDivider ? (node.label ?? '') : (doc?.basename ?? '');
-					new TextPromptModal(this.app, isDivider ? i18n('outline.writing.renameDividerTitle') : i18n('outline.writing.renameSceneTitle'), currentName, async (name) => {
+					new TextPromptModal(this.app, isDivider ? i18n('outline.writing.renameDividerTitle') : i18n('outline.writing.renameSceneTitle'), currentName, (name) => {
 						if (isDivider) {
 							ctx.persistTree(renameDividerLabel(fullTree, node.id, name));
 						} else if (doc && name !== doc.basename) {
 							const folder = doc.parent?.path ? doc.parent.path + '/' : '';
-							try {
-								await this.app.fileManager.renameFile(doc, `${folder}${name}.md`);
-							} catch {
-								new Notice(i18n('outline.notice.renameFailed'));
-							}
+							runSafely((async () => {
+								try {
+									await this.app.fileManager.renameFile(doc, `${folder}${name}.md`);
+								} catch {
+									new Notice(i18n('outline.notice.renameFailed'));
+								}
+							})());
 						}
 					}).open();
 				})
@@ -1059,12 +1064,14 @@ export class StorygridOutlineView extends ItemView {
 					const message = isDivider
 						? i18n('outline.writing.deleteDividerConfirm', { label })
 						: i18n('outline.writing.deleteSceneConfirm', { label });
-					new ConfirmModal(this.app, message, i18n('common.delete'), async () => {
+					new ConfirmModal(this.app, message, i18n('common.delete'), () => {
 						if (isDivider) {
 							ctx.persistTree(removeNodePromotingChildren(fullTree, node.id));
 						} else if (doc) {
-							await this.app.fileManager.trashFile(doc);
-							new Notice(i18n('outline.notice.deletedFile', { name: doc.basename }));
+							runSafely((async () => {
+								await this.app.fileManager.trashFile(doc);
+								new Notice(i18n('outline.notice.deletedFile', { name: doc.basename }));
+							})());
 						}
 					}).open();
 				})
@@ -1096,7 +1103,7 @@ export class StorygridOutlineView extends ItemView {
 		item.addEventListener('dragstart', (e) => {
 			e.dataTransfer?.setData('text/plain', node.id);
 			if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
-			const ghost = document.createElement('div');
+			const ghost = createDiv();
 			ghost.textContent = isDivider ? (node.label || '') : (doc?.basename ?? '');
 			Object.assign(ghost.style, {
 				position: 'fixed', top: '-9999px', left: '-9999px',
@@ -1106,13 +1113,14 @@ export class StorygridOutlineView extends ItemView {
 				borderRadius: '6px', color: 'var(--text-normal)',
 				fontSize: '13px', opacity: '0.9', pointerEvents: 'none', boxSizing: 'border-box',
 			});
-			document.body.appendChild(ghost);
+			const ghostDoc = this.containerEl.doc;
+			ghostDoc.body.appendChild(ghost);
 			e.dataTransfer?.setDragImage(ghost, e.offsetX || 20, e.offsetY || 12);
 			this._treeDrop = null;
 			this._treeDragCache = null;
 			this._treeDragStart = { x: e.clientX, depth };
-			setTimeout(() => {
-				if (document.body.contains(ghost)) document.body.removeChild(ghost);
+			window.setTimeout(() => {
+				if (ghostDoc.body.contains(ghost)) ghostDoc.body.removeChild(ghost);
 				item.addClass('is-dragging');
 			}, 0);
 		});
@@ -1140,7 +1148,7 @@ export class StorygridOutlineView extends ItemView {
 	 * beforeId} on `this._treeDrop` for the row's dragend to apply.
 	 */
 	private setupTreeDrag(list: HTMLElement, tree: SceneTree): void {
-		list.setCssStyles({ position: 'relative' });
+		list.addClass('sg-outline-drag-host');
 		const line = list.createDiv({ cls: 'sg-outline-drop-line' });
 
 		const clearDropTargets = () => {
@@ -1757,7 +1765,7 @@ export class StorygridOutlineView extends ItemView {
 		setPhosphorIcon(dashLink.createSpan({ cls: 'sg-outline-tab-icon' }), DASHBOARD_ICON, '◆');
 		dashLink.createSpan({ text: i18n('outline.dashboard.openFull') });
 		dashLink.setAttribute('aria-label', i18n('outline.dashboard.openFullAria'));
-		dashLink.addEventListener('click', () => this.plugin.openDashboard(projectRoot));
+		dashLink.addEventListener('click', () => { runSafely(this.plugin.openDashboard(projectRoot)); });
 
 		if (!this.plugin.isSprintActive()) {
 			const sprintBtn = btnGroup.createEl('button', { cls: 'sg-outline-dash-btn' });
@@ -1773,7 +1781,7 @@ export class StorygridOutlineView extends ItemView {
 			void this.plugin.saveData(this.plugin.settings);
 			void writeProjectMirror(this.app, projectRoot, dash);
 		};
-		const rerender = () => this.renderAll();
+		const rerender = () => { void this.renderAll(); };
 
 		const now = new Date();
 		const today = dayKey(now);
@@ -1865,7 +1873,7 @@ export class StorygridOutlineView extends ItemView {
 			todos,
 			save: () => {
 				quietSave();
-				document.dispatchEvent(new CustomEvent('storygrid:tasks-changed', { detail: 'outline' }));
+				plotverkEvents.dispatchEvent(new CustomEvent('storygrid:tasks-changed', { detail: 'outline' }));
 			},
 			rerender,
 			compact: true,
@@ -1912,8 +1920,8 @@ export class StorygridOutlineView extends ItemView {
 		setPhosphorIcon(codexIcon, CODEX_ICON, '◆');
 		codexLink.createSpan({ text: i18n('outline.world.openCodex') });
 		codexLink.setAttribute('aria-label', i18n('outline.world.openCodexAria'));
-		codexLink.addEventListener('click', () => this.plugin.openCodex(projectRoot));
-		codexLink.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') this.plugin.openCodex(projectRoot); });
+		codexLink.addEventListener('click', () => { runSafely(this.plugin.openCodex(projectRoot)); });
+		codexLink.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') runSafely(this.plugin.openCodex(projectRoot)); });
 
 const list = body.createDiv({ cls: 'sg-outline-list' });
 		const activePath = this.app.workspace.getActiveFile()?.path ?? null;
@@ -2044,9 +2052,11 @@ const list = body.createDiv({ cls: 'sg-outline-list' });
 										this.app,
 										i18n('outline.world.deleteEntityConfirm', { name: entity.name }),
 										i18n('common.delete'),
-										async () => {
-											await this.app.fileManager.trashFile(entity.file);
-											new Notice(i18n('outline.notice.deletedFile', { name: entity.name }));
+										() => {
+											runSafely((async () => {
+												await this.app.fileManager.trashFile(entity.file);
+												new Notice(i18n('outline.notice.deletedFile', { name: entity.name }));
+											})());
 										}
 									).open();
 								})
@@ -2172,9 +2182,9 @@ const list = body.createDiv({ cls: 'sg-outline-list' });
 			opt.value = w.id;
 			if (w.id === wf.id) opt.selected = true;
 		}
-		wfSel.addEventListener('change', async () => {
+		wfSel.addEventListener('change', () => {
 			compileState.workflowId = wfSel.value;
-			await saveAndRerender();
+			runSafely(saveAndRerender());
 		});
 		const wfMenuBtn = wfRow.createEl('button', { cls: 'sg-outline-scene-linkbtn', attr: { 'aria-label': i18n('outline.compile.workflowActionsAria') } });
 		setPhosphorIcon(wfMenuBtn, 'dots-three', '⋯');
@@ -2206,8 +2216,8 @@ const list = body.createDiv({ cls: 'sg-outline-list' });
 			);
 			menu.addItem((it) =>
 				it.setTitle(i18n('outline.menu.rename')).setIcon('pencil').onClick(() => {
-					new TextPromptModal(this.app, i18n('outline.compile.renameWorkflowTitle'), wf.name, async (name) => {
-						if (name.trim()) { wf.name = name.trim(); await saveAndRerender(); }
+					new TextPromptModal(this.app, i18n('outline.compile.renameWorkflowTitle'), wf.name, (name) => {
+						if (name.trim()) { wf.name = name.trim(); runSafely(saveAndRerender()); }
 					}).open();
 				})
 			);
@@ -2241,9 +2251,9 @@ const list = body.createDiv({ cls: 'sg-outline-list' });
 			opt.value = id;
 			if (wf.output === id) opt.selected = true;
 		}
-		fmtSel.addEventListener('change', async () => {
+		fmtSel.addEventListener('change', () => {
 			wf.output = fmtSel.value as CompileOutputFormat;
-			await saveAndRerender();
+			runSafely(saveAndRerender());
 		});
 
 		// ── Save-as name ──────────────────────────────────────────────────────
@@ -2274,7 +2284,7 @@ const list = body.createDiv({ cls: 'sg-outline-list' });
 					compileState.coverImagePath = file.path;
 					saveQuiet();
 					coverBtn.setText(coverName());
-					coverClear.setCssStyles({ display: '' });
+					coverClear.show();
 				}).open();
 			});
 			const coverClear = coverRow.createEl('button', { cls: 'sg-outline-scene-linkbtn', attr: { 'aria-label': i18n('outline.compile.removeCoverAria') } });
@@ -2284,7 +2294,7 @@ const list = body.createDiv({ cls: 'sg-outline-list' });
 				delete compileState.coverImagePath;
 				saveQuiet();
 				coverBtn.setText(coverName());
-				coverClear.setCssStyles({ display: 'none' });
+				coverClear.hide();
 			});
 		}
 
@@ -2302,7 +2312,7 @@ const list = body.createDiv({ cls: 'sg-outline-list' });
 		fmtToggle.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleFmt(); } });
 
 		const fmtGroup = body.createDiv({ cls: 'sg-outline-fmt-group' });
-		if (!this._compileOptsOpen) fmtGroup.setCssStyles({ display: 'none' });
+		if (!this._compileOptsOpen) fmtGroup.hide();
 
 		// Title page details (author and contact persist with the workflow)
 		if (wf.titlePage !== 'none') {
@@ -2488,7 +2498,7 @@ const list = body.createDiv({ cls: 'sg-outline-list' });
 			const manuscript = this.app.vault.getAbstractFileByPath(manuscriptPathFor(gridFile.path, grid.name, ext, nameInput.value));
 			if (manuscript instanceof TFile) {
 				const openBtn = actions.createEl('button', { cls: 'sg-outline-btn', text: i18n('outline.compile.openLastExport') });
-				openBtn.addEventListener('click', () => openOrReveal(this.app, manuscript));
+				openBtn.addEventListener('click', () => { runSafely(openOrReveal(this.app, manuscript)); });
 			}
 		}
 	}
@@ -2515,9 +2525,9 @@ const list = body.createDiv({ cls: 'sg-outline-list' });
 			top.createSpan({ cls: 'sg-outline-rule-name', text: spec?.name ?? step.id });
 			const rm = top.createEl('button', { cls: 'sg-outline-scene-linkbtn sg-outline-rule-remove', attr: { 'aria-label': i18n('outline.compile.removeStepAria') } });
 			setPhosphorIcon(rm, 'x', '×');
-			rm.addEventListener('click', async () => {
+			rm.addEventListener('click', () => {
 				wf.steps.splice(wf.steps.indexOf(step), 1);
-				await saveAndRerender();
+				runSafely(saveAndRerender());
 			});
 
 			for (const opt of spec?.options ?? []) {

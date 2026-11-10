@@ -1,17 +1,16 @@
 // Story Timeline layout engine — pure TypeScript, no Obsidian imports,
 // mirroring the grid-data.ts convention.
 //
-// Computes world-space geometry for the redesigned timeline (mock approved
-// 2026-08-30): a central spine with year chips and month ticks, colored
+// Computes world-space geometry for the timeline: a central spine with year chips and month ticks, colored
 // tracks on both sides of it, ranged events as bars with darker end caps,
 // one-time events as point markers, "stitch" connectors from every event
 // back to the spine, and label anchors. The renderer (timeline-render.ts)
 // becomes a dumb painter over this output: every visual decision — spacing,
 // bar thickness, marker size, stitches, orientation — arrives here as a
-// pure function input, so the Phase B sliders plug straight in with no
+// pure function input, so appearance sliders plug straight in with no
 // layout rework.
 //
-// Units (2026-11-03 redesign): the camera stretches ONLY the time axis, so
+// Units: the camera stretches ONLY the time axis, so
 // across-axis numbers here are plain on-screen px, and along-axis positions
 // are world px (day × pxPerDay) that the camera multiplies by its zoom.
 // Every SIZE (badge radius, bar thickness, gaps) is on-screen px. The engine
@@ -40,17 +39,17 @@ export interface LayoutEvent {
 	trackId: string;
 	startDay: number;
 	endDay?: number;
-	/** Per-event override of spec.markerRadius (point events only) — B2.1. Already clamped by the caller (timeline-render's read seam); the engine trusts it as-is. Absent = follow the spec default. */
+	/** Per-event override of spec.markerRadius (point events only). Already clamped by the caller (timeline-render's read seam); the engine trusts it as-is. Absent = follow the spec default. */
 	markerRadius?: number;
-	/** Per-event override of spec.barThickness (ranged events only) — B2.1. Same clamp/absent contract as markerRadius. */
+	/** Per-event override of spec.barThickness (ranged events only). Same clamp/absent contract as markerRadius. */
 	barThickness?: number;
 	/** Still going on: the caller set endDay to the story's present, and the bar ends in an arrow there instead of an end badge. */
 	ongoing?: boolean;
 }
 
 /**
- * The geometry knobs. These are Emma's "customization not limits" sliders:
- * each one is a plain number so Phase B can wire a slider straight to it.
+ * The geometry knobs, one per appearance slider: each one is a plain number
+ * so a slider can be wired straight to it.
  * Stroke widths for the spine/threads/stitches are paint (renderer) concerns
  * — only measurements that move geometry live here.
  */
@@ -103,10 +102,10 @@ export const DEFAULT_LAYOUT_SPEC: TimelineLayoutSpec = {
 
 /**
  * On-screen badge radius for a "marker size" knob. Compressive on purpose:
- * the default knob (10) lands on a 26px badge (Emma, 2026-11-06: the 40px
- * ones felt "big and bulky"), the slider still scales it (3 → 17px,
- * 28 → 49px), and the old big per-event sizes (20 → 39px) stay sane instead
- * of doubling. It is exactly 0.65 × the 2026-11-03 formula (knob + 10), so a
+ * the default knob (10) lands on a 26px badge (40px read as bulky), the
+ * slider still scales it (3 → 17px, 28 → 49px), and the old big per-event
+ * sizes (20 → 39px) stay sane instead of doubling. It is exactly 0.65 × the
+ * earlier formula (knob + 10), so a
  * timeline's size differences between events keep their old proportions.
  * Rounded to half a pixel so the circle edges stay crisp.
  */
@@ -132,8 +131,8 @@ export function endBadgeRadiusFor(startRadius: number): number {
 /**
  * On-screen bar thickness for a "bar thickness" knob — the default (12) lands
  * on 7px; a big old value (29) stays well short of a slab. 0.8 × the
- * 2026-11-03 formula: thinned less than the badges (0.65×) on purpose — next
- * to 26px badges it stays a clear bar, never the "thin lines" Emma rejected.
+ * earlier formula: thinned less than the badges (0.65×) on purpose — next
+ * to 26px badges it stays a clear bar, never a thin line.
  */
 export function barThicknessFor(barThickness: number): number {
 	return Math.round((3.2 + barThickness * 0.32) * 10) / 10;
@@ -187,7 +186,7 @@ export interface MarkerLayout {
 	center: LayoutPoint;
 	/** Across-axis shift applied when badges on one track would overlap on screen at this zoom (0 otherwise). */
 	fanOffset: number;
-	/** Effective radius this marker paints at — the event's own override, or spec.markerRadius. The painter reads this instead of the spec value so B2.1 overrides reach the halo/dot without re-resolving. */
+	/** Effective radius this marker paints at — the event's own override, or spec.markerRadius. The painter reads this instead of the spec value so overrides reach the halo/dot without re-resolving. */
 	radius: number;
 }
 
@@ -265,7 +264,7 @@ export function axisPoint(along: number, across: number, orientation: TimelineOr
 
 /**
  * Turns an along-axis segment (the spine's span, or a solid-style track
- * thread's line) into a thickness-centered rect. B3 needs this because an
+ * thread's line) into a thickness-centered rect. Gradients need this because an
  * axis-aligned `<line>` has a zero-area bounding box and this codebase's
  * gradients are `objectBoundingBox` — a gradient on a line paints nothing, so
  * anything that should carry a real gradient (rather than solidFromColor's
@@ -550,15 +549,15 @@ export function computeTimelineLayout(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Lane-free layout: compact columns beside the main line (2026-11-03)
+// Lane-free layout: compact columns beside the main line
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Columns per side of the main line before items start sharing (overlapping along time — zoom in to separate). */
 export const MAX_COLUMNS_PER_SIDE = 4;
 
 /**
- * The Timeline without plotline lanes (Emma, 2026-11-03: "it's enough to have
- * events"): every event sits in one of a few compact columns either side of
+ * The Timeline without plotline lanes (the events alone carry it): every
+ * event sits in one of a few compact columns either side of
  * the main line, World Anvil style. Items are packed by time at the CURRENT
  * zoom (spec.alongScale): each takes the column closest to the line —
  * right, left, then the next pair out — that is free again by its start, so
@@ -728,7 +727,7 @@ export const TIMELINE_MAX_ZOOM = 8;
  * Whether the camera can be fitted to the events now. A view that is not on
  * screen yet (a new tab opened from the Writers Panel icon, before Obsidian
  * shows it) measures 0×0, and fitting then parks the camera at zoom 1 on day 0
- * — far from every event, so only the main line shows (Emma, 2026-11-03).
+ * — far from every event, so only the main line shows.
  * The renderer waits for a real size instead and fits then.
  */
 export function canFitViewport(width: number, height: number): boolean {

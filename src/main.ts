@@ -1,6 +1,9 @@
+import { plotverkEvents } from './utils/plotverk-events';
 import { Plugin, WorkspaceLeaf, TFile, TFolder, TAbstractFile, Notice, setIcon, addIcon, Menu, FuzzySuggestModal, FuzzyMatch, MarkdownView, App, Platform, editorInfoField } from 'obsidian';
 import { EditorView } from '@codemirror/view';
 import { openOrReveal } from './utils/workspace';
+import { runSafely } from './utils/report-error';
+import { triggerSettingsChanged, leafTabHeader } from './utils/obsidian-internals';
 import { Extension } from '@codemirror/state';
 import { typewriterScroll, focusDimming } from './utils/typewriter';
 import { coachHighlights, coachChangeNotifier, coachRefreshEffect, CoachScanContext } from './prose/coach-extension';
@@ -58,7 +61,6 @@ import { buildProjectStructure } from './utils/folder-builder';
 import { showTypewriterPopover } from './utils/tw-popover';
 import { toggleWriteMode } from './utils/writing-modes';
 import { showSprintSummary, openSprintSetup } from './modals/sprint-modal';
-import { TextPromptModal } from './modals/prompt-modal';
 import { PLANET_SVG, STORYGRID_MARK_SVG, NOTE_PENCIL_SVG, GLOBE_SVG, SQUARES_FOUR_SVG, PEN_NIB_SVG, CHART_BAR_SVG, GRAPH_SVG, setPhosphorIcon, CONNECTIONS_MAP_ICON, DASHBOARD_ICON, GRID_VIEW_ICON, CODEX_ICON, TIMELINE_ICON, TIMELINE_SVG } from './utils/icons';
 import { CodexSuggest } from './editor/codex-suggest';
 import { registerScanCommand } from './commands/scan-mentions';
@@ -160,7 +162,7 @@ export default class StorygridPlugin extends Plugin {
 	/** Whether a quick-link icon shows in the given surface ('top' strip / 'panel' header). */
 	quickLinkVisible(key: QuickLinkKey, where: 'top' | 'panel'): boolean {
 		if (!this.quickLinkOn(key)) return false;
-		// Default 'panel', NOT 'both' (Emma, 2026-09-06): the sidebar tab strip
+		// Default 'panel', NOT 'both': the sidebar tab strip
 		// holds the Writers Panel tab and nothing else unless the user puts
 		// something there themselves. Defaulting to 'both' meant a fresh vault —
 		// where every module is on because no intent has been chosen — opened
@@ -186,7 +188,6 @@ export default class StorygridPlugin extends Plugin {
 			{ key: 'codex', icon: CODEX_ICON, fallback: '◎', label: 'Open Codex', onClick: () => void this.openCodex() },
 			{ key: 'timeline', icon: TIMELINE_ICON, fallback: '📅', label: 'Open Timeline', onClick: () => void this.openOrCreateTimeline() },
 		];
-		let shown = 0;
 		let firstBtn: HTMLElement | null = null;
 		for (const def of defs) {
 			if (!show(def.key)) continue;
@@ -196,12 +197,11 @@ export default class StorygridPlugin extends Plugin {
 			btn.setAttribute('title', def.label);
 			btn.addEventListener('click', def.onClick);
 			if (!firstBtn) firstBtn = btn;
-			shown++;
 		}
 		// One-time nudge, the first time this row appears anywhere.
 		if (firstBtn && this.canShowCoachMark('quicklaunch-row-intro')) {
 			const anchor = firstBtn;
-			requestAnimationFrame(() => {
+			window.requestAnimationFrame(() => {
 				showCoachMark(anchor, t('quickLaunch.coachMark'), {
 					placement: 'bottom',
 					onDismiss: () => this.markCoachMarkSeen('quicklaunch-row-intro'),
@@ -283,7 +283,7 @@ export default class StorygridPlugin extends Plugin {
 		registerEntityModalPlugin(this);
 		this.sprintLastMinutes = this.getDefaultSprintMinutes();
 		this.applyCodexSheetClasses();
-		document.body.addClass('sg-plugin-active');
+		this.mainBody.addClass('sg-plugin-active');
 
 		// v1: all features enabled locally; no server validation yet.
 		// When payment is wired up, replace enabledFeatures with the server response.
@@ -491,7 +491,9 @@ export default class StorygridPlugin extends Plugin {
 			this.updateCoachChip();
 		}
 		// A sprint switches marks off while it runs, and back on after.
-		this.registerDomEvent(document, 'storygrid:sprint-changed' as keyof DocumentEventMap, () => this.refreshCoachMode());
+		const onSprintChanged = () => this.refreshCoachMode();
+		plotverkEvents.addEventListener('storygrid:sprint-changed', onSprintChanged);
+		this.register(() => plotverkEvents.removeEventListener('storygrid:sprint-changed', onSprintChanged));
 		this.typewriterStatusEl = this.addStatusBarItem();
 		this.typewriterStatusEl.addClass('sg-status-typewriter', 'mod-clickable');
 		setIcon(this.typewriterStatusEl, 'keyboard');
@@ -508,17 +510,16 @@ export default class StorygridPlugin extends Plugin {
 		// Word count status bar chip — shows live word count of the open scene
 		this.wordCountStatusEl = this.addStatusBarItem();
 		this.wordCountStatusEl.addClass('sg-status-wordcount');
-		this.wordCountStatusEl.setCssStyles({ display: 'none' });
+		this.wordCountStatusEl.hide();
 
 		// Sprint countdown chip — visible only during an active sprint
 		this.sprintEl = this.addStatusBarItem();
 		this.sprintEl.addClass('sg-status-sprint', 'mod-clickable');
-		this.sprintEl.setCssStyles({ display: 'none' });
+		this.sprintEl.hide();
 		this.sprintEl.setAttribute('aria-label', 'Writing sprint — click for options');
 		this.sprintEl.addEventListener('click', (e) => {
 			const menu = new Menu();
 			if (this.sprintStartAt !== null) {
-				const elapsed = Date.now() - this.sprintStartAt;
 				const words = Math.max(0, this.getTodayTypedWords() - this.sprintStartWords);
 				menu.addItem((it) =>
 					it.setTitle(`Stop sprint (${words.toLocaleString()} words so far)`)
@@ -610,7 +611,7 @@ export default class StorygridPlugin extends Plugin {
 			name: t('command.openGrid'),
 			checkCallback: (checking) => {
 				if (!this.isModuleOn('plotGrid')) return false;
-				if (!checking) this.openGridPicker();
+				if (!checking) runSafely(this.openGridPicker());
 				return true;
 			},
 		});
@@ -633,7 +634,7 @@ export default class StorygridPlugin extends Plugin {
 			name: t('command.openCodex'),
 			checkCallback: (checking) => {
 				if (!this.isModuleOn('codex')) return false;
-				if (!checking) this.openCodex();
+				if (!checking) runSafely(this.openCodex());
 				return true;
 			},
 		});
@@ -643,7 +644,7 @@ export default class StorygridPlugin extends Plugin {
 			name: t('command.openWritersPanel'),
 			checkCallback: (checking) => {
 				if (!this.isModuleOn('writersPanel')) return false;
-				if (!checking) this.openOutline();
+				if (!checking) runSafely(this.openOutline());
 				return true;
 			},
 		});
@@ -736,11 +737,11 @@ export default class StorygridPlugin extends Plugin {
 			}
 			// Re-apply any persisted writing mode body class (no nav side-effects on restart)
 			if (this.settings.writingMode) {
-				document.body.classList.add(`sg-mode-${this.settings.writingMode}`);
+				this.mainBody.classList.add(`sg-mode-${this.settings.writingMode}`);
 				this.refreshModeChip();
 			}
-			// The Writers Panel is ALWAYS present when the plugin is on (Emma's
-			// rule, 2026-09-06): it is the plugin's home base, not an optional
+			// The Writers Panel is ALWAYS present when the plugin is on: it is
+			// the plugin's home base, not an optional
 			// extra, and the ONLY way to be rid of it is the settings switch.
 			// It used to also require `intent !== null`, which meant a fresh
 			// vault — one where the intent chooser had not been answered yet —
@@ -780,6 +781,16 @@ export default class StorygridPlugin extends Plugin {
 		return !!p && (p.includes('/Scenes/') || p.startsWith('Scenes/'));
 	}
 
+	/**
+	 * The main window's body. Plugin-wide body classes (typewriter, writing
+	 * mode, sheet styling) always go here: `activeDocument` changes with the
+	 * focused window, so an add and its later remove could land on different
+	 * popout windows and leave a class stuck.
+	 */
+	private get mainBody(): HTMLElement {
+		return this.app.workspace.containerEl.doc.body;
+	}
+
 	/** Rebuild the editor-extension set from settings and apply it live. */
 	refreshTypewriterMode(): void {
 		const modeOn = this.settings.typewriterMode;
@@ -804,14 +815,14 @@ export default class StorygridPlugin extends Plugin {
 			}
 			this.app.workspace.updateOptions();
 		}
-		document.body.classList.toggle('sg-typewriter-on', effectivelyOn);
+		this.mainBody.classList.toggle('sg-typewriter-on', effectivelyOn);
 		// Dim strength (10–90%) → remaining opacity of non-active rows
 		const strength = Math.min(90, Math.max(10, this.settings.typewriterDimStrength ?? 60));
-		document.body.style.setProperty('--sg-tw-dim-opacity', `${(100 - strength) / 100}`);
+		this.mainBody.style.setProperty('--sg-tw-dim-opacity', `${(100 - strength) / 100}`);
 		// Line position drives the editor's top/bottom padding so the typed
 		// row can rest at that height even at the start or end of a document
 		const linePos = Math.min(90, Math.max(10, this.settings.typewriterLinePosition ?? 35));
-		document.body.style.setProperty('--sg-tw-line-pos', `${linePos}`);
+		this.mainBody.style.setProperty('--sg-tw-line-pos', `${linePos}`);
 		// Status bar reflects the mode setting (not effective state) so the
 		// writer can see their preference even when editing a non-scene file
 		if (this.typewriterStatusEl) {
@@ -844,7 +855,7 @@ export default class StorygridPlugin extends Plugin {
 		for (const leaf of this.app.workspace.getLeavesOfType('markdown')) {
 			coachEditorView(leaf.view)?.dispatch({ effects: coachRefreshEffect.of(null) });
 		}
-		document.dispatchEvent(new CustomEvent('storygrid:coach-doc-changed'));
+		plotverkEvents.dispatchEvent(new CustomEvent('storygrid:coach-doc-changed'));
 	}
 
 	/** The status-bar chip shows the mode in force. */
@@ -889,7 +900,7 @@ export default class StorygridPlugin extends Plugin {
 	/** A Codex sheet changed (name, aliases) or a note's frontmatter status changed → re-read soon. */
 	private coachOnMetadataChanged(f: TFile): void {
 		const fm = this.app.metadataCache.getFileCache(f)?.frontmatter;
-		const kind = fm?.['storygrid-type'];
+		const kind: unknown = fm?.['storygrid-type'];
 		if (typeof kind === 'string' && kind !== 'scene') {
 			this.scheduleCoachRefresh();
 			return;
@@ -989,7 +1000,7 @@ export default class StorygridPlugin extends Plugin {
 	 */
 	coachIsScene(file: TFile): boolean {
 		const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
-		const kind = fm?.['storygrid-type'];
+		const kind: unknown = fm?.['storygrid-type'];
 		if (kind === 'scene') return true;
 		if (typeof kind === 'string') return false;
 		return this.isSceneFile(file.path) || typeof fm?.status === 'string';
@@ -1028,7 +1039,7 @@ export default class StorygridPlugin extends Plugin {
 		const navButtons = mdView.containerEl.querySelector('.view-header-nav-buttons');
 		if (!navButtons) return;
 
-		const btn = document.createElement('div');
+		const btn = createDiv();
 		btn.className = 'clickable-icon view-header-icon sg-tw-header-btn';
 		if (this.settings.typewriterMode) btn.classList.add('is-active');
 		btn.setAttribute('aria-label', `Typewriter mode: ${this.settings.typewriterMode ? 'on' : 'off'}`);
@@ -1046,8 +1057,8 @@ export default class StorygridPlugin extends Plugin {
 		const outlineLeaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_OUTLINE);
 		if (!outlineLeaves.length) return;
 
-		const leaf = outlineLeaves[0] as any;
-		const tabHeaderEl: HTMLElement | undefined = leaf.tabHeaderEl;
+		const leaf = outlineLeaves[0];
+		const tabHeaderEl = leafTabHeader(leaf);
 		if (!tabHeaderEl || !tabHeaderEl.parentElement) return;
 
 		const show = (key: QuickLinkKey) => this.quickLinkVisible(key, 'top');
@@ -1063,7 +1074,7 @@ export default class StorygridPlugin extends Plugin {
 		let insertAfter: HTMLElement = tabHeaderEl;
 		for (const def of defs) {
 			if (!show(def.key)) continue;
-			const btn = document.createElement('div');
+			const btn = createDiv();
 			btn.className = 'clickable-icon sg-sidebar-tab-btn';
 			btn.setAttribute('aria-label', def.label);
 			setPhosphorIcon(btn, def.icon, def.fallback);
@@ -1091,10 +1102,10 @@ export default class StorygridPlugin extends Plugin {
 		const isMac = Platform.isMacOS;
 		const shortcut = isMac ? '⌘O' : 'Ctrl+O';
 
-		const hud = document.body.createDiv({ cls: 'sg-focus-hud' });
+		const hud = activeDocument.body.createDiv({ cls: 'sg-focus-hud' });
 		const exitBtn = hud.createEl('button', { cls: 'sg-focus-hud-exit', text: 'Exit Focus' });
 		exitBtn.addEventListener('click', () => void this.toggleTypewriterMode());
-		hud.createEl('span', { cls: 'sg-focus-hud-hint', text: `Press ${shortcut} to switch scenes` });
+		hud.createSpan({ cls: 'sg-focus-hud-hint', text: `Press ${shortcut} to switch scenes` });
 		this._focusHudEl = hud;
 	}
 
@@ -1135,7 +1146,7 @@ export default class StorygridPlugin extends Plugin {
 	async refreshWordCountChip(): Promise<void> {
 		const file = this.app.workspace.getActiveFile();
 		if (!file || file.extension !== 'md') {
-			if (this.wordCountStatusEl) this.wordCountStatusEl.setCssStyles({ display: 'none' });
+			if (this.wordCountStatusEl) this.wordCountStatusEl.hide();
 			return;
 		}
 		try {
@@ -1144,7 +1155,7 @@ export default class StorygridPlugin extends Plugin {
 			const goal = this.getWordGoalFor(file.path);
 			this.renderWordCountChip(wc, goal);
 		} catch {
-			if (this.wordCountStatusEl) this.wordCountStatusEl.setCssStyles({ display: 'none' });
+			if (this.wordCountStatusEl) this.wordCountStatusEl.hide();
 		}
 	}
 
@@ -1162,7 +1173,7 @@ export default class StorygridPlugin extends Plugin {
 	/** Write the computed word count (and optional goal) into the status bar chip. */
 	private renderWordCountChip(words: number, goal: number | null): void {
 		if (!this.wordCountStatusEl) return;
-		this.wordCountStatusEl.setCssStyles({ display: '' });
+		this.wordCountStatusEl.show();
 		if (goal && goal > 0) {
 			const pct = Math.min(100, Math.round((words / goal) * 100));
 			this.wordCountStatusEl.setText(`${words.toLocaleString()} / ${goal.toLocaleString()}w · ${pct}%`);
@@ -1242,7 +1253,7 @@ export default class StorygridPlugin extends Plugin {
 		this.sprintInterval = window.setInterval(() => this.tickSprint(), 1000);
 		this.tickSprint();
 		new Notice(`Sprint started — ${minutes} minutes. Go!`);
-		document.dispatchEvent(new CustomEvent('storygrid:sprint-changed'));
+		plotverkEvents.dispatchEvent(new CustomEvent('storygrid:sprint-changed'));
 		this._notifySprintViews();
 	}
 
@@ -1302,7 +1313,7 @@ export default class StorygridPlugin extends Plugin {
 		this.sprintStartWords = 0;
 		this.sprintWordGoal = 0;
 		this.updateSprintChip();
-		document.dispatchEvent(new CustomEvent('storygrid:sprint-changed'));
+		plotverkEvents.dispatchEvent(new CustomEvent('storygrid:sprint-changed'));
 		this._notifySprintViews();
 	}
 
@@ -1355,10 +1366,10 @@ export default class StorygridPlugin extends Plugin {
 	private updateSprintChip(remainingMs?: number): void {
 		if (!this.sprintEl) return;
 		if (remainingMs === undefined) {
-			this.sprintEl.setCssStyles({ display: 'none' });
+			this.sprintEl.hide();
 			return;
 		}
-		this.sprintEl.setCssStyles({ display: '' });
+		this.sprintEl.show();
 		const totalSecs = Math.ceil(remainingMs / 1000);
 		const mins = Math.floor(totalSecs / 60);
 		const secs = totalSecs % 60;
@@ -1371,14 +1382,14 @@ export default class StorygridPlugin extends Plugin {
 		return Object.values(dash.typedWords).reduce((sum, h) => sum + (h[today] ?? 0), 0);
 	}
 
-	async onunload(): Promise<void> {
+	onunload(): void {
 		this.coachCard?.hide();
 		if (this._coachRefreshTimer !== null) window.clearTimeout(this._coachRefreshTimer);
 		this._coachRefreshTimer = null;
 		registerEntityModalPlugin(null);
-		document.body.classList.remove('sg-typewriter-on', 'sg-sheets-styled', 'sg-infobox-left', 'sg-infobox-top', 'sg-mode-write', 'sg-plugin-active');
-		document.body.style.removeProperty('--sg-tw-dim-opacity');
-		document.body.style.removeProperty('--sg-tw-line-pos');
+		this.mainBody.classList.remove('sg-typewriter-on', 'sg-sheets-styled', 'sg-infobox-left', 'sg-infobox-top', 'sg-mode-write', 'sg-plugin-active');
+		this.mainBody.style.removeProperty('--sg-tw-dim-opacity');
+		this.mainBody.style.removeProperty('--sg-tw-line-pos');
 		this._leafHeaderBtn?.remove();
 		this._removeFocusHUD();
 		if (this.typedWordsTimer !== null) window.clearTimeout(this.typedWordsTimer);
@@ -1431,12 +1442,12 @@ export default class StorygridPlugin extends Plugin {
 	async openWelcome(): Promise<void> {
 		const existing = this.app.workspace.getLeavesOfType(VIEW_TYPE_WELCOME)[0];
 		if (existing) {
-			this.app.workspace.revealLeaf(existing);
+			void this.app.workspace.revealLeaf(existing);
 			return;
 		}
 		const leaf = this.app.workspace.getLeaf('tab');
 		await leaf.setViewState({ type: VIEW_TYPE_WELCOME, active: true });
-		this.app.workspace.revealLeaf(leaf);
+		void this.app.workspace.revealLeaf(leaf);
 	}
 
 	/**
@@ -1455,12 +1466,12 @@ export default class StorygridPlugin extends Plugin {
 	async openIntentChooser(): Promise<void> {
 		const existing = this.app.workspace.getLeavesOfType(VIEW_TYPE_INTENT)[0];
 		if (existing) {
-			this.app.workspace.revealLeaf(existing);
+			void this.app.workspace.revealLeaf(existing);
 			return;
 		}
 		const leaf = this.app.workspace.getLeaf('tab');
 		await leaf.setViewState({ type: VIEW_TYPE_INTENT, active: true });
-		this.app.workspace.revealLeaf(leaf);
+		void this.app.workspace.revealLeaf(leaf);
 	}
 
 	/**
@@ -1540,7 +1551,7 @@ export default class StorygridPlugin extends Plugin {
 
 		if (this.modeStatusEl && this.canShowCoachMark('pantser-write-chip')) {
 			const chip = this.modeStatusEl;
-			requestAnimationFrame(() => {
+			window.requestAnimationFrame(() => {
 				showCoachMark(chip, t('intent.coachMark.writeMode'), {
 					placement: 'top',
 					onDismiss: () => this.markCoachMarkSeen('pantser-write-chip'),
@@ -1644,7 +1655,7 @@ export default class StorygridPlugin extends Plugin {
 			active: true,
 		});
 		this.dedupeWritersPanels(leaf);
-		this.app.workspace.revealLeaf(leaf);
+		void this.app.workspace.revealLeaf(leaf);
 	}
 
 	/** Reveal (or create) the Writers Panel WITHOUT switching its active grid —
@@ -1708,7 +1719,7 @@ export default class StorygridPlugin extends Plugin {
 			active: true,
 		});
 		this.dedupeWritersPanels(leaf);
-		this.app.workspace.revealLeaf(leaf);
+		void this.app.workspace.revealLeaf(leaf);
 	}
 
 	/**
@@ -1732,7 +1743,7 @@ export default class StorygridPlugin extends Plugin {
 			type: VIEW_TYPE_DASHBOARD,
 			state: { projectRoot: root },
 		});
-		this.app.workspace.revealLeaf(leaf);
+		void this.app.workspace.revealLeaf(leaf);
 	}
 
 	/**
@@ -1744,7 +1755,7 @@ export default class StorygridPlugin extends Plugin {
 	async showMeAround(): Promise<void> {
 		await this.openDashboard();
 		const view = await loadedView(this.app.workspace.getLeavesOfType(VIEW_TYPE_DASHBOARD)[0], StorygridDashboardView);
-		requestAnimationFrame(() => view?.runTourCoachMark());
+		window.requestAnimationFrame(() => view?.runTourCoachMark());
 	}
 
 	/**
@@ -1816,7 +1827,7 @@ export default class StorygridPlugin extends Plugin {
 			const history = (dash.typedWords[pending.root] ??= {});
 			// Floor at 0 so the daily total never goes negative
 			history[today] = Math.max(0, (history[today] ?? 0) + delta);
-			document.dispatchEvent(new CustomEvent('storygrid:words-changed'));
+			plotverkEvents.dispatchEvent(new CustomEvent('storygrid:words-changed'));
 
 			// Update streak for this project
 			const streaks = (dash.streaks ??= {});
@@ -1843,7 +1854,7 @@ export default class StorygridPlugin extends Plugin {
 			const el = view.containerEl;
 			if (!el) continue;
 			el.classList.remove('storygrid-sheet', ...kindClasses);
-			const t = view.file
+			const t: unknown = view.file
 				? this.app.metadataCache.getFileCache(view.file)?.frontmatter?.['storygrid-type']
 				: undefined;
 			if (typeof t === 'string' && hasKind(t)) {
@@ -1863,7 +1874,7 @@ export default class StorygridPlugin extends Plugin {
 			this.app,
 			'Upgrade all Codex documents to the current entry layout? Your text is kept — this only adds the modern structure (infobox and sections) where an entry is missing it.',
 			'Upgrade entries',
-			async () => {
+			() => { runSafely((async () => {
 				let count = 0;
 				for (const project of findProjects(this.app)) {
 					for (const kind of getCodexKindOrder()) {
@@ -1891,7 +1902,7 @@ export default class StorygridPlugin extends Plugin {
 					}
 				}
 				new Notice(count > 0 ? `Upgraded ${count} Codex ${count === 1 ? 'entry' : 'entries'}.` : 'All Codex entries are already up to date.');
-			}
+			})()); }
 		).open();
 	}
 
@@ -1904,14 +1915,14 @@ export default class StorygridPlugin extends Plugin {
 			await existing.loadIfDeferred?.();
 			const view = existing.view;
 			if (view instanceof SocialMapsView) view.switchTo(tab, scopeRoot);
-			this.app.workspace.revealLeaf(existing);
+			void this.app.workspace.revealLeaf(existing);
 			return;
 		}
 		const leaf = this.app.workspace.getLeaf('tab');
 		// No root given = the view follows the Dashboard's active project itself.
 		const scope = scopeRoot !== undefined ? { scopeRoot, explicitScope: true } : {};
 		await leaf.setViewState({ type: VIEW_TYPE_SOCIAL_MAPS, active: true, state: { activeTab: tab, ...scope } });
-		this.app.workspace.revealLeaf(leaf);
+		void this.app.workspace.revealLeaf(leaf);
 	}
 
 	/** Thin alias — kept so every existing call site (dashboard tiles/banners, grid-view.ts, welcome-view) keeps working unchanged. */
@@ -1951,12 +1962,12 @@ export default class StorygridPlugin extends Plugin {
 			(leaf) => leafStateString(leaf, 'filePath') === filePath
 		);
 		if (existing) {
-			this.app.workspace.revealLeaf(existing);
+			void this.app.workspace.revealLeaf(existing);
 			return;
 		}
 		const leaf = this.app.workspace.getLeaf('tab');
 		await leaf.setViewState({ type: VIEW_TYPE_TIMELINE, state: { filePath } });
-		this.app.workspace.revealLeaf(leaf);
+		void this.app.workspace.revealLeaf(leaf);
 	}
 
 	/**
@@ -1981,7 +1992,7 @@ export default class StorygridPlugin extends Plugin {
 			this.settings.activeBookId = matchedBook[0];
 			this.settings.activeSeriesId = matchedBook[1].seriesId;
 			await this.saveData(this.settings);
-			document.dispatchEvent(new CustomEvent('storygrid:project-changed'));
+			plotverkEvents.dispatchEvent(new CustomEvent('storygrid:project-changed'));
 			return;
 		}
 		this.settings.activeProjectRoot = projectRoot;
@@ -2014,7 +2025,7 @@ export default class StorygridPlugin extends Plugin {
 			this.settings.activeSeriesId = undefined;
 		}
 		await this.saveData(this.settings);
-		document.dispatchEvent(new CustomEvent('storygrid:project-changed'));
+		plotverkEvents.dispatchEvent(new CustomEvent('storygrid:project-changed'));
 	}
 
 	/**
@@ -2065,7 +2076,7 @@ export default class StorygridPlugin extends Plugin {
 		if (changed && Object.keys(seriesRegistry).length === 0) this.settings.isSeriesMode = false;
 		if (changed) {
 			await this.saveData(this.settings);
-			document.dispatchEvent(new CustomEvent('storygrid:project-changed'));
+			plotverkEvents.dispatchEvent(new CustomEvent('storygrid:project-changed'));
 		}
 	}
 
@@ -2114,7 +2125,7 @@ export default class StorygridPlugin extends Plugin {
 
 		if (!changed) return;
 		await this.saveData(this.settings);
-		document.dispatchEvent(new CustomEvent('storygrid:project-changed'));
+		plotverkEvents.dispatchEvent(new CustomEvent('storygrid:project-changed'));
 	}
 
 	/**
@@ -2130,7 +2141,7 @@ export default class StorygridPlugin extends Plugin {
 			// Already focused — just make sure the series id is current.
 			this.settings.activeSeriesId = seriesId;
 			await this.saveData(this.settings);
-			document.dispatchEvent(new CustomEvent('storygrid:project-changed'));
+			plotverkEvents.dispatchEvent(new CustomEvent('storygrid:project-changed'));
 		} else {
 			await this.setActiveProjectRoot(series.rootPath);
 		}
@@ -2176,7 +2187,7 @@ export default class StorygridPlugin extends Plugin {
 		const root = projectRoot ?? this.settings.activeProjectRoot ?? findProjects(this.app)[0]?.rootPath ?? '';
 		const leaf = existing ?? this.app.workspace.getLeaf('tab');
 		await leaf.setViewState({ type: VIEW_TYPE_HISTORY, active: true, state: { projectRoot: root } });
-		this.app.workspace.revealLeaf(leaf);
+		void this.app.workspace.revealLeaf(leaf);
 	}
 
 	/** Manually snapshot every scene in a project, asking which project when several exist. */
@@ -2266,7 +2277,7 @@ export default class StorygridPlugin extends Plugin {
 	returnToSocialMaps(leaf: WorkspaceLeaf, tab: SocialMapsTab): void {
 		if (!this.isSocialMapsLeafOpen(leaf)) return;
 		if (leaf.view instanceof SocialMapsView) leaf.view.switchTo(tab);
-		this.app.workspace.revealLeaf(leaf);
+		void this.app.workspace.revealLeaf(leaf);
 	}
 
 	/** Codex "View family tree" on a Bloodline entry: the Story Tree's family view, showing only the families tied to it. */
@@ -2289,12 +2300,12 @@ export default class StorygridPlugin extends Plugin {
 		await existing?.loadIfDeferred?.();
 		if (existing && existing.view instanceof SocialMapsView) {
 			existing.view.showStoryTree(tree, scopeRoot);
-			this.app.workspace.revealLeaf(existing);
+			void this.app.workspace.revealLeaf(existing);
 			return;
 		}
 		const leaf = existing ?? this.app.workspace.getLeaf('tab');
 		await leaf.setViewState({ type: VIEW_TYPE_SOCIAL_MAPS, active: true, state: { activeTab: 'tree', scopeRoot, explicitScope: true, tree } });
-		this.app.workspace.revealLeaf(leaf);
+		void this.app.workspace.revealLeaf(leaf);
 	}
 
 	/**
@@ -2307,7 +2318,7 @@ export default class StorygridPlugin extends Plugin {
 		for (const entity of allEntities) {
 			if (entity.entityId !== null) continue;
 			try {
-				await this.app.fileManager.processFrontMatter(entity.file, (fm) => {
+				await this.app.fileManager.processFrontMatter(entity.file, (fm: Record<string, unknown>) => {
 					if (!fm['storygrid-id']) fm['storygrid-id'] = generateEntityId();
 				});
 			} catch {
@@ -2368,9 +2379,9 @@ export default class StorygridPlugin extends Plugin {
 		for (const gridFile of this.findAllGridFiles()) {
 			if (openPaths.has(gridFile.path)) continue;
 			try {
-				const grid = JSON.parse(await this.app.vault.read(gridFile));
+				const grid = JSON.parse(await this.app.vault.read(gridFile)) as { cards?: { linkedDocPath?: string }[] } & Record<string, unknown>;
 				let changed = false;
-				const cards = (grid.cards ?? []).map((c: { linkedDocPath?: string }) => {
+				const cards = (grid.cards ?? []).map((c) => {
 					if (!c.linkedDocPath) return c;
 					if (isFile && c.linkedDocPath === oldPath) {
 						changed = true;
@@ -2403,7 +2414,7 @@ export default class StorygridPlugin extends Plugin {
 					if (!todo.link) continue;
 					if (isFile && todo.link.path === oldPath) {
 						todo.link.path = file.path;
-						todo.link.label = (file as TFile).basename;
+						todo.link.label = (file).basename;
 						taskLinksChanged = true;
 						changedRoots.add(root);
 					} else if (!isFile && todo.link.path.startsWith(oldPrefix)) {
@@ -2522,7 +2533,7 @@ export default class StorygridPlugin extends Plugin {
 			await this.saveSettings();
 		}
 		// Merge legacy connectionsMap/storyTree module flags into the new socialMaps flag.
-		this.settings.enabledModules = migrateEnabledModules(this.settings.enabledModules as Record<string, boolean> | undefined) as typeof this.settings.enabledModules;
+		this.settings.enabledModules = migrateEnabledModules(this.settings.enabledModules) as typeof this.settings.enabledModules;
 		// Merge any user-defined custom kinds into the live kind registry.
 		initKindRegistry(this.settings.customKinds ?? []);
 		// Prose Coach: highlightsAlwaysOn/helpLevel → mode (off | revising | always).
@@ -2585,7 +2596,7 @@ export default class StorygridPlugin extends Plugin {
 		await this.saveData(this.settings);
 		this.applyCodexSheetClasses();
 		// Notify all open grid views to re-render with updated settings
-		(this.app.workspace as any).trigger('storygrid:settings-changed');
+		triggerSettingsChanged(this.app.workspace);
 		this._injectSidebarTabButtons();
 	}
 
@@ -2601,10 +2612,10 @@ export default class StorygridPlugin extends Plugin {
 	 * respond to settings changes without being rewritten.
 	 */
 	applyCodexSheetClasses(): void {
-		document.body.classList.toggle('sg-sheets-styled', this.settings.codexSheetStyling);
-		document.body.classList.remove('sg-infobox-left', 'sg-infobox-top');
-		if (this.settings.codexInfoboxPosition === 'left') document.body.classList.add('sg-infobox-left');
-		if (this.settings.codexInfoboxPosition === 'top') document.body.classList.add('sg-infobox-top');
+		this.mainBody.classList.toggle('sg-sheets-styled', this.settings.codexSheetStyling);
+		this.mainBody.classList.remove('sg-infobox-left', 'sg-infobox-top');
+		if (this.settings.codexInfoboxPosition === 'left') this.mainBody.classList.add('sg-infobox-left');
+		if (this.settings.codexInfoboxPosition === 'top') this.mainBody.classList.add('sg-infobox-top');
 	}
 
 	// ─── Grid opening and creation ────────────────────────────────────────────
@@ -2690,7 +2701,7 @@ export default class StorygridPlugin extends Plugin {
 		new NewGridModal(
 			this.app,
 			'',
-			async (_name, _folder, templateId) => { await onPick(templateId); },
+			(_name, _folder, templateId) => { runSafely((async () => onPick(templateId))()); },
 			this.settings.customTemplates,
 			3,
 			defaultName
@@ -2734,8 +2745,8 @@ export default class StorygridPlugin extends Plugin {
 		}
 		new GridPickerModal(
 			this.app,
-			(file: TFile) => this.openGridFile(file),
-			() => this.createNewGrid()
+			(file: TFile) => { runSafely(this.openGridFile(file)); },
+			() => { runSafely(this.createNewGrid()); }
 		).open();
 	}
 
@@ -2747,7 +2758,7 @@ export default class StorygridPlugin extends Plugin {
 		);
 
 		if (existing) {
-			this.app.workspace.revealLeaf(existing);
+			void this.app.workspace.revealLeaf(existing);
 			return;
 		}
 
@@ -2756,7 +2767,7 @@ export default class StorygridPlugin extends Plugin {
 			type: VIEW_TYPE_STORYGRID,
 			state: { filePath: file.path },
 		});
-		this.app.workspace.revealLeaf(leaf);
+		void this.app.workspace.revealLeaf(leaf);
 	}
 }
 

@@ -1,4 +1,4 @@
-import { FakeVault, fakeApp } from '../test-support/fake-vault';
+import { FakeVault, fakeApp } from '../test/fake-vault';
 import { migrateSafetyFolders } from './safety-folder';
 import { isSafetyNetPath, wasSafetyNetPath } from './safety-paths';
 

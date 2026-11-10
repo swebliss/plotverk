@@ -84,7 +84,7 @@ export function isSafetyNetPath(path: string): boolean {
 	return SAFETY_PATH_RE.test(path);
 }
 
-/** The safety folder's first name (step 5, 2026-11-01) — read once at startup to merge it into pvbackup. */
+/** The safety folder's original name — read once at startup to merge it into pvbackup. */
 export const OLD_SAFETY_FOLDER_NAME = 'Plotverk';
 
 /**

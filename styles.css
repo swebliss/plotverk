@@ -26,7 +26,7 @@
 	--sg-toolbar-border: var(--background-modifier-border);
 	--sg-header-bg:   linear-gradient(160deg, var(--background-secondary-alt, var(--background-secondary)) 0%, var(--background-secondary) 100%);
 	--sg-panel-bg:    var(--background-secondary);
-	--sg-cell-bg:     color-mix(in srgb, var(--background-primary) 92%, #000);
+	--sg-cell-bg:     color-mix(in srgb, var(--background-primary) 96%, #000);
 	--sg-default-card-bg: linear-gradient(to bottom, var(--background-primary) 0%, var(--background-secondary) 100%);
 
 	/* Header dividers */
@@ -260,18 +260,24 @@
 }
 
 /* Toolbar buttons — labelled by default, theme-native colours */
+/* Obsidian paints every <button> itself (`button:not(.clickable-icon)`, its
+   hover, focus ring, mobile tap and tablet padding rules, up to (0,2,1)).
+   `button.` plus the class written twice outranks all of those, so the look
+   below wins without !important. Other plugin buttons use the same pattern. */
+button.sg-toolbar-btn.sg-toolbar-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0 11px;
+	border-radius: 6px;
+	border: 1px solid transparent;
+	background: transparent;
+	box-shadow: none;
+	color: var(--text-muted);
+}
 .sg-toolbar-btn {
-	display: inline-flex !important;
-	align-items: center !important;
-	justify-content: center !important;
 	gap: 6px;
 	height: 30px;
-	padding: 0 11px !important;
-	border-radius: 6px !important;
-	border: 1px solid transparent !important;
-	background: transparent !important;
-	box-shadow: none !important;
-	color: var(--text-muted) !important;
 	font-size: 0.82em;
 	font-weight: 500;
 	cursor: pointer;
@@ -281,31 +287,31 @@
 	flex: 0 0 auto;
 }
 
-.sg-toolbar-btn:hover {
-	background: var(--background-modifier-hover) !important;
-	color: var(--text-normal) !important;
+button.sg-toolbar-btn.sg-toolbar-btn:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
 }
 
 .sg-toolbar-btn:active {
 	transform: scale(0.96);
-	transition: none !important;
+	transition: none;
 }
 
 /* Icon-only buttons (overflow ⋯) — square footprint */
-.sg-toolbar-btn--icon {
-	padding: 0 7px !important;
+button.sg-toolbar-btn--icon.sg-toolbar-btn--icon {
+	padding: 0 7px;
 }
 
 /* Accent call-to-action — the "New" creation menu */
-.sg-toolbar-btn--accent {
-	background: var(--interactive-accent) !important;
-	color: var(--text-on-accent) !important;
-	border-color: transparent !important;
+button.sg-toolbar-btn--accent.sg-toolbar-btn--accent {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	border-color: transparent;
 }
 
-.sg-toolbar-btn--accent:hover {
-	background: var(--interactive-accent-hover) !important;
-	color: var(--text-on-accent) !important;
+button.sg-toolbar-btn--accent.sg-toolbar-btn--accent:hover {
+	background: var(--interactive-accent-hover);
+	color: var(--text-on-accent);
 }
 
 /* Visible text labels (the redesign shows them on primary actions) */
@@ -321,9 +327,9 @@
 	margin-left: -2px;
 	opacity: 0.75;
 }
-.sg-toolbar-btn-caret svg {
-	width: 12px !important;
-	height: 12px !important;
+.sg-toolbar-btn .sg-toolbar-btn-caret svg {
+	width: 12px;
+	height: 12px;
 }
 
 /* Phosphor icon SVG sizing — uniform across toolbar, cards, modals */
@@ -340,8 +346,8 @@
 	align-items: center;
 }
 .sg-toolbar .sg-toolbar-btn-icon svg {
-	width: 17px !important;
-	height: 17px !important;
+	width: 17px;
+	height: 17px;
 	display: block;
 	flex-shrink: 0;
 }
@@ -447,13 +453,13 @@
 /* ── Corner cell (sticky both axes) ───────────────────────────────────────── */
 
 .sg-corner {
-	position: sticky !important;
+	position: sticky;
 	/* -1px hides the sub-pixel sliver the CSS `zoom` property can leave above
 	   sticky cells, through which colored columns used to peek. */
 	top: -1px;
 	left: 0;
-	z-index: 4 !important;
-	background: var(--sg-header-bg) !important;
+	z-index: 4;
+	background: var(--sg-header-bg);
 	min-width: 40px;
 	width: 160px;
 }
@@ -475,7 +481,17 @@
 	border-right: none;
 	transition: background var(--sg-dur-fast);
 	overflow: hidden;
-	/* cursor is set dynamically by JS (grab normally, col-resize near edge) */
+	cursor: grab;
+}
+
+/* Near the right (column) or bottom (row) edge the header offers a resize
+   instead of a drag; grid-view.ts toggles these on mousemove. */
+.sg-col-header.sg-edge-col,
+.sg-row-header.sg-edge-col {
+	cursor: col-resize;
+}
+.sg-row-header.sg-edge-row {
+	cursor: row-resize;
 }
 
 .sg-col-header:nth-child(odd) {
@@ -543,6 +559,17 @@ tr .sg-row-header {
 	box-shadow:
 		inset 0 1px 0 var(--sg-hover-inset),
 		rgba(0, 0, 0, 0.09) 0px 3px 12px;
+}
+
+/* Row colour, set per header from grid-view.ts through --sg-axis-fill. Doubled
+   class, after the hover rule, so it outranks the hover tint. */
+.sg-row-header.sg-axis-tinted--solid {
+	background: var(--sg-axis-fill);
+}
+.sg-row-header.sg-axis-tinted--gradient {
+	background-image: var(--sg-axis-fill);
+	background-size: cover;
+	border-left: none;
 }
 
 .sg-row-header .sg-header-label {
@@ -666,6 +693,13 @@ tr .sg-row-header {
 	background: color-mix(in srgb, var(--sg-resize-accent) 12%, var(--sg-cell-bg));
 }
 
+/* A palette gradient on a cell (row or column colour), from grid-view.ts
+   through --sg-axis-fill. After the drag-over rule so the gradient stays on top while a card hovers over the cell. */
+.sg-cell.sg-axis-tinted--gradient {
+	background-image: var(--sg-axis-fill);
+	background-size: cover;
+}
+
 /* ── Scene cards ───────────────────────────────────────────────────────────── */
 /* Card is in normal flow so its height drives the table row height.
    margin: 3px replaces the old absolute top/left/right/bottom: 3px offsets.
@@ -701,13 +735,15 @@ tr .sg-row-header {
 	transform: translateY(0);
 }
 
-.sg-card.sg-dragging {
+/* Scoped to the cell so the placeholder outranks the card's own colour, frame
+   and status bar rules further down (they are doubled-class rules). */
+.sg-cell .sg-card.sg-dragging {
 	cursor: grabbing;
 	pointer-events: none;
 	/* Show a themed dashed drop-placeholder instead of a transparent hole */
-	background: color-mix(in srgb, var(--sg-cell-bg) 85%, transparent) !important;
-	border: 1.5px dashed var(--sg-border) !important;
-	box-shadow: none !important;
+	background: color-mix(in srgb, var(--sg-cell-bg) 85%, transparent);
+	border: 1.5px dashed var(--sg-border);
+	box-shadow: none;
 }
 
 /* Dark theme card border — darker to reduce brightness */
@@ -718,6 +754,19 @@ tr .sg-row-header {
 :not(.theme-dark) .sg-card {
 	border-color: color-mix(in srgb, var(--text-normal) 16%, transparent);
 	box-shadow: none;
+}
+
+/* Card colour, frame ring and status bar arrive from grid-view.ts as custom
+   properties on the card. Doubled class, after the hover and theme rules, so
+   they outrank those. */
+.sg-card.sg-card--filled {
+	background: var(--sg-card-fill);
+}
+.sg-card.sg-card--framed {
+	box-shadow: 0 0 0 2px var(--sg-card-frame), var(--sg-shadow-xs);
+}
+.sg-card.sg-card--status-frame {
+	border-left: 4px solid var(--sg-card-status);
 }
 
 /* Hide the placeholder's contents — keep just the dashed outline */
@@ -745,8 +794,10 @@ tr .sg-row-header {
 
 /* Card being edited in the editing sidebar — accent ring + soft glow
    instead of the old bar across the top */
+.sg-card.sg-card--editing {
+	border-color: var(--interactive-accent);
+}
 .sg-card--editing {
-	border-color: var(--interactive-accent) !important;
 	box-shadow:
 		0 0 0 2px color-mix(in srgb, var(--interactive-accent) 30%, transparent),
 		0 4px 14px color-mix(in srgb, var(--interactive-accent) 18%, transparent);
@@ -892,8 +943,8 @@ tr .sg-row-header {
 	opacity: 0.55;
 }
 
-.sg-card-edit-btn:hover {
-	opacity: 1 !important;
+.sg-card .sg-card-edit-btn:hover {
+	opacity: 1;
 	background: var(--sg-hover-bg);
 	box-shadow:
 		inset 0 1px 0 var(--sg-hover-inset),
@@ -1041,15 +1092,15 @@ tr .sg-row-header {
 .sg-cell-note div,
 .sg-cell-note .markdown-rendered,
 .sg-cell-note .markdown-rendered p {
-	margin: 0 !important;
-	padding: 0 !important;
-	line-height: 1.35 !important;
+	margin: 0;
+	padding: 0;
+	line-height: 1.35;
 }
 .sg-cell-note h1, .sg-cell-note h2, .sg-cell-note h3,
 .sg-cell-note h4, .sg-cell-note h5, .sg-cell-note h6 {
-	margin: 0 !important;
-	font-size: 1em !important;
-	line-height: 1.35 !important;
+	margin: 0;
+	font-size: 1em;
+	line-height: 1.35;
 }
 .sg-card-notes h1, .sg-card-notes h2, .sg-card-notes h3,
 .sg-card-notes h4, .sg-card-notes h5 {
@@ -1074,14 +1125,12 @@ tr .sg-row-header {
 	margin-top: 6px;
 	padding: 2px 7px 2px 5px;
 	font-size: 10px;
-	font-weight: 500;
 	color: var(--interactive-accent);
 	background: color-mix(in srgb, var(--interactive-accent) 10%, transparent);
 	border-radius: 10px;
 	cursor: pointer;
 	max-width: 100%;
 	overflow: hidden;
-	transition: background 0.15s ease;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 	transition: background var(--sg-dur-fast);
@@ -1187,7 +1236,7 @@ tr .sg-row-header {
 
 .sg-col-header.sg-drag-over,
 .sg-row-header.sg-drag-over {
-	background: color-mix(in srgb, var(--sg-resize-accent) 18%, var(--sg-cell-bg)) !important;
+	background: color-mix(in srgb, var(--sg-resize-accent) 18%, var(--sg-cell-bg));
 }
 
 /* ── Wikilinks inside cards ────────────────────────────────────────────────── */
@@ -1211,8 +1260,12 @@ tr .sg-row-header {
 
 .sg-col-header--resizing,
 .sg-row-header--resizing {
-	background: color-mix(in srgb, var(--sg-resize-accent) 18%, var(--sg-cell-bg)) !important;
 	user-select: none;
+}
+/* Doubled class: outranks the header's striped, hover and row-colour backgrounds. */
+.sg-col-header.sg-col-header--resizing,
+.sg-row-header.sg-row-header--resizing {
+	background: color-mix(in srgb, var(--sg-resize-accent) 18%, var(--sg-cell-bg));
 }
 
 /* Resize edge indicator: right edge of col headers */
@@ -1233,8 +1286,8 @@ tr .sg-row-header {
 	background: color-mix(in srgb, var(--sg-resize-accent) 55%, transparent);
 }
 
-.sg-col-header--resizing::after {
-	background: var(--sg-resize-accent) !important;
+.sg-col-header.sg-col-header--resizing::after {
+	background: var(--sg-resize-accent);
 }
 
 /* Resize edge indicator: bottom edge of row headers */
@@ -1255,8 +1308,8 @@ tr .sg-row-header {
 	background: color-mix(in srgb, var(--sg-resize-accent) 55%, transparent);
 }
 
-.sg-row-header--resizing::after {
-	background: var(--sg-resize-accent) !important;
+.sg-row-header.sg-row-header--resizing::after {
+	background: var(--sg-resize-accent);
 }
 
 /* ── Card border radius ────────────────────────────────────────────────────── */
@@ -1283,6 +1336,44 @@ tr .sg-row-header {
 	transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
+/* ── Drag choreography (grid-view.ts) ──────────────────────────────────────── */
+/* Rows, columns and cards slide into place while something is dragged. Scoped
+   to the grid and written with :is() so these state classes rank (0,3,0) and
+   outrank every other transition on these elements. */
+.sg-grid :is(tr, .sg-col-header, .sg-cell, .sg-card).sg-slide {
+	transition: transform 0.45s cubic-bezier(0.25, 1, 0.5, 1);
+}
+.sg-grid :is(tr, .sg-col-header, .sg-cell, .sg-card).sg-no-transition {
+	transition: none;
+}
+.sg-grid :is(tr, .sg-col-header, .sg-cell, .sg-card).sg-will-transform {
+	will-change: transform;
+}
+/* The column header being dragged stops catching the pointer. */
+.sg-grid .sg-col-header.sg-no-pointer {
+	pointer-events: none;
+}
+/* The card a dragged card would swap with slides flat (not lifted) toward the
+   source cell. */
+.sg-grid .sg-card.sg-card--live-swap {
+	z-index: 1;
+	box-shadow: none;
+}
+/* While a drag or an edge resize runs, the whole document shows the gesture's
+   cursor and stops selecting text. */
+body.sg-body-grabbing {
+	cursor: grabbing;
+	user-select: none;
+}
+body.sg-body-col-resize {
+	cursor: col-resize;
+	user-select: none;
+}
+body.sg-body-row-resize {
+	cursor: row-resize;
+	user-select: none;
+}
+
 /* ── Desktop drag ghost (custom floating clone) ────────────────────────────── */
 
 .sg-drag-ghost {
@@ -1301,8 +1392,8 @@ tr .sg-row-header {
 
 .sg-row-header.sg-header--lifted,
 .sg-col-header.sg-header--lifted {
-	background: color-mix(in srgb, var(--sg-resize-accent) 16%, var(--sg-cell-bg)) !important;
-	box-shadow: var(--sg-shadow-md) !important;
+	background: color-mix(in srgb, var(--sg-resize-accent) 16%, var(--sg-cell-bg));
+	box-shadow: var(--sg-shadow-md);
 	outline: 2px solid var(--sg-resize-accent);
 	outline-offset: -2px;
 }
@@ -1416,15 +1507,19 @@ tr .sg-row-header {
 	margin-bottom: 2px;
 }
 
+/* `button.` + doubled class: outranks Obsidian's <button> paint (see the
+   toolbar-button note above). */
+button.sg-md-toolbar-btn.sg-md-toolbar-btn {
+	border-radius: 0;
+	border: none;
+	background: transparent;
+	box-shadow: none;
+}
 .sg-md-toolbar-btn {
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	padding: 6px 8px;
-	border-radius: 0 !important;
-	border: none !important;
-	background: transparent !important;
-	box-shadow: none !important;
 	color: var(--sg-text);
 	cursor: pointer;
 	flex-shrink: 0;
@@ -1439,16 +1534,20 @@ tr .sg-row-header {
 	flex-shrink: 0;
 }
 
+button.sg-md-toolbar-btn.sg-md-toolbar-btn:hover {
+	background: transparent;
+	border: none;
+	box-shadow: none;
+}
 .sg-md-toolbar-btn:hover {
-	background: transparent !important;
-	border: none !important;
-	box-shadow: none !important;
 	color: var(--sg-text);
 	opacity: 0.7;
 }
 
+button.sg-md-toolbar-btn.sg-md-toolbar-btn:active {
+	background: transparent;
+}
 .sg-md-toolbar-btn:active {
-	background: transparent !important;
 	opacity: 1;
 	color: var(--interactive-accent);
 }
@@ -1877,7 +1976,6 @@ body:not(.is-mobile) .modal.sg-new-grid-modal {
 	gap: 12px;
 	margin: 16px 0 4px;
 	padding: 4px; /* room for the focus ring and lift, which overflow would clip */
-	max-height: min(56vh, 540px);
 	max-height: min(56dvh, 540px);
 	overflow-y: auto;
 }
@@ -1901,28 +1999,37 @@ body:not(.is-mobile) .modal.sg-new-grid-modal {
 	line-height: normal;
 	border-radius: 6px;
 	border: 1.5px solid color-mix(in srgb, var(--text-normal) 12%, transparent);
-	background: var(--background-primary) !important;
-	box-shadow: var(--sg-shadow-xs) !important;
 	cursor: pointer;
 	transition: border-color var(--sg-dur-base) var(--sg-ease-out), background-color var(--sg-dur-base) var(--sg-ease-out), transform var(--sg-dur-base) var(--sg-ease-out);
+}
+/* `button.`: the paint outranks Obsidian's <button> rules (see the toolbar-button note). */
+.sg-template-picker button.sg-template-card {
+	background: var(--background-primary);
+	box-shadow: var(--sg-shadow-xs);
 }
 
 .sg-template-picker .sg-template-card:hover {
 	border-color: var(--interactive-accent);
-	background: color-mix(in srgb, var(--interactive-accent) 6%, var(--background-primary)) !important;
 	transform: translateY(-1px);
+}
+.sg-template-picker button.sg-template-card:hover {
+	background: color-mix(in srgb, var(--interactive-accent) 6%, var(--background-primary));
 }
 
 .sg-template-picker .sg-template-card.sg-template-card--selected {
 	border-color: var(--interactive-accent);
-	background: color-mix(in srgb, var(--interactive-accent) 12%, var(--background-primary)) !important;
-	box-shadow: 0 6px 18px color-mix(in srgb, var(--interactive-accent) 22%, transparent) !important;
+}
+.sg-template-picker button.sg-template-card.sg-template-card--selected {
+	background: color-mix(in srgb, var(--interactive-accent) 12%, var(--background-primary));
+	box-shadow: 0 6px 18px color-mix(in srgb, var(--interactive-accent) 22%, transparent);
 }
 
 .sg-template-picker .sg-template-card:focus-visible {
 	outline: none;
 	border-color: var(--interactive-accent);
-	box-shadow: 0 0 0 2px var(--background-primary), 0 0 0 4px var(--interactive-accent) !important;
+}
+.sg-template-picker button.sg-template-card:focus-visible {
+	box-shadow: 0 0 0 2px var(--background-primary), 0 0 0 4px var(--interactive-accent);
 }
 
 .sg-template-picker .sg-template-card-title {
@@ -1949,7 +2056,6 @@ body:not(.is-mobile) .modal.sg-new-grid-modal {
 	.sg-template-picker {
 		grid-template-columns: 1fr;
 		gap: 10px;
-		max-height: min(52vh, 540px);
 		max-height: min(52dvh, 540px);
 	}
 	.sg-template-picker .sg-template-card {
@@ -2416,8 +2522,8 @@ body:not(.is-mobile) .modal.sg-new-grid-modal {
 	pointer-events: auto;
 }
 
-.sg-side-panel--no-transition {
-	transition: none !important;
+.sg-side-panel.sg-side-panel--no-transition {
+	transition: none;
 }
 
 /* Panel header */
@@ -2479,7 +2585,7 @@ body:not(.is-mobile) .modal.sg-new-grid-modal {
 	flex: 1;
 	/* min-height:0 lets this flex child shrink below its content so it scrolls
 	   internally — without it the panel grows past the sheet and the × drifts
-	   off-screen (see mobile-design-guidelines: flexbox scroll clipping). */
+	   off-screen (a capped flex column needs min-height: 0 for its child to scroll). */
 	min-height: 0;
 	overflow-y: auto;
 	padding: 8px 12px 16px 12px;
@@ -2684,47 +2790,56 @@ body:not(.is-mobile) .modal.sg-new-grid-modal {
 	height: 18px;
 }
 
-/* Panel inputs — !important so host themes (e.g. Minimal) that target
-   input[type=text] with higher specificity can't override our field colors */
+/* Panel inputs — the field colours say `input.` + the class twice so they
+   outrank Obsidian's own input[type=text] rules, including its hover and
+   focus colours at (0,2,1). Everything else keeps the single class. */
+input.sg-panel-input.sg-panel-input {
+	background: var(--sg-input-bg);
+	border: 1px solid var(--sg-border);
+	color: var(--sg-text);
+}
 .sg-panel-input {
 	width: 100%;
-	background: var(--sg-input-bg) !important;
-	border: 1px solid var(--sg-border) !important;
 	border-radius: 6px;
 	padding: 7px 10px;
 	font-size: 0.9em;
-	color: var(--sg-text) !important;
 	transition: border-color var(--sg-dur-subtle), box-shadow var(--sg-dur-subtle);
 	box-sizing: border-box;
 	box-shadow: var(--sg-shadow-inset);
 }
 
+input.sg-panel-input.sg-panel-input:focus {
+	border-color: var(--interactive-accent);
+	background: var(--sg-input-bg-focus);
+}
 .sg-panel-input:focus {
 	outline: none;
-	border-color: var(--interactive-accent) !important;
-	background: var(--sg-input-bg-focus) !important;
 	box-shadow: 0 0 0 3px color-mix(in srgb, var(--interactive-accent) 20%, transparent);
 	transition: box-shadow var(--sg-dur-base) var(--sg-ease-out);
 }
 
+select.sg-panel-select.sg-panel-select {
+	background: var(--sg-input-bg);
+	border: 1px solid var(--sg-border);
+	color: var(--sg-text);
+}
 .sg-panel-select {
 	width: 100%;
-	background: var(--sg-input-bg) !important;
-	border: 1px solid var(--sg-border) !important;
 	border-radius: 6px;
 	padding: 7px 10px;
 	font-size: 0.9em;
-	color: var(--sg-text) !important;
 	transition: border-color var(--sg-dur-subtle), box-shadow var(--sg-dur-subtle);
 	box-sizing: border-box;
 	cursor: pointer;
 	box-shadow: var(--sg-shadow-inset);
 }
 
+select.sg-panel-select.sg-panel-select:focus {
+	border-color: var(--interactive-accent);
+	background: var(--sg-input-bg-focus);
+}
 .sg-panel-select:focus {
 	outline: none;
-	border-color: var(--interactive-accent) !important;
-	background: var(--sg-input-bg-focus) !important;
 }
 
 .sg-panel-color {
@@ -2756,12 +2871,12 @@ body:not(.is-mobile) .modal.sg-new-grid-modal {
 	width: 100%;
 	min-height: 180px;
 	resize: vertical;
-	background: var(--sg-input-bg) !important;
-	border: 1px solid var(--sg-border) !important;
+	background: var(--sg-input-bg);
+	border: 1px solid var(--sg-border);
 	border-radius: 6px;
 	padding: 9px 11px;
 	font-size: 0.9em;
-	color: var(--sg-text) !important;
+	color: var(--sg-text);
 	font-family: inherit;
 	line-height: 1.6;
 	box-sizing: border-box;
@@ -2780,12 +2895,12 @@ body:not(.is-mobile) .modal.sg-new-grid-modal {
 	/* Ceiling so a long synopsis scrolls INSIDE the box instead of ballooning the
 	   whole panel — on mobile that used to push the close (×) off the top edge. */
 	max-height: 300px;
-	background: var(--sg-input-bg) !important;
-	border: 1px solid var(--sg-border) !important;
+	background: var(--sg-input-bg);
+	border: 1px solid var(--sg-border);
 	border-radius: 6px;
 	padding: 9px 11px;
 	font-size: 0.9em;
-	color: var(--sg-text) !important;
+	color: var(--sg-text);
 	font-family: inherit;
 	line-height: 1.6;
 	box-sizing: border-box;
@@ -2796,8 +2911,8 @@ body:not(.is-mobile) .modal.sg-new-grid-modal {
 
 .sg-panel-richtext:focus {
 	outline: none;
-	border-color: var(--interactive-accent) !important;
-	background: var(--sg-input-bg-focus) !important;
+	border-color: var(--interactive-accent);
+	background: var(--sg-input-bg-focus);
 	box-shadow: 0 0 0 3px color-mix(in srgb, var(--interactive-accent) 20%, transparent);
 	transition: box-shadow var(--sg-dur-base) var(--sg-ease-out);
 }
@@ -2821,8 +2936,8 @@ body:not(.is-mobile) .modal.sg-new-grid-modal {
 
 .sg-panel-textarea:focus {
 	outline: none;
-	border-color: var(--interactive-accent) !important;
-	background: var(--sg-input-bg-focus) !important;
+	border-color: var(--interactive-accent);
+	background: var(--sg-input-bg-focus);
 	box-shadow: 0 0 0 3px color-mix(in srgb, var(--interactive-accent) 20%, transparent);
 	transition: box-shadow var(--sg-dur-base) var(--sg-ease-out);
 }
@@ -2852,12 +2967,14 @@ body:not(.is-mobile) .modal.sg-new-grid-modal {
 }
 
 /* Small button in panel (e.g. Clear) */
+/* Native <button>: strip Obsidian's default ~30px height so the button hugs
+   its label like the chips do (`button.` + doubled class outranks it). */
+button.sg-panel-btn-small.sg-panel-btn-small {
+	height: auto;
+	min-height: 0;
+}
 .sg-panel-btn-small {
 	font-size: 11px;
-	/* Native <button>: strip Obsidian's default ~30px height + shadow so the
-	   button hugs its label like the chips do. */
-	height: auto !important;
-	min-height: 0 !important;
 	box-shadow: none;
 	line-height: 1;
 	padding: 4px 9px;
@@ -2963,18 +3080,25 @@ body:not(.is-mobile) .modal.sg-new-grid-modal {
 	color: var(--color-purple, #9b59b6);
 }
 
+/* Chips in the card editor open their document on click. */
+.sg-chip.sg-chip--clickable {
+	cursor: pointer;
+}
+
 /* The × is a native <button>: Obsidian's stylesheet gives every button a fixed
    ~30px height + padding + shadow, which silently props the whole chip open.
    Zero all of that out so the chip's own padding decides the height. */
+button.sg-chip-remove.sg-chip-remove {
+	border: none;
+	background: none;
+	box-shadow: none;
+	height: auto;
+	min-height: 0;
+}
 .sg-chip-remove {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	border: none !important;
-	background: none !important;
-	box-shadow: none !important;
-	height: auto !important;
-	min-height: 0 !important;
 	width: auto;
 	cursor: pointer;
 	color: inherit;
@@ -3100,12 +3224,11 @@ body:not(.is-mobile) .modal.sg-new-grid-modal {
 		position: fixed;
 		top: auto;
 		left: 0; right: 0; bottom: 0;
-		width: 100vw !important;
-		min-width: unset !important;
+		width: 100vw;
+		min-width: unset;
 		/* dvh tracks the keyboard-shrunk viewport, so the sheet (and its × header)
 		   stay ABOVE the on-screen keyboard instead of being scrolled up behind
-		   the status bar. vh is the fallback for older WebViews. */
-		max-height: 88vh;
+		   the status bar. */
 		max-height: 88dvh;
 		min-height: 0;
 		z-index: 1000;
@@ -3140,6 +3263,24 @@ body:not(.is-mobile) .modal.sg-new-grid-modal {
 	gap: 6px;
 	align-items: center;
 	margin-bottom: 5px;
+}
+/* A row/column label fills the row (the shared label field is fixed-width elsewhere). */
+.sg-custom-template-row .sg-character-field-label {
+	flex: 1;
+}
+.sg-custom-template-form-body .sg-modal-actions {
+	margin-top: 12px;
+}
+/* The Pro feature badges in Settings are indicators, not buttons. */
+.clickable-icon.sg-pro-feature-active,
+.clickable-icon.sg-pro-feature-locked {
+	cursor: default;
+}
+/* Inline validation message under the "add series" row. */
+.sg-series-mgr-err-msg {
+	color: var(--text-error);
+	font-size: 12px;
+	margin-top: 4px;
 }
 
 .sg-settings-desc {
@@ -3401,6 +3542,10 @@ body:not(.is-mobile) .modal.sg-new-grid-modal {
 
 .sg-cpick-collapsible.sg-cpick-collapsed {
 	opacity: 0;
+}
+/* Shut end of the grow/shrink animation (color-picker-popover.ts _setCollapsed). */
+.sg-cpick-shut {
+	max-height: 0;
 }
 
 /* Solid / Gradient tabs */
@@ -3960,13 +4105,16 @@ body:not(.is-mobile) .modal.sg-new-grid-modal {
 
 .sg-toolbar-zoom .sg-toolbar-zoom-btn {
 	height: 28px;
-	padding: 0 8px !important;
-	border-radius: 0 !important;
-	border: none !important;
+}
+/* `button.`: same rank as the toolbar-button paint above, later in the file, so it wins. */
+.sg-toolbar-zoom button.sg-toolbar-zoom-btn {
+	padding: 0 8px;
+	border-radius: 0;
+	border: none;
 }
 
-.sg-toolbar-zoom .sg-toolbar-zoom-btn:hover {
-	background: var(--background-modifier-hover) !important;
+.sg-toolbar-zoom button.sg-toolbar-zoom-btn:hover {
+	background: var(--background-modifier-hover);
 }
 
 .sg-toolbar-zoom-label {
@@ -3987,11 +4135,11 @@ body:not(.is-mobile) .modal.sg-new-grid-modal {
 
 /* Card editor toolbar — font size dropdown */
 .sg-md-toolbar-select {
-	background: var(--sg-input-bg) !important;
-	border: 1px solid var(--sg-border) !important;
+	background: var(--sg-input-bg);
+	border: 1px solid var(--sg-border);
 	border-radius: 6px;
 	font-size: 0.78em;
-	color: var(--sg-text) !important;
+	color: var(--sg-text);
 	padding: 2px 4px;
 	cursor: pointer;
 	height: 26px;
@@ -4404,7 +4552,7 @@ body:not(.is-mobile) .modal.sg-new-grid-modal {
 	line-height: 1.25;
 }
 
-/* ── Phone menu: boxed ☰ beside the section heading + bottom sheet (2026-11-07) ──
+/* ── Phone menu: boxed ☰ beside the section heading + bottom sheet ──
    Phones hide the sidebar. A boxed ☰ sits left of the "Characters" heading (no
    extra bar; the heading already says where you are) and opens the tree as a
    bottom sheet. */
@@ -4490,7 +4638,6 @@ body:not(.is-mobile) .modal.sg-new-grid-modal {
 	flex-direction: column;
 	/* min-height: 0 so the inner list scrolls instead of being clipped (mobile rules). */
 	min-height: 0;
-	max-height: 80vh;
 	max-height: 80dvh;
 	background: var(--sg-cdx-sidebar-bg);
 	border-radius: 12px 12px 0 0;
@@ -5259,11 +5406,39 @@ body:not(.is-mobile) .modal.sg-new-grid-modal {
 		min-height: 30px;
 	}
 
-	/* Empty-cell "add card" button: always visible, finger-sized */
-	.sg-cell-add-card {
-		opacity: 0.6;
-		width: 36px;
-		height: 36px;
+	/* Empty cells stay blank until tapped: a plus in every cell is noise on a small
+	   screen. Tapping one cell "arms" it — a soft accent inset outline and one
+	   finger-sized plus. visibility keeps the hidden plus out of hit-testing, so a
+	   tap on the middle of a blank cell arms it instead of creating a card. The
+	   :hover variants beat the desktop hover-reveal rule and sticky hover on touch. */
+	.sg-cell-content--empty .sg-cell-add-card,
+	.sg-cell:hover .sg-cell-content--empty .sg-cell-add-card {
+		opacity: 0;
+		visibility: hidden;
+	}
+	.sg-cell-content--armed {
+		outline: 2px solid color-mix(in srgb, var(--interactive-accent) 55%, transparent);
+		outline-offset: -3px;
+		border-radius: 6px;
+	}
+	.theme-dark .sg-cell-content--armed {
+		outline-color: color-mix(in srgb, var(--interactive-accent) 70%, transparent);
+	}
+	/* Two classes outrank the single-class "clean plus" sizing rule further down. */
+	.sg-cell-content--armed .sg-cell-add-card,
+	.sg-cell:hover .sg-cell-content--armed .sg-cell-add-card {
+		opacity: 1;
+		visibility: visible;
+		width: 44px;
+		height: 44px;
+	}
+	/* The first-scene ghost hint shares the centre with the plus: drop its own
+	   dashed circle and let the text sit along the bottom edge instead. */
+	.sg-cell-content--armed .sg-ghost-hint-icon {
+		display: none;
+	}
+	.sg-cell-content--armed .sg-ghost-hint {
+		justify-content: flex-end;
 	}
 
 	/* Codex card edit pencil: always visible */
@@ -5523,7 +5698,9 @@ body:not(.is-mobile) .modal.sg-new-grid-modal {
 	flex-shrink: 0;
 }
 .sg-series-mgr-btn:hover { opacity: 0.9; }
-.sg-series-mgr-err { border-color: var(--color-red) !important; }
+/* `input.` + doubled class: outranks Obsidian's input[type=text] hover/focus
+   border colour and the scope modal's own error rule without !important. */
+input.sg-series-mgr-err.sg-series-mgr-err { border-color: var(--color-red); }
 
 /* Standard quick-launch icon row — identical in the Codex, Writers Panel, Dashboard,
    and (mixed into the toolbar) Plot Grid headers. See StorygridPlugin.renderQuickLaunchRow. */
@@ -5698,11 +5875,11 @@ body:not(.is-mobile) .modal.sg-new-grid-modal {
 /* World tab entity items — override scene-specific styles, feel clickable */
 .sg-outline-world-entity {
 	cursor: pointer;
-	margin-left: 0 !important;
-	padding-left: 8px !important;
+	margin-left: 0;
+	padding-left: 8px;
 	border-radius: 6px;
 }
-.sg-outline-world-entity::before { display: none !important; }
+.sg-outline-world-entity::before { display: none; }
 .sg-outline-world-entity-icon {
 	display: flex;
 	align-items: center;
@@ -5975,7 +6152,7 @@ body:not(.is-mobile) .modal.sg-new-grid-modal {
 	flex-wrap: wrap;
 }
 .sg-toolbar-btn {
-	flex: 0 0 auto !important;
+	flex: 0 0 auto;
 }
 
 /* Phones: wrapping made the toolbar eat vertical space and the rightmost
@@ -6308,6 +6485,10 @@ body:not(.is-mobile) .modal.sg-new-grid-modal {
 }
 
 /* Drop line — the depth-aware insertion indicator during outline drag. */
+/* The list that hosts the drop line (outline-view.ts setupTreeDrag). */
+.sg-outline-drag-host {
+	position: relative;
+}
 .sg-outline-drop-line {
 	position: absolute;
 	right: 8px;
@@ -6775,7 +6956,7 @@ body:not(.is-mobile) .modal.sg-new-grid-modal {
 .sg-outline-todo-plus svg { width: 12px; height: 12px; }
 .sg-outline-todo:hover .sg-outline-todo-plus { opacity: 0.6; }
 .sg-outline-todo.has-subtasks .sg-outline-todo-plus { opacity: 0.55; }
-.sg-outline-todo-plus:hover { opacity: 1 !important; color: var(--interactive-accent); }
+.sg-outline-todo-plus:hover { opacity: 1; color: var(--interactive-accent); }
 
 /* Subtask panel */
 .sg-outline-subtasks { display: flex; flex-direction: column; }
@@ -7085,17 +7266,21 @@ body {
 .modal.sg-sheet-host {
 	width: min(940px, 94vw);
 	max-width: none;
-	height: min(780px, 88vh);
 	height: min(780px, 88dvh);
 	padding: 0;
 	overflow: hidden;
+}
+
+/* Obsidian pads .modal-content (more on phones); the sheet runs edge to edge. */
+.modal.sg-sheet-host .sg-sheet {
+	padding: 0;
 }
 
 .sg-sheet {
 	display: flex;
 	flex-direction: column;
 	height: 100%;
-	padding: 0 !important;
+	padding: 0;
 }
 
 /* ── Per-kind accents (light theme) ── */
@@ -7373,7 +7558,6 @@ body {
 	border-radius: 6px;
 	overflow: hidden;
 	border: 1px solid var(--background-modifier-border);
-	background: none;
 	padding: 0;
 	font: inherit;
 	display: block;
@@ -9463,8 +9647,7 @@ body {
 /* Widgets that already carry their own chip/track styling (tags, slider,
    image) sit inside the field box with a touch less padding, so the box
    reads as a container rather than a second layer of chrome. */
-.sg-outline-preview-field-value:has(.sg-chip-container),
-.sg-outline-preview-field-value:has(.sg-fw-slider-read) {
+.sg-outline-preview-field-value.sg-outline-preview-field-value--inset {
 	padding: 3px 5px;
 }
 .sg-outline-preview-field-value .sg-chip-container {
@@ -9965,7 +10148,7 @@ body {
 }
 
 @media (max-width: 760px) {
-	.sg-detail-band:has(.sg-detail-action--tree) { flex-wrap: wrap; }
+	.sg-detail-band.sg-detail-band--has-tree { flex-wrap: wrap; }
 }
 
 .sg-detail-action {
@@ -10471,8 +10654,7 @@ body {
 		"icon  label"
 		"value value";
 	align-items: center;
-	column-gap: 9px;
-	row-gap: 9px;
+	gap: 9px;
 	padding: 15px 16px;
 	border-radius: var(--sg-d-radius);
 	/* A faint vertical gradient rather than a flat fill — on a white page a
@@ -10603,7 +10785,7 @@ body {
 @media (max-width: 760px) {
 	.sg-detail-band { padding: 8px 14px; gap: 10px; }
 	/* Two back buttons + chip + name + actions don't fit one phone row. */
-	.sg-detail-band:has(.sg-detail-back--origin) { flex-wrap: wrap; }
+	.sg-detail-band.sg-detail-band--has-origin { flex-wrap: wrap; }
 	.sg-detail-back,
 	.sg-detail-action { min-height: 44px; }
 	.sg-detail-back { padding: 0 14px 0 10px; }
@@ -11160,12 +11342,14 @@ body {
 	text-transform: none;
 	letter-spacing: 0.02em;
 }
+button.sg-todo-add-btn.sg-todo-add-btn {
+	background: none;
+	border: none;
+	box-shadow: none;
+}
 .sg-todo-add-btn {
 	position: relative;
 	margin-left: auto;
-	background: none !important;
-	border: none !important;
-	box-shadow: none !important;
 	cursor: pointer;
 	padding: 2px;
 	color: var(--text-muted);
@@ -12033,13 +12217,15 @@ body {
 	align-items: center;
 	justify-content: center;
 	padding: 2px;
-	border: none !important;
-	background: none !important;
-	box-shadow: none !important;
 	color: var(--text-muted);
 	cursor: pointer;
 	opacity: 0;
 	transition: opacity var(--sg-dur-subtle) ease, color var(--sg-dur-subtle) ease;
+}
+button.sg-dash-widget-fold.sg-dash-widget-fold {
+	border: none;
+	background: none;
+	box-shadow: none;
 }
 .sg-dash-widget:hover > .sg-dash-widget-fold,
 .sg-dash-widget-fold:focus-visible { opacity: 0.7; }
@@ -12096,16 +12282,20 @@ body {
 	width: 26px;
 	height: 26px;
 	padding: 0;
-	border: none !important;
 	border-radius: 6px;
-	background: none !important;
-	box-shadow: none !important;
 	color: var(--text-muted);
 	cursor: pointer;
 	outline: none;
 }
+button.sg-dash-widget-foldbtn.sg-dash-widget-foldbtn {
+	border: none;
+	background: none;
+	box-shadow: none;
+}
+button.sg-dash-widget-foldbtn.sg-dash-widget-foldbtn:hover {
+	background: none;
+}
 .sg-dash-widget-foldbtn:hover {
-	background: none !important;
 	color: var(--text-normal);
 }
 .sg-dash-widget-foldbtn svg { width: 15px; height: 15px; }
@@ -12517,6 +12707,10 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 
 /* ── Typewriter settings popover ─────────────────────────────────────────── */
 
+/* Laid out but invisible while its size is measured for positioning. */
+.sg-tw-popover--measuring {
+	visibility: hidden;
+}
 .sg-tw-popover {
 	position: fixed;
 	z-index: 1000;
@@ -12648,7 +12842,32 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 	box-shadow: inset 0 0 0 2px var(--interactive-accent);
 }
 .sg-codex-tree-chevron {
-	all: unset;
+	/* A full reset of the native button, spelled out: every box, font, text and paint
+	   property the browser and Obsidian put on a <button> is dropped one by
+	   one, at the same single-class specificity, so nothing else changes.
+	   (Properties this rule sets itself further down are simply set there.) */
+	-webkit-app-region: unset;
+	appearance: unset;
+	box-sizing: unset;
+	margin: unset;
+	padding: unset;
+	border: unset;
+	border-radius: unset;
+	corner-shape: unset;
+	outline: unset;
+	background-color: unset;
+	box-shadow: unset;
+	font: unset;
+	letter-spacing: unset;
+	word-spacing: unset;
+	text-align: unset;
+	text-indent: unset;
+	text-shadow: unset;
+	text-transform: unset;
+	text-rendering: unset;
+	white-space: unset;
+	user-select: unset;
+	transition: unset;
 	cursor: pointer;
 	width: 18px;
 	height: 18px;
@@ -12688,7 +12907,27 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 	flex-shrink: 0;
 }
 .sg-codex-tree-add {
-	all: unset;
+	/* Same spelled-out reset as .sg-codex-tree-chevron above. */
+	-webkit-app-region: unset;
+	appearance: unset;
+	box-sizing: unset;
+	margin: unset;
+	padding: unset;
+	border: unset;
+	corner-shape: unset;
+	outline: unset;
+	background-color: unset;
+	box-shadow: unset;
+	font: unset;
+	letter-spacing: unset;
+	word-spacing: unset;
+	text-align: unset;
+	text-indent: unset;
+	text-shadow: unset;
+	text-transform: unset;
+	text-rendering: unset;
+	white-space: unset;
+	user-select: unset;
 	cursor: pointer;
 	margin-left: auto;
 	width: 20px;
@@ -12806,6 +13045,8 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 	overflow: hidden;
 	cursor: pointer;
 	position: relative;
+	/* Stacking order per avatar comes from grid-view.ts (first on top). */
+	z-index: var(--sg-avatar-z);
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -12821,7 +13062,7 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 
 .sg-card-avatar:hover {
 	transform: translateY(-2px) scale(1.08);
-	z-index: 99 !important;
+	z-index: 99;
 }
 
 .sg-card-avatar img {
@@ -13430,11 +13671,20 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 	line-height: 1.65;
 }
 
+/* As wide as the wider button and centred; both buttons stretch to that width
+   so their edges line up. */
 .sg-welcome-cta-row {
 	display: flex;
 	flex-direction: column;
-	align-items: center;
+	align-items: stretch;
+	width: fit-content;
+	max-width: 100%;
+	margin-inline: auto;
 	gap: 14px;
+}
+
+.sg-welcome-cta-row > .sg-welcome-btn {
+	justify-content: center;
 }
 
 .sg-welcome-btn {
@@ -13742,11 +13992,12 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 	margin: 0 0 14px;
 }
 
-.sg-welcome-footer-note {
-	font-size: 0.98rem !important;
-	color: var(--text-muted) !important;
+/* Scoped under the footer so it outranks `.sg-welcome-footer p` above. */
+.sg-welcome-footer .sg-welcome-footer-note {
+	font-size: 0.98rem;
+	color: var(--text-muted);
 	max-width: 560px;
-	margin: 0 auto 20px !important;
+	margin: 0 auto 20px;
 	line-height: 1.6;
 }
 
@@ -14259,8 +14510,8 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
    every "Plotverk is telling you something" surface reads as one family. Used
    for the Codex "welcome to the Codex" intro and the Dashboard's readiness
    suggestions. It always sits on yellow, so colours are fixed dark-ink values
-   in BOTH themes (no theme variables), with !important where Obsidian's own
-   button styles would otherwise win. */
+   in BOTH themes (no theme variables), with selectors specific enough to beat
+   Obsidian's own button styles. */
 
 .sg-tab-intro {
 	display: flex;
@@ -14269,7 +14520,7 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 	margin: 0 0 14px;
 	padding: 10px 10px 10px 14px;
 	background: #fff44f;
-	border: 1px solid color-mix(in srgb, #fff44f 60%, black 15%);
+	border: 1px solid color-mix(in srgb, #fff44f 60%, #000 15%);
 	border-radius: 6px;
 	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18), 0 1px 3px rgba(0, 0, 0, 0.14);
 	transition: opacity var(--sg-dur-slow) ease;
@@ -14290,7 +14541,7 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 .sg-tab-intro .sg-tab-intro-text {
 	font-size: 0.88em;
 	line-height: 1.45;
-	color: var(--sg-tab-intro-ink) !important;
+	color: var(--sg-tab-intro-ink);
 	flex: 1;
 	min-width: 0;
 }
@@ -14308,19 +14559,22 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 	line-height: 1;
 	font-weight: 600;
 	border-radius: 6px;
-	border: 1px solid rgba(26, 26, 20, 0.45) !important;
-	background: transparent !important;
-	color: var(--sg-tab-intro-ink) !important;
-	box-shadow: none !important;
 	cursor: pointer;
 	flex-shrink: 0;
 	transition: background-color var(--sg-dur-subtle), border-color var(--sg-dur-subtle);
 }
+/* `button.`: outranks Obsidian's <button> paint (see the toolbar-button note). */
+.sg-tab-intro button.sg-tab-intro-close {
+	border: 1px solid rgba(26, 26, 20, 0.45);
+	background: transparent;
+	color: var(--sg-tab-intro-ink);
+	box-shadow: none;
+}
 
-.sg-tab-intro .sg-tab-intro-close:hover,
-.sg-tab-intro .sg-tab-intro-close:focus-visible {
-	background: rgba(26, 26, 20, 0.12) !important;
-	border-color: var(--sg-tab-intro-ink) !important;
+.sg-tab-intro button.sg-tab-intro-close:hover,
+.sg-tab-intro button.sg-tab-intro-close:focus-visible {
+	background: rgba(26, 26, 20, 0.12);
+	border-color: var(--sg-tab-intro-ink);
 }
 
 /* The suggestion's action ("Open the Plot Grid"): same dark-ink button as the
@@ -14339,17 +14593,19 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 	font-weight: 600;
 	line-height: 1.2;
 	text-decoration: none;
-	border: 1px solid #1a1a14 !important;
-	background: #1a1a14 !important;
-	color: #fff44f !important;
-	box-shadow: none !important;
 	cursor: pointer;
 	transition: background-color var(--sg-dur-subtle);
 }
+.sg-tab-intro.sg-dash-suggestion button.sg-dash-link-btn {
+	border: 1px solid #1a1a14;
+	background: #1a1a14;
+	color: #fff44f;
+	box-shadow: none;
+}
 
-.sg-tab-intro.sg-dash-suggestion .sg-dash-link-btn:hover,
-.sg-tab-intro.sg-dash-suggestion .sg-dash-link-btn:focus-visible {
-	background: #3d3d30 !important;
+.sg-tab-intro.sg-dash-suggestion button.sg-dash-link-btn:hover,
+.sg-tab-intro.sg-dash-suggestion button.sg-dash-link-btn:focus-visible {
+	background: #3d3d30;
 }
 
 /* Narrow panes: text on its own line, the buttons under it. */
@@ -14452,7 +14708,7 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 	gap: 6px;
 	padding: 12px 14px;
 	background: #fff44f;
-	border: 1px solid color-mix(in srgb, #fff44f 60%, black 15%);
+	border: 1px solid color-mix(in srgb, #fff44f 60%, #000 15%);
 	border-radius: 6px;
 	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28), 0 1px 3px rgba(0, 0, 0, 0.18);
 	animation: sg-coach-mark-in 0.18s ease-out;
@@ -14473,7 +14729,7 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 	width: 10px;
 	height: 10px;
 	background: #fff44f;
-	border: 1px solid color-mix(in srgb, #fff44f 60%, black 15%);
+	border: 1px solid color-mix(in srgb, #fff44f 60%, #000 15%);
 	border-right: none;
 	border-bottom: none;
 	transform: rotate(45deg);
@@ -14492,13 +14748,13 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 .sg-coach-mark-title {
 	font-size: 0.85em;
 	font-weight: 700;
-	color: var(--sg-coach-mark-ink) !important;
+	color: var(--sg-coach-mark-ink);
 }
 
 .sg-coach-mark-text {
 	font-size: 0.85em;
 	line-height: 1.4;
-	color: var(--sg-coach-mark-ink) !important;
+	color: var(--sg-coach-mark-ink);
 }
 
 .sg-coach-mark-footer {
@@ -14510,9 +14766,13 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 }
 
 /* The buttons sit on yellow in BOTH themes, so they use fixed dark-ink colours,
-   never theme variables. !important on the paint: Obsidian's own
+   never theme variables. The paint rules below say `button.`: Obsidian's own
    `button:not(.clickable-icon)` rules are more specific than a single class and
    used to win in the dark theme, painting a dark-grey button under dark text. */
+.sg-coach-mark button.sg-coach-mark-skip,
+.sg-coach-mark button.sg-coach-mark-btn {
+	box-shadow: none;
+}
 .sg-coach-mark .sg-coach-mark-skip,
 .sg-coach-mark .sg-coach-mark-btn {
 	appearance: none;
@@ -14529,34 +14789,33 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 	font-size: 0.8em;
 	font-weight: 600;
 	text-decoration: none;
-	box-shadow: none !important;
 	cursor: pointer;
 	transition: background-color var(--sg-dur-subtle), border-color var(--sg-dur-subtle);
 }
 
 /* Secondary (Skip): outlined in ink. */
-.sg-coach-mark .sg-coach-mark-skip {
-	background: transparent !important;
-	border: 1px solid rgba(26, 26, 20, 0.5) !important;
-	color: var(--sg-coach-mark-ink) !important;
+.sg-coach-mark button.sg-coach-mark-skip {
+	background: transparent;
+	border: 1px solid rgba(26, 26, 20, 0.5);
+	color: var(--sg-coach-mark-ink);
 }
 
-.sg-coach-mark .sg-coach-mark-skip:hover,
-.sg-coach-mark .sg-coach-mark-skip:focus-visible {
-	background: rgba(26, 26, 20, 0.12) !important;
-	border-color: var(--sg-coach-mark-ink) !important;
+.sg-coach-mark button.sg-coach-mark-skip:hover,
+.sg-coach-mark button.sg-coach-mark-skip:focus-visible {
+	background: rgba(26, 26, 20, 0.12);
+	border-color: var(--sg-coach-mark-ink);
 }
 
 /* Primary (Got it / Next): solid ink with yellow text. */
-.sg-coach-mark .sg-coach-mark-btn {
-	background: var(--sg-coach-mark-ink) !important;
-	border: 1px solid var(--sg-coach-mark-ink) !important;
-	color: #fff44f !important;
+.sg-coach-mark button.sg-coach-mark-btn {
+	background: var(--sg-coach-mark-ink);
+	border: 1px solid var(--sg-coach-mark-ink);
+	color: #fff44f;
 }
 
-.sg-coach-mark .sg-coach-mark-btn:hover,
-.sg-coach-mark .sg-coach-mark-btn:focus-visible {
-	background: #3d3d30 !important;
+.sg-coach-mark button.sg-coach-mark-btn:hover,
+.sg-coach-mark button.sg-coach-mark-btn:focus-visible {
+	background: #3d3d30;
 }
 
 @media (hover: none) and (pointer: coarse) {
@@ -15709,6 +15968,10 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 .sg-rg-svg:active {
 	cursor: grabbing;
 }
+/* Set from rel-graph-view.ts for the whole pan, mouse or finger. */
+.sg-rg-svg.sg-rg-svg--panning {
+	cursor: grabbing;
+}
 
 /* ─── Edges ─── */
 
@@ -15876,9 +16139,10 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 	font-size: 0.85em;
 }
 
-.sg-rg-example-note {
-	font-size: 0.78em !important;
-	color: var(--text-faint) !important;
+/* `p.` so it outranks `.sg-rg-empty p` above (same specificity, later). */
+p.sg-rg-example-note {
+	font-size: 0.78em;
+	color: var(--text-faint);
 	max-width: 320px;
 }
 
@@ -15922,6 +16186,11 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 	min-height: 1px;
 	border-radius: 2px;
 	flex-shrink: 0;
+}
+/* The "Unspecified" entry: a thin, muted line (the others get their relationship colour inline). */
+.sg-rg-legend-swatch--bare {
+	background: var(--text-faint);
+	height: 1px;
 }
 
 .sg-rg-legend-label {
@@ -16551,6 +16820,10 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 .sg-st-svg:active {
 	cursor: grabbing;
 }
+/* Set from story-tree-view.ts for the whole pan, mouse or finger. */
+.sg-st-svg.sg-st-svg--panning {
+	cursor: grabbing;
+}
 
 /* ─── Edges ─── */
 
@@ -16868,9 +17141,10 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 	font-size: 0.85em;
 }
 
-.sg-st-example-note {
-	font-size: 0.78em !important;
-	color: var(--text-faint) !important;
+/* `p.` so it outranks `.sg-st-empty p` above (same specificity, later). */
+p.sg-st-example-note {
+	font-size: 0.78em;
+	color: var(--text-faint);
 	max-width: 320px;
 }
 
@@ -17059,8 +17333,7 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 	}
 
 	/* min-height:0 lets .sg-rg-settings-body actually scroll inside the capped
-	   max-height sheet above, instead of silently clipping — see the flex-column
-	   scroll-clipping rule in the mobile design guidelines. */
+	   max-height sheet above, instead of silently clipping. */
 	.sg-rg-settings-panel .sg-rg-settings-body {
 		min-height: 0;
 	}
@@ -17401,7 +17674,7 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
     .sg-scan-row { padding: 12px 16px; }
     .sg-scan-row input[type="checkbox"] { height: 20px; width: 20px; }
     .sg-scan-footer { padding: 10px 16px; }
-    .sg-scan-list { max-height: 60vh; max-height: 60dvh; }
+    .sg-scan-list { max-height: 60dvh; }
     .sg-scan-apply-btn,
     .sg-scan-cancel-btn { min-height: 44px; }
 }
@@ -17430,6 +17703,10 @@ body.sg-plugin-active a.internal-link {
    Floating card shown when hovering a Codex wikilink.
    ═══════════════════════════════════════════════════════════════════════════ */
 
+/* Laid out but invisible while its size is measured for positioning. */
+.sg-entity-popover--measuring {
+	visibility: hidden;
+}
 .sg-entity-popover {
 	position: fixed;
 	z-index: 1000;
@@ -17538,7 +17815,7 @@ body.sg-plugin-active a.internal-link {
 
 /* Touch devices — no hover possible */
 @media (hover: none) {
-	.sg-entity-popover { display: none !important; }
+	.sg-entity-popover { display: none; }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -17547,28 +17824,17 @@ body.sg-plugin-active a.internal-link {
    "Reduce motion" in their OS accessibility settings.
    ═══════════════════════════════════════════════════════════════════════════ */
 
+/* The root list is written four times through :is(): each :is() counts as one
+   class, so the selector ranks (0,4,0) and outranks every transition and
+   animation rule in this file (none uses more than three classes) without
+   !important. The drag ghost lives outside the roots, so it gets the same
+   treatment on its own. */
 @media (prefers-reduced-motion: reduce) {
-	.sg-view-root *,
-	.sg-side-panel *,
-	.sg-codex-root *,
-	.sg-dashboard-root *,
-	.sg-detail-root *,
-	.sg-sm-root *,
-	.sg-rg-root *,
-	.sg-st-root *,
-	.sg-tl-root *,
-	.sg-color-popover *,
-	.sg-color-popover--v2 *,
-	.sg-select-panel *,
-	.sg-due-popover *,
-	.sg-drag-ghost,
-	.sg-tl-add-popover *,
-	.sg-focus-hud *,
-	.sg-entity-popover *,
-	.sg-tw-popover * {
-		transition-duration: 0.01ms !important;
-		animation-duration: 0.01ms !important;
-		animation-iteration-count: 1 !important;
+	:is(.sg-view-root, .sg-side-panel, .sg-codex-root, .sg-dashboard-root, .sg-detail-root, .sg-sm-root, .sg-rg-root, .sg-st-root, .sg-tl-root, .sg-color-popover, .sg-color-popover--v2, .sg-select-panel, .sg-due-popover, .sg-tl-add-popover, .sg-focus-hud, .sg-entity-popover, .sg-tw-popover):is(.sg-view-root, .sg-side-panel, .sg-codex-root, .sg-dashboard-root, .sg-detail-root, .sg-sm-root, .sg-rg-root, .sg-st-root, .sg-tl-root, .sg-color-popover, .sg-color-popover--v2, .sg-select-panel, .sg-due-popover, .sg-tl-add-popover, .sg-focus-hud, .sg-entity-popover, .sg-tw-popover):is(.sg-view-root, .sg-side-panel, .sg-codex-root, .sg-dashboard-root, .sg-detail-root, .sg-sm-root, .sg-rg-root, .sg-st-root, .sg-tl-root, .sg-color-popover, .sg-color-popover--v2, .sg-select-panel, .sg-due-popover, .sg-tl-add-popover, .sg-focus-hud, .sg-entity-popover, .sg-tw-popover):is(.sg-view-root, .sg-side-panel, .sg-codex-root, .sg-dashboard-root, .sg-detail-root, .sg-sm-root, .sg-rg-root, .sg-st-root, .sg-tl-root, .sg-color-popover, .sg-color-popover--v2, .sg-select-panel, .sg-due-popover, .sg-tl-add-popover, .sg-focus-hud, .sg-entity-popover, .sg-tw-popover) *,
+	.sg-drag-ghost.sg-drag-ghost.sg-drag-ghost.sg-drag-ghost {
+		transition-duration: 0.01ms;
+		animation-duration: 0.01ms;
+		animation-iteration-count: 1;
 	}
 }
 
@@ -17717,6 +17983,10 @@ body.sg-plugin-active a.internal-link {
 }
 
 .sg-tl-svg:active {
+	cursor: grabbing;
+}
+/* Set from timeline-render.ts for the whole pan, mouse or finger. */
+.sg-tl-svg.sg-tl-svg--panning {
 	cursor: grabbing;
 }
 
@@ -17936,8 +18206,29 @@ body.sg-plugin-active a.internal-link {
 }
 
 .sg-tl-node-halo {
+	fill: var(--background-primary);
 	stroke: rgba(0, 0, 0, 0.14);
 	stroke-width: 1px;
+}
+
+/* Invisible, finger-sized targets around badges and era names on touch screens. */
+.sg-tl-node-hit,
+.sg-tl-era-label-hit {
+	fill: transparent;
+	pointer-events: all;
+}
+
+/* The hairline across the whole timeline where an era starts or ends. */
+.sg-tl-era-edge {
+	stroke-width: 1px;
+	pointer-events: none;
+}
+
+/* The arrowhead at the open end of a bar, outlined in the page colour. */
+.sg-tl-bar-arrow {
+	stroke: var(--background-primary);
+	stroke-width: 1.5px;
+	stroke-linejoin: round;
 }
 
 .theme-dark .sg-tl-node-halo {
@@ -18853,7 +19144,6 @@ body.sg-plugin-active a.internal-link {
 		bottom: 0;
 		width: 100vw;
 		max-width: none;
-		max-height: 88vh;
 		max-height: 88dvh;
 		min-height: 0;
 		z-index: 1000;

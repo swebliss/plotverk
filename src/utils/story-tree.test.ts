@@ -283,7 +283,7 @@ describe('computeUnions', () => {
 		});
 
 		test('Saltmarch: "Ex-Partner" written only on Ilse pulls Halvard in on her row, in her family block', () => {
-			// Emma's case: Halvard's own sheet says nothing back, and they share no child.
+			// A one-sided line: Halvard's own sheet says nothing back, and they share no child.
 			const entities = [
 				entity('Ilse Ferrow', { Rel: 'Daughter: [[Mara Ferrow]]\nSon: [[Tobin Ferrow]]\nEnemy: [[Councillor Idris Vane]]\nEx-Partner: [[Halvard Crane]]' }),
 				entity('Mara Ferrow', { Rel: 'Mother: [[Ilse Ferrow]]\nBrother: [[Tobin Ferrow]]\nRival: [[Halvard Crane]]\nCousin: [[Bex Ferrow-Tull]]' }),

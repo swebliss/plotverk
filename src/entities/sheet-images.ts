@@ -113,8 +113,8 @@ export function resolveImageField(app: App, raw: string, sourcePath: string): TF
 }
 
 function kindFromFrontmatter(app: App, file: TFile): EntityKind | null {
-	const v = app.metadataCache.getFileCache(file)?.frontmatter?.['storygrid-type'];
-	return typeof v === 'string' && hasKind(v) ? (v as EntityKind) : null;
+	const v: unknown = app.metadataCache.getFileCache(file)?.frontmatter?.['storygrid-type'];
+	return typeof v === 'string' && hasKind(v) ? v : null;
 }
 
 /**

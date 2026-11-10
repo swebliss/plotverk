@@ -5,10 +5,10 @@ import type StorygridPlugin from '../main';
  * indicator. Sliders apply immediately so the writer gets live feedback.
  */
 export function showTypewriterPopover(anchor: HTMLElement, plugin: StorygridPlugin): void {
-	document.querySelector('.sg-tw-popover')?.remove();
+	anchor.doc.querySelector('.sg-tw-popover')?.remove();
 
 	const s = plugin.settings;
-	const pop = document.body.createDiv({ cls: 'sg-tw-popover' });
+	const pop = anchor.doc.body.createDiv({ cls: 'sg-tw-popover' });
 
 	// ── Header — toggle ──────────────────────────────────────────────────────
 	const head = pop.createDiv({ cls: 'sg-tw-pop-head' });
@@ -77,23 +77,23 @@ export function showTypewriterPopover(anchor: HTMLElement, plugin: StorygridPlug
 
 	// ── Position above the anchor ─────────────────────────────────────────────
 	// First pass: measure at default position to get popover height
-	pop.setCssStyles({ visibility: 'hidden' });
+	pop.addClass('sg-tw-popover--measuring');
 	const ar = anchor.getBoundingClientRect();
 	const pr = pop.getBoundingClientRect();
 	const top = ar.top - pr.height - 6;
 	const left = Math.min(ar.right - pr.width, window.innerWidth - pr.width - 8);
 	pop.style.top = `${Math.max(8, top)}px`;
 	pop.style.left = `${Math.max(8, left)}px`;
-	pop.setCssStyles({ visibility: '' });
+	pop.removeClass('sg-tw-popover--measuring');
 
 	// ── Close on outside click ────────────────────────────────────────────────
 	const close = (e: MouseEvent) => {
 		if (!pop.contains(e.target as Node) && e.target !== anchor) {
 			pop.remove();
-			document.removeEventListener('mousedown', close, true);
+			anchor.doc.removeEventListener('mousedown', close, true);
 		}
 	};
-	setTimeout(() => document.addEventListener('mousedown', close, true), 0);
+	window.setTimeout(() => anchor.doc.addEventListener('mousedown', close, true), 0);
 }
 
 function addSlider(

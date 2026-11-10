@@ -86,6 +86,12 @@ describe('card statistics', () => {
 		expect(parseWikilinkTargets('No links here.')).toEqual([]);
 		expect(parseWikilinkTargets('[[A]] [[B]] [[A]]')).toEqual(['A', 'B', 'A']);
 		expect(parseWikilinkTargets('![[image.png]] [[Char]]')).toEqual(['Char']);
+		// embeds are skipped, even when glued to other links or mid-text
+		expect(parseWikilinkTargets('![[a]][[b]]')).toEqual(['b']);
+		expect(parseWikilinkTargets('[[a]]![[b]][[c]]')).toEqual(['a', 'c']);
+		expect(parseWikilinkTargets('![[x [[y]]')).toEqual(['y']);
+		expect(parseWikilinkTargets('![[[a]]')).toEqual(['a']);
+		expect(parseWikilinkTargets('!![[a]] [[b|shown]]')).toEqual(['b']);
 	});
 
 });

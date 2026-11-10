@@ -110,7 +110,7 @@ export async function retitleEntitySheet(app: App, file: TFile, name: string): P
  * write entirely.
  */
 export function appendAlias(existing: unknown, alias: string): unknown[] | null {
-	const before = Array.isArray(existing)
+	const before: unknown[] = Array.isArray(existing)
 		? existing
 		: typeof existing === 'string' && existing.trim()
 			? [existing]
@@ -298,8 +298,8 @@ export function editRelationshipsField(
  * The frontmatter half of the same edit: always the Relationships section's
  * new text — the rule the parser and the Edit-sheet save already follow (the
  * body wins). Copying the body, rather than editing the key's own copy, means
- * a write also heals a frontmatter that had fallen behind (before 2026-11-03
- * mirrored lines were written into the body only), so after any write both
+ * a write also heals a frontmatter that had fallen behind (older versions
+ * wrote mirrored lines into the body only), so after any write both
  * halves say exactly the same lines. A key holding something other than text
  * is replaced too, as the Edit-sheet save would.
  */

@@ -256,7 +256,7 @@ export function lineEnds(calendar: CalendarDef, range: ResolvedRange | null, ite
 	if (days.length === 0) return null;
 	const startDay = Math.min(...days);
 	const endDay = Math.max(...days, ...(presentDay !== undefined && Number.isFinite(presentDay) ? [presentDay] : []));
-	// Everything on one day: no stub (Emma, 2026-08-31) — the line covers
+	// Everything on one day: no stub — the line covers
 	// that whole year, both caps naming it, like chosen years "1188 to 1188".
 	if (endDay === startDay) {
 		const year = absoluteYearOfDay(calendar, startDay);

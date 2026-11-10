@@ -40,7 +40,7 @@ export function typewriterScroll(linePosition: () => number = () => 50): Extensi
 		// effect — CM re-measures and overrides animated scrolls, which made
 		// the effect-based approach unreliable. Deferred one frame so the
 		// caret coordinates reflect the keystroke that triggered this.
-		requestAnimationFrame(() => {
+		window.requestAnimationFrame(() => {
 			pending = false;
 			const view = update.view;
 			try {
@@ -114,7 +114,7 @@ export function focusDimming(solidRows: () => number = () => 1): Extension {
 			private schedule() {
 				if (this.scheduled) return;
 				this.scheduled = true;
-				requestAnimationFrame(() => {
+				window.requestAnimationFrame(() => {
 					this.scheduled = false;
 					try {
 						const range = measureSolidRange(this.view, solidRows());

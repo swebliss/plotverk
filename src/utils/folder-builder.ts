@@ -12,7 +12,7 @@ import { entityFolderPath, CODEX_FOLDER } from '../entities/entity-manager';
  *        └── Places/
  *
  * No "Plot Grid" sub-folder: the grid file never went there, so it only ever
- * sat empty (Emma, 2026-11-03: "otherwise just remove the Plot Grid folder").
+ * sat empty.
  */
 export async function buildProjectStructure(
 	app: App,

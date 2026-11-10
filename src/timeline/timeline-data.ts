@@ -77,7 +77,7 @@ export interface Plotline {
 	 * in event-icons.ts for the exact fallback order.
 	 */
 	icon?: string;
-	/** Track thread stroke width override (world px) — B2.1. Paint only; absent falls back to appearance.trackWidth. Clamped to APPEARANCE_LIMITS.trackWidth at the renderer's read seam. */
+	/** Track thread stroke width override (world px). Paint only; absent falls back to appearance.trackWidth. Clamped to APPEARANCE_LIMITS.trackWidth at the renderer's read seam. */
 	width?: number;
 }
 
@@ -86,9 +86,9 @@ export interface EventDisplay {
 	plotlineId?: string;
 	color?: string;
 	lineStyle?: LineStyle;
-	/** Point-marker radius override (world px) — B2.1, only meaningful while the event has no end date. Absent falls back to appearance.markerSize. Clamped to APPEARANCE_LIMITS.markerSize at the renderer's read seam. */
+	/** Point-marker radius override (world px), only meaningful while the event has no end date. Absent falls back to appearance.markerSize. Clamped to APPEARANCE_LIMITS.markerSize at the renderer's read seam. */
 	markerSize?: number;
-	/** Ranged-event bar thickness override (world px) — B2.1, only meaningful once the event has an end date. Absent falls back to appearance.barThickness. Clamped to APPEARANCE_LIMITS.barThickness at the renderer's read seam. */
+	/** Ranged-event bar thickness override (world px), only meaningful once the event has an end date. Absent falls back to appearance.barThickness. Clamped to APPEARANCE_LIMITS.barThickness at the renderer's read seam. */
 	barThickness?: number;
 	/**
 	 * Point/bar glyph override (B4) — a prefixed value like "phosphor:sword"

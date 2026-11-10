@@ -51,42 +51,43 @@ function clamp(n: number, lo: number, hi: number): number {
 
 /** Renders one callout; returns a close function. Caller owns advancing/dismissing. */
 function showSingle(anchor: HTMLElement, text: string, opts: ShowSingleOptions): () => void {
-	const mark = document.createElement('div');
+	const mark = createDiv();
 	mark.className = COACH_MARK_CLASS;
 
-	const arrow = document.createElement('div');
+	const arrow = createDiv();
 	arrow.className = 'sg-coach-mark-arrow';
 	mark.appendChild(arrow);
 
 	if (opts.title) {
-		const title = document.createElement('div');
+		const title = createDiv();
 		title.className = 'sg-coach-mark-title';
 		title.textContent = opts.title;
 		mark.appendChild(title);
 	}
 
-	const body = document.createElement('div');
+	const body = createDiv();
 	body.className = 'sg-coach-mark-text';
 	body.textContent = text;
 	mark.appendChild(body);
 
-	const footer = document.createElement('div');
+	const footer = createDiv();
 	footer.className = 'sg-coach-mark-footer';
 	if (opts.skipLabel) {
-		const skip = document.createElement('button');
+		const skip = createEl('button');
 		skip.className = 'sg-coach-mark-skip';
 		skip.textContent = opts.skipLabel;
 		skip.addEventListener('click', () => { close(); opts.onSkip?.(); });
 		footer.appendChild(skip);
 	}
-	const primary = document.createElement('button');
+	const primary = createEl('button');
 	primary.className = 'sg-coach-mark-btn';
 	primary.textContent = opts.buttonLabel;
 	primary.addEventListener('click', () => { close(); opts.onPrimary(); });
 	footer.appendChild(primary);
 	mark.appendChild(footer);
 
-	document.body.appendChild(mark);
+	const doc = anchor.doc;
+	doc.body.appendChild(mark);
 
 	const placement = opts.placement ?? 'bottom';
 	const position = (): void => {
@@ -134,14 +135,14 @@ function showSingle(anchor: HTMLElement, text: string, opts: ShowSingleOptions):
 		closed = true;
 		window.removeEventListener('resize', onReposition);
 		window.removeEventListener('scroll', onReposition, true);
-		document.removeEventListener('keydown', onKeydown);
+		doc.removeEventListener('keydown', onKeydown);
 		visibilityObserver.disconnect();
 		mark.remove();
 	};
 	const onKeydown = (e: KeyboardEvent) => {
 		if (e.key === 'Escape') { close(); opts.onSkip?.(); }
 	};
-	document.addEventListener('keydown', onKeydown);
+	doc.addEventListener('keydown', onKeydown);
 
 	// Auto-close (silently — this does NOT count as dismissed, so it can still
 	// fire again later) once the anchor is no longer visible. Obsidian keeps
@@ -181,7 +182,7 @@ export function showCoachMark(
  * dropped so a missing/collapsed element never breaks the chain.
  */
 export function showCoachMarkChain(steps: CoachMarkStep[], onDone?: () => void, onHide?: () => void): void {
-	const live = steps.filter((s) => document.body.contains(s.anchor)).slice(0, 3);
+	const live = steps.filter((s) => s.anchor.isConnected).slice(0, 3);
 	if (!live.length) { onDone?.(); return; }
 	let i = 0;
 	const advance = (): void => {

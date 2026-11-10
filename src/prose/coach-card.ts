@@ -103,7 +103,7 @@ export function matchCase(replaced: string, word: string): string {
 export class CoachCard {
 	private el: HTMLElement | null = null;
 	/** The document the card lives in — a popout window's, when the editor is in one. */
-	private doc: Document = document;
+	private doc: Document = activeDocument;
 	private hideTimer: number | null = null;
 	private overCard = false;
 	private readonly onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') this.hide(); };

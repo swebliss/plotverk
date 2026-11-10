@@ -1,4 +1,4 @@
-import { GridData, SceneCard, CardStatus } from '../grid-data';
+import { SceneCard, CardStatus } from '../grid-data';
 
 /**
  * Pure statistics helpers for the Dashboard (no Obsidian imports so
@@ -84,10 +84,18 @@ export interface CharacterBalance {
  */
 export function parseWikilinkTargets(text: string): string[] {
 	const targets: string[] = [];
-	const re = /(?<!!)\[\[([^\]|]+?)(?:\|[^\]]+)?\]\]/g;
+	// An optional leading "!" marks an embed (![[image.png]]), which is skipped.
+	// (No lookbehind: old iOS WebViews refuse to parse it.)
+	const re = /(!?)\[\[([^\]|]+?)(?:\|[^\]]+)?\]\]/g;
 	let m: RegExpExecArray | null;
 	while ((m = re.exec(text)) !== null) {
-		const raw = m[1].trim();
+		if (m[1] === '!') {
+			// Resume just after the "!" so a "[[" inside the skipped span is still tried
+			// (the "[[" right after the "!" is the embed itself and never matches).
+			re.lastIndex = m.index + 2;
+			continue;
+		}
+		const raw = m[2].trim();
 		const base = (raw.split('/').pop() ?? raw).replace(/\.md$/i, '');
 		if (base) targets.push(base);
 	}

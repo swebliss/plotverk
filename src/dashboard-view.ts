@@ -1,9 +1,12 @@
-import { ItemView, WorkspaceLeaf, Notice, Platform, ViewStateResult, TAbstractFile, TFile } from 'obsidian';
+import { plotverkEvents } from './utils/plotverk-events';
+import { ItemView, WorkspaceLeaf, Platform, ViewStateResult, TAbstractFile, TFile } from 'obsidian';
 import type StorygridPlugin from './main';
+import { onSettingsChanged, runCommandById } from './utils/obsidian-internals';
 import { setPhosphorIcon } from './utils/icons';
 import { t } from './i18n';
 import { TaskListController } from './ui/task-list';
-import type { ModuleId, IntentId } from './modules';
+import type { ModuleId } from './modules';
+import { runSafely } from './utils/report-error';
 import { showCoachMark } from './ui/coach-mark';
 import { isFamilyLabel } from './utils/relation-mirror';
 import {
@@ -11,15 +14,13 @@ import {
 	SceneCard,
 	StorygridSettings,
 	DashboardSettings,
-	StreakData,
-	TodoItem,
 	ProjectGoals,
 	DashboardWidgetConfig,
 	DashboardWidgetSlot,
 } from './grid-data';
 import { findFocusScopes, StoryProject, type EntityInfo } from './entities/entity-manager';
 import { parseRelationLines } from './utils/relations';
-import { writeProjectMirror, scheduleProjectMirror } from './utils/project-data-store';
+import { scheduleProjectMirror } from './utils/project-data-store';
 import { isSafetyNetPath } from './utils/safety-paths';
 import { getCodexKindOrder } from './entities/entity-kinds';
 import { resolveWidgetLayout, getWidgetDef, defaultHiddenWidgetIds, computePresenceNotes, type ResolvedWidgetLayout } from './dashboard-widgets';
@@ -105,9 +106,9 @@ export class StorygridDashboardView extends ItemView {
 
 		const scheduleRefresh = (file?: TAbstractFile) => {
 			if (file && isSafetyNetPath(file.path)) return;
-			const active = document.activeElement;
+			const active = this.contentEl.doc.activeElement;
 			if (active && this.contentEl.contains(active) &&
-				(active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement)) return;
+				(active.instanceOf(HTMLInputElement) || active.instanceOf(HTMLTextAreaElement))) return;
 			if (this.app.workspace.getMostRecentLeaf() !== this.leaf) {
 				this._needsRender = true;
 				return;
@@ -129,22 +130,22 @@ export class StorygridDashboardView extends ItemView {
 		// Re-render when plugin settings change (e.g. a module toggle in Settings)
 		// so jump-to tiles for a just-enabled/disabled module update immediately.
 		this.registerEvent(
-			(this.app.workspace as any).on('storygrid:settings-changed', () => void this.render())
+			onSettingsChanged(this.app.workspace, () => void this.render())
 		);
 
 		// Follow the globally active project
 		const projectHandler = () => void this.render();
-		document.addEventListener('storygrid:project-changed', projectHandler);
-		this.register(() => document.removeEventListener('storygrid:project-changed', projectHandler));
+		plotverkEvents.addEventListener('storygrid:project-changed', projectHandler);
+		this.register(() => plotverkEvents.removeEventListener('storygrid:project-changed', projectHandler));
 
 		this._sprintChangedHandler = () => this.refreshSprintPanel();
-		document.addEventListener('storygrid:sprint-changed', this._sprintChangedHandler);
+		plotverkEvents.addEventListener('storygrid:sprint-changed', this._sprintChangedHandler);
 
 		this._tasksChangedHandler = (e: Event) => {
 			if ((e as CustomEvent).detail === 'dashboard') return;
 			void this.render();
 		};
-		document.addEventListener('storygrid:tasks-changed', this._tasksChangedHandler);
+		plotverkEvents.addEventListener('storygrid:tasks-changed', this._tasksChangedHandler);
 
 		await this.render();
 	}
@@ -154,11 +155,11 @@ export class StorygridDashboardView extends ItemView {
 		if (this.refreshTimer !== null) window.clearTimeout(this.refreshTimer);
 		if (this._sprintTick !== null) { window.clearInterval(this._sprintTick); this._sprintTick = null; }
 		if (this._sprintChangedHandler) {
-			document.removeEventListener('storygrid:sprint-changed', this._sprintChangedHandler);
+			plotverkEvents.removeEventListener('storygrid:sprint-changed', this._sprintChangedHandler);
 			this._sprintChangedHandler = null;
 		}
 		if (this._tasksChangedHandler) {
-			document.removeEventListener('storygrid:tasks-changed', this._tasksChangedHandler);
+			plotverkEvents.removeEventListener('storygrid:tasks-changed', this._tasksChangedHandler);
 			this._tasksChangedHandler = null;
 		}
 	}
@@ -230,7 +231,7 @@ export class StorygridDashboardView extends ItemView {
 
 	/** app.commands is not part of the public Obsidian API, so this cast is isolated to one spot. */
 	private runCommand(id: string): void {
-		(this.app as any).commands.executeCommandById(id);
+		runCommandById(this.app, id);
 	}
 
 	/** Count wikilink mentions of each character across all scene documents.
@@ -341,7 +342,7 @@ if (projects.length > 1) {
 
 		this._editToggleEl = editBtn;
 		if (!this.editMode && this.plugin.canShowCoachMark('dashboard-edit-toggle')) {
-			requestAnimationFrame(() => this.runTourCoachMark(
+			window.requestAnimationFrame(() => this.runTourCoachMark(
 				() => this.plugin.markCoachMarkSeen('dashboard-edit-toggle'),
 				() => this.plugin.releasePendingCoachMark('dashboard-edit-toggle'),
 			));
@@ -550,7 +551,7 @@ if (projects.length > 1) {
 				if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
 
 				// Custom drag image, so styling the live element immediately is safe.
-				const ghost = document.createElement('div');
+				const ghost = createDiv();
 				ghost.textContent = def?.label ?? id;
 				Object.assign(ghost.style, {
 					position: 'fixed', top: '-9999px', left: '-9999px',
@@ -562,10 +563,11 @@ if (projects.length > 1) {
 					fontSize: '12px', fontWeight: '650',
 					pointerEvents: 'none', boxSizing: 'border-box',
 				});
-				document.body.appendChild(ghost);
+				const ghostDoc = this.contentEl.doc;
+				ghostDoc.body.appendChild(ghost);
 				e.dataTransfer?.setDragImage(ghost, 20, 14);
 				wrap.addClass('sg-dash-widget--dragging');
-				window.setTimeout(() => { if (document.body.contains(ghost)) document.body.removeChild(ghost); }, 0);
+				window.setTimeout(() => { if (ghostDoc.body.contains(ghost)) ghostDoc.body.removeChild(ghost); }, 0);
 			});
 			wrap.addEventListener('dragend', () => {
 				wrap.removeClass('sg-dash-widget--dragging');
@@ -624,7 +626,7 @@ if (projects.length > 1) {
 	 *  widget stays reversible afterward via the eye icon in edit mode. */
 	private ensureWidgets(dash: DashboardSettings): DashboardWidgetConfig {
 		if (!dash.widgets) {
-			const intent = (this.plugin.settings.intent ?? null) as IntentId | null;
+			const intent = (this.plugin.settings.intent ?? null);
 			dash.widgets = { hidden: defaultHiddenWidgetIds(intent), order: { left: [], right: [] } };
 		}
 		const w = dash.widgets;
@@ -709,7 +711,7 @@ if (projects.length > 1) {
 			card.addEventListener('click', onClick);
 		};
 
-		const intent = (this.plugin.settings.intent ?? null) as IntentId | null;
+		const intent = (this.plugin.settings.intent ?? null);
 
 		// World Builder: no manuscript to resume — the equivalent action is
 		// picking up wherever they last left off in the Codex.
@@ -738,10 +740,12 @@ if (projects.length > 1) {
 			.sort((a, b) => b.stat.mtime - a.stat.mtime)[0];
 
 		if (recentScene) {
-			makeCard('resume', 'pen-nib', '✍', t('dashboard.action.resumeDraft'), recentScene.basename, async () => {
-				const leaf = this.app.workspace.getLeaf('tab');
-				await leaf.openFile(recentScene);
-				this.app.workspace.revealLeaf(leaf);
+			makeCard('resume', 'pen-nib', '✍', t('dashboard.action.resumeDraft'), recentScene.basename, () => {
+				runSafely((async () => {
+					const leaf = this.app.workspace.getLeaf('tab');
+					await leaf.openFile(recentScene);
+					void this.app.workspace.revealLeaf(leaf);
+				})());
 			});
 			this.promotedAction = null;
 			return;
@@ -884,7 +888,7 @@ if (projects.length > 1) {
 						cx: 36, cy: 36, r: RING_R, class: 'sg-sprint-ring-arc',
 						'stroke-dasharray': String(RING_C), transform: 'rotate(-90 36 36)',
 					},
-				}) as unknown as SVGCircleElement;
+				});
 				timeEl = ringBox.createDiv({ cls: 'sg-sprint-ring-time' });
 			} else {
 				timeEl = timerWrap.createDiv({ cls: 'sg-dash-sprint-time' });
@@ -1323,7 +1327,7 @@ if (projects.length > 1) {
 			todos,
 			save: () => {
 				this.quietSave();
-				document.dispatchEvent(new CustomEvent('storygrid:tasks-changed', { detail: 'dashboard' }));
+				plotverkEvents.dispatchEvent(new CustomEvent('storygrid:tasks-changed', { detail: 'dashboard' }));
 			},
 			rerender: () => void this.render(),
 			compact: false,

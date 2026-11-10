@@ -1,3 +1,4 @@
+import { plotverkEvents } from './utils/plotverk-events';
 import { ItemView, WorkspaceLeaf, ViewStateResult, TAbstractFile } from 'obsidian';
 import type StorygridPlugin from './main';
 import { setPhosphorIcon } from './utils/icons';
@@ -56,13 +57,13 @@ export class StorygridHistoryView extends ItemView {
 
 		// Refresh when tasks complete (fired by task-list controller)
 		const taskHandler = () => void this.render();
-		document.addEventListener('storygrid:tasks-changed', taskHandler);
-		this.register(() => document.removeEventListener('storygrid:tasks-changed', taskHandler));
+		plotverkEvents.addEventListener('storygrid:tasks-changed', taskHandler);
+		this.register(() => plotverkEvents.removeEventListener('storygrid:tasks-changed', taskHandler));
 
 		// Follow the globally active project
 		const projectHandler = () => void this.render();
-		document.addEventListener('storygrid:project-changed', projectHandler);
-		this.register(() => document.removeEventListener('storygrid:project-changed', projectHandler));
+		plotverkEvents.addEventListener('storygrid:project-changed', projectHandler);
+		this.register(() => plotverkEvents.removeEventListener('storygrid:project-changed', projectHandler));
 
 		await this.render();
 	}

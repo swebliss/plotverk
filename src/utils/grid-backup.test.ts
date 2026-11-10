@@ -1,4 +1,4 @@
-import { FakeVault, fakeApp } from '../test-support/fake-vault';
+import { FakeVault, fakeApp } from '../test/fake-vault';
 import { listGridBackups, restoreNewestValidBackup, writeGridBackup } from './grid-backup';
 
 const GRID = 'Saltmarch/Saltmarch.storygrid';

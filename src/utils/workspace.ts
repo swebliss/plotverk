@@ -13,7 +13,7 @@ export async function openOrReveal(app: App, file: TFile, options?: OpenViewStat
 		if (view?.file?.path === file.path) existing = leaf;
 	});
 	if (existing) {
-		app.workspace.revealLeaf(existing);
+		void app.workspace.revealLeaf(existing);
 		return;
 	}
 	await app.workspace.getLeaf('tab').openFile(file, options);

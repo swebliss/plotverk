@@ -8,6 +8,7 @@ import {
 	SnapshotReason,
 } from '../utils/scene-snapshots';
 import { ConfirmModal } from './prompt-modal';
+import { runSafely } from '../utils/report-error';
 
 const REASON_LABEL: Record<SnapshotReason, string> = {
 	daily: 'Daily',
@@ -89,15 +90,17 @@ export class SnapshotBrowserModal extends Modal {
 				this.app,
 				`Restore "${this.sceneName}" to the version from ${formatTimestamp(snap.timestamp)}? The current text is snapshotted first, so this is safe to undo.`,
 				'Restore',
-				async () => {
-					try {
-						await restoreSceneSnapshot(this.app, this.scenePath, snap);
-						new Notice(`Restored "${this.sceneName}" to ${formatTimestamp(snap.timestamp)}.`);
-						this.close();
-						this.onRestored?.();
-					} catch (err) {
-						new Notice(`Plotverk: Could not restore. ${err instanceof Error ? err.message : ''}`);
-					}
+				() => {
+					runSafely((async () => {
+						try {
+							await restoreSceneSnapshot(this.app, this.scenePath, snap);
+							new Notice(`Restored "${this.sceneName}" to ${formatTimestamp(snap.timestamp)}.`);
+							this.close();
+							this.onRestored?.();
+						} catch (err) {
+							new Notice(`Plotverk: Could not restore. ${err instanceof Error ? err.message : ''}`);
+						}
+					})());
 				}
 			).open();
 		});

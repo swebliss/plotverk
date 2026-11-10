@@ -375,7 +375,7 @@ function renderStagedCard(container: HTMLElement, options: FieldCreatorOptions):
 		nameInput = body.createEl('input', { cls: 'sg-sheet-field-input', type: 'text' });
 		nameInput.placeholder = 'Name the new section';
 		nameInput.value = newSection;
-		nameInput.addEventListener('input', () => { newSection = nameInput!.value; syncChrome(); });
+		nameInput.addEventListener('input', () => { newSection = nameInput.value; syncChrome(); });
 		paint();
 	}
 
@@ -539,7 +539,7 @@ export function renderFieldCreatorCard(container: HTMLElement, options: FieldCre
 	categorySelect.createEl('option', { text: '+ New group…', value: NEW_CATEGORY_SENTINEL });
 	const newCategoryInput = categoryRow.createEl('input', { cls: 'sg-sheet-field-input', type: 'text' });
 	newCategoryInput.placeholder = 'Group name';
-	newCategoryInput.setCssStyles({ display: 'none' });
+	newCategoryInput.hide();
 	categorySelect.addEventListener('change', () => {
 		newCategoryInput.style.display = categorySelect.value === NEW_CATEGORY_SENTINEL ? '' : 'none';
 		if (categorySelect.value === NEW_CATEGORY_SENTINEL) newCategoryInput.focus();

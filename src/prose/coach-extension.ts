@@ -1,3 +1,4 @@
+import { plotverkEvents } from '../utils/plotverk-events';
 import { Extension, RangeSetBuilder, StateEffect } from '@codemirror/state';
 import { EditorView, ViewPlugin, ViewUpdate, Decoration, DecorationSet } from '@codemirror/view';
 import { ProseFinding, RepetitionGroup } from './types';
@@ -51,7 +52,7 @@ const runDeco = Decoration.mark({ class: 'sg-prose-mark sg-prose-mark--run' });
 /** The mark under the pointer: a word mark wins over the rhythm run underlining it. */
 function markUnder(target: EventTarget | null): HTMLElement | null {
 	const el = target as HTMLElement | null;
-	return (el?.closest?.('.sg-prose-mark:not(.sg-prose-mark--run)') ?? el?.closest?.('.sg-prose-mark--run') ?? null) as HTMLElement | null;
+	return (el?.closest?.('.sg-prose-mark:not(.sg-prose-mark--run)') ?? el?.closest?.('.sg-prose-mark--run') ?? null);
 }
 
 export function coachHighlights(host: CoachExtensionHost): Extension {
@@ -219,7 +220,7 @@ export function coachChangeNotifier(debounceMs = REBUILD_MS): Extension {
 		if (timer !== null) window.clearTimeout(timer);
 		timer = window.setTimeout(() => {
 			timer = null;
-			document.dispatchEvent(new CustomEvent('storygrid:coach-doc-changed'));
+			plotverkEvents.dispatchEvent(new CustomEvent('storygrid:coach-doc-changed'));
 		}, debounceMs);
 	});
 }

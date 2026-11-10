@@ -6,22 +6,22 @@
 // creating an import cycle — timeline-data already imports from grid-data.
 //
 // Every knob here is a stored value, resolved through one function, so the
-// Phase B sliders panel has exactly one seam to write to and the renderer has
+// appearance sliders panel has exactly one seam to write to and the renderer has
 // exactly one seam to read from. DEFAULTS reproduce today's hardcoded look
 // byte for byte, which is what makes this step visually inert: a timeline with
 // no `appearance` block renders precisely as it did before.
 
 /**
  * How event name labels behave. 'hover' also covers the tapped/active state on touch.
- * Both 'room' (the default since the 2026-11-03 redesign) and 'always' hide a
+ * Both 'room' (the default) and 'always' hide a
  * name that would sit on another name or on a badge; 'room' also keeps a wider
  * gap between names, for a calmer overview.
  */
 export type TimelineLabelMode = 'room' | 'always' | 'hover' | 'off';
 
 /**
- * Which way label text runs. Decoupled from orientation on purpose (Emma's
- * A2 verdict): a vertical timeline may still want upright, readable labels.
+ * Which way label text runs. Decoupled from orientation on purpose: a
+ * vertical timeline may still want upright, readable labels.
  * 'readable' keeps text horizontal in both orientations; 'along-axis' turns it
  * to run parallel with the time axis (a no-op in horizontal view, where the
  * time axis IS horizontal).
@@ -54,7 +54,7 @@ export interface TimelineAppearance {
 	/** Spine tick unit — 'auto' derives it from zoom, the rest pin it. */
 	axisUnit: TimelineAxisUnit;
 	/**
-	 * Spine color override (B3). OPTIONAL and absent by default — unlike every
+	 * Spine color override. OPTIONAL and absent by default — unlike every
 	 * other knob here, there is no DEFAULT_TIMELINE_APPEARANCE value for it,
 	 * because "absent" has its own meaning: fall back to styles.css's
 	 * `.sg-tl-spine` rule rather than to a hardcoded hex that would just be a
@@ -66,9 +66,9 @@ export interface TimelineAppearance {
 }
 
 /**
- * The shipped look. Every size is on-screen px since the 2026-11-03 redesign
- * (zoom no longer shrinks them), so spineWidth rose to 4 (clearly visible, far
- * from a slab), spacing to 104 (room for two badges side by side — 26px by default since 2026-11-06), and
+ * The shipped look. Every size is on-screen px (zoom does not shrink them),
+ * so spineWidth is 4 (clearly visible, far from a slab), spacing is 104 (room
+ * for two of the default 26px badges side by side), and
  * labels default to 'room'. Kept as literal numbers rather than read out of
  * DEFAULT_LAYOUT_SPEC so this module stays import-free.
  */
@@ -91,7 +91,7 @@ export interface AppearanceLimit {
 }
 
 /**
- * Slider bounds — the single source of truth for both the Phase B panel's
+ * Slider bounds — the single source of truth for both the appearance panel's
  * `<input type="range">` attributes and the clamping in resolveAppearance().
  * That second job matters independently of the UI: `.timeline` files are plain
  * JSON a user can hand-edit (or a future import could malform), and a
@@ -116,7 +116,7 @@ const AXIS_UNITS: readonly TimelineAxisUnit[] = ['auto', 'year', 'month', 'day']
 /**
  * Clamp to a knob's limits, rejecting NaN/Infinity/non-numbers by answering
  * `undefined` — the same "absent = follow the next layer" contract
- * resolveAppearance() uses for its own fields. Exported so the B2.1 per-event
+ * resolveAppearance() uses for its own fields. Exported so the per-event
  * size overrides (markerSize/barThickness on EventDisplay, width on
  * Plotline) can clamp through this exact rule at their own read seam in
  * timeline-render.ts, rather than re-deriving a second clamp: a
@@ -153,7 +153,7 @@ export function resolveAppearance(
 
 	const bool = (key: 'stitches'): boolean => {
 		for (const layer of layers) {
-			if (typeof layer[key] === 'boolean') return layer[key] as boolean;
+			if (typeof layer[key] === 'boolean') return layer[key];
 		}
 		return DEFAULT_TIMELINE_APPEARANCE[key];
 	};

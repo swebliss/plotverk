@@ -42,7 +42,7 @@ export class CodexSuggest extends EditorSuggest<EntityInfo> {
 
 		const query = before.slice(atIdx + 1);
 		// Stop if query contains punctuation that clearly ends a name
-		if (/[.,!?;:()\[\]{}"'`]/.test(query)) return null;
+		if (/[.,!?;:()[\]{}"'`]/.test(query)) return null;
 
 		return {
 			start: { line: cursor.line, ch: atIdx },
@@ -73,7 +73,7 @@ export class CodexSuggest extends EditorSuggest<EntityInfo> {
 			let best = fuzzy(entity.name);
 
 			// Also fuzzy-search frontmatter aliases
-			const raw = this.app.metadataCache
+			const raw: unknown = this.app.metadataCache
 				.getFileCache(entity.file)
 				?.frontmatter?.['aliases'];
 			const aliases: string[] = Array.isArray(raw)

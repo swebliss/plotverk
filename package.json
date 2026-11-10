@@ -1,26 +1,35 @@
 {
   "name": "plotverk",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "A visual plot grid for fiction writers — Obsidian community plugin.",
+  "license": "GPL-3.0-only",
   "private": true,
   "scripts": {
     "dev": "node esbuild.config.mjs",
     "build": "tsc --noEmit && node esbuild.config.mjs production",
-    "test": "jest"
+    "test": "jest",
+    "lint": "eslint .",
+    "lint:css": "stylelint styles.css"
   },
   "keywords": [],
   "devDependencies": {
     "@types/d3-force": "^3.0.10",
     "@types/jest": "^29.5.0",
     "@types/node": "^20.14.0",
-    "builtin-modules": "^3.3.0",
     "esbuild": "^0.21.5",
+    "eslint": "^9.39.5",
+    "eslint-plugin-obsidianmd": "^0.5.1",
     "jest": "^29.5.0",
     "obsidian": "latest",
+    "stylelint": "^17.16.0",
+    "stylelint-config-obsidianmd": "^0.1.0",
     "ts-jest": "^29.1.0",
-    "typescript": "^5.4.5"
+    "typescript": "^5.4.5",
+    "typescript-eslint": "^8.72.2"
   },
   "dependencies": {
+    "@codemirror/state": "6.5.0",
+    "@codemirror/view": "6.38.6",
     "@phosphor-icons/core": "^2.1.1",
     "d3-force": "^3.0.0"
   }

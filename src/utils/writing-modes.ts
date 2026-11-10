@@ -24,7 +24,7 @@ export async function toggleWriteMode(plugin: StorygridPlugin): Promise<void> {
 		try { app.workspace.rightSplit?.expand(); } catch { /* mobile */ }
 
 		settings.writingMode = null;
-		document.body.classList.remove('sg-mode-write');
+		app.workspace.containerEl.doc.body.classList.remove('sg-mode-write');
 		await plugin.saveData(settings);
 		plugin.refreshModeChip();
 		new Notice(t('writeMode.notice.off'));
@@ -34,7 +34,7 @@ export async function toggleWriteMode(plugin: StorygridPlugin): Promise<void> {
 	// Snapshot the user's typewriter preference so it can be restored on exit
 	settings._preModeTypewriter = settings.typewriterMode;
 	settings.writingMode = 'write';
-	document.body.classList.add('sg-mode-write');
+	app.workspace.containerEl.doc.body.classList.add('sg-mode-write');
 
 	if (!settings.typewriterMode) {
 		settings.typewriterMode = true;

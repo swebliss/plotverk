@@ -518,9 +518,9 @@ export function mergeWithSpecDefaults(kind: EntityKind | null, fields: Character
 
 /** A parsed field that shares a label with a kind field, with the type and settings the parser could not infer put back. */
 function repairFromSpec(found: CharacterField, def: EntityFieldSpec): CharacterField {
-	// A same-named field the writer made herself, holding a value the spec's
+	// A same-named field the writer made themselves, holding a value the spec's
 	// dropdown doesn't offer ("Woman" in a hand-made Gender field), stays as
-	// she made it — a dropdown would show it as empty.
+	// they made it — a dropdown would show it as empty.
 	const options = def.config?.options;
 	if (options && found.value.trim() && !options.includes(found.value.trim())) return found;
 	// The parser falls back to 'text' when it has no schema info; trust the spec's type in that case only.

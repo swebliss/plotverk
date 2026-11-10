@@ -118,7 +118,7 @@ export async function readProjectMirror(app: App, projectRoot: string): Promise<
 }
 
 const MIRROR_DEBOUNCE_MS = 30_000;
-const pendingMirrors = new Map<string, { timer: ReturnType<typeof setTimeout>; app: App; dash: DashboardSettings }>();
+const pendingMirrors = new Map<string, { timer: number; app: App; dash: DashboardSettings }>();
 
 /**
  * Debounced `writeProjectMirror` for callers that fire on every typing pause
@@ -136,7 +136,7 @@ export function scheduleProjectMirror(app: App, projectRoot: string, dash: Dashb
 	const entry = {
 		app,
 		dash,
-		timer: setTimeout(() => {
+		timer: window.setTimeout(() => {
 			pendingMirrors.delete(projectRoot);
 			void writeProjectMirror(entry.app, projectRoot, entry.dash);
 		}, MIRROR_DEBOUNCE_MS),
@@ -147,7 +147,7 @@ export function scheduleProjectMirror(app: App, projectRoot: string, dash: Dashb
 /** Write every scheduled mirror now (plugin unload). */
 export function flushProjectMirrors(): void {
 	for (const [root, entry] of pendingMirrors) {
-		clearTimeout(entry.timer);
+		window.clearTimeout(entry.timer);
 		void writeProjectMirror(entry.app, root, entry.dash);
 	}
 	pendingMirrors.clear();

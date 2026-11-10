@@ -33,7 +33,7 @@ export function maskNonProse(text: string, opts?: { keepHeadings?: boolean; keep
 	};
 
 	// 1. Frontmatter — only at the very top of the file.
-	const fm = /^﻿?---[ \t]*\r?\n(?:[\s\S]*?\r?\n)?(?:---|\.\.\.)[ \t]*(?=\r?\n|$)/.exec(text);
+	const fm = /^\uFEFF?---[ \t]*\r?\n(?:[\s\S]*?\r?\n)?(?:---|\.\.\.)[ \t]*(?=\r?\n|$)/.exec(text);
 	if (fm) blank(0, fm[0].length);
 
 	// 2. Fenced code blocks (``` or ~~~), line by line. An unclosed fence runs to the end.

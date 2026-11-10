@@ -1,4 +1,5 @@
-import { FuzzySuggestModal, Notice, Editor, MarkdownView, Menu } from 'obsidian';
+import { FuzzySuggestModal, Notice, Editor, Menu } from 'obsidian';
+import { runSafely } from '../utils/report-error';
 import type { EntityInfo } from '../entities/entity-manager';
 import { buildEntityWikilink } from '../refs/references';
 import { addEntityAlias } from '../entities/entity-write';
@@ -53,7 +54,11 @@ class AddAliasModal extends FuzzySuggestModal<EntityInfo> {
 		return `${entity.name} (${spec.singular})`;
 	}
 
-	async onChooseItem(entity: EntityInfo): Promise<void> {
+	onChooseItem(entity: EntityInfo): void {
+		runSafely(this.addAlias(entity));
+	}
+
+	private async addAlias(entity: EntityInfo): Promise<void> {
 		try {
 			const result = await addEntityAlias(this.app, entity.file, this.alias);
 			if (result === 'duplicate') {

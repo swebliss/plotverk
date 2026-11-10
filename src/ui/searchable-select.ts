@@ -75,25 +75,26 @@ export function renderSearchableSelect(
 	// Plain DOM, not container.createDiv() — this panel lives outside the
 	// normal container tree (appended to <body> below) so it is never
 	// clipped by an ancestor's overflow:hidden.
-	const panel = document.createElement('div');
+	const panel = createDiv();
 	panel.className = 'sg-select-panel';
-	const search = document.createElement('input');
+	const search = createEl('input');
 	search.className = 'sg-select-search';
 	search.type = 'text';
 	search.placeholder = opts.searchPlaceholder ?? 'Search…';
 	panel.appendChild(search);
-	const list = document.createElement('div');
+	const list = createDiv();
 	list.className = 'sg-select-list';
 	list.setAttribute('role', 'listbox');
 	list.id = `${instanceId}-listbox`;
 	panel.appendChild(list);
 	trigger.setAttribute('aria-controls', list.id);
-	const empty = document.createElement('div');
+	const empty = createDiv();
 	empty.className = 'sg-select-empty';
 	empty.textContent = 'Nothing matches that.';
-	empty.setCssStyles({ display: 'none' });
+	empty.hide();
 	panel.appendChild(empty);
-	document.body.appendChild(panel);
+	const doc = wrap.doc;
+	doc.body.appendChild(panel);
 
 	// ── Grouping ────────────────────────────────────────────────────────────
 	// Buckets in order of first appearance; options with no group render flat.
@@ -123,19 +124,19 @@ export function renderSearchableSelect(
 	};
 
 	const makeRow = (option: SearchableOption, index: number): HTMLElement => {
-		const row = document.createElement('div');
+		const row = createDiv();
 		row.className = 'sg-select-option';
 		row.setAttribute('role', 'option');
 		row.id = `${instanceId}-option-${index}`;
 		const isSelected = option.value === value;
 		row.classList.toggle('is-selected', isSelected);
 		row.setAttribute('aria-selected', String(isSelected));
-		const label = document.createElement('span');
+		const label = createSpan();
 		label.className = 'sg-select-option-label';
 		label.textContent = option.label;
 		row.appendChild(label);
 		if (option.hint) {
-			const hint = document.createElement('span');
+			const hint = createSpan();
 			hint.className = 'sg-select-option-hint';
 			hint.textContent = option.hint;
 			row.appendChild(hint);
@@ -145,21 +146,21 @@ export function renderSearchableSelect(
 	};
 
 	const makeGroupHeader = (name: string, count: number, expanded: boolean, onToggle: () => void): HTMLElement => {
-		const header = document.createElement('div');
+		const header = createDiv();
 		header.className = 'sg-select-group-header';
 		header.setAttribute('role', 'button');
 		header.setAttribute('tabindex', '0');
 		header.setAttribute('aria-expanded', String(expanded));
 		header.classList.toggle('is-expanded', expanded);
-		const chevron = document.createElement('span');
+		const chevron = createSpan();
 		chevron.className = 'sg-select-group-chevron';
 		setStaticMarkup(chevron, CHEVRON_SVG);
 		header.appendChild(chevron);
-		const title = document.createElement('span');
+		const title = createSpan();
 		title.className = 'sg-select-group-title';
 		title.textContent = name;
 		header.appendChild(title);
-		const badge = document.createElement('span');
+		const badge = createSpan();
 		badge.className = 'sg-select-group-count';
 		badge.textContent = String(count);
 		header.appendChild(badge);
@@ -203,7 +204,7 @@ export function renderSearchableSelect(
 			});
 			list.appendChild(header);
 			if (expanded) {
-				const body = document.createElement('div');
+				const body = createDiv();
 				body.className = 'sg-select-group-body';
 				for (const option of shown) {
 					const row = makeRow(option, renderedRows.length);
@@ -311,7 +312,7 @@ export function renderSearchableSelect(
 		const target = e.target as Node;
 		if (!wrap.contains(target) && !panel.contains(target)) setOpen(false);
 	};
-	document.addEventListener('click', onDocClick);
+	doc.addEventListener('click', onDocClick);
 	// The portaled panel doesn't scroll with an ancestor (e.g. a modal body),
 	// so it has to be repositioned live. Capture phase catches scrolling on
 	// any nested container, not just the window.
@@ -324,7 +325,7 @@ export function renderSearchableSelect(
 		el: wrap,
 		getValue: () => value,
 		destroy: () => {
-			document.removeEventListener('click', onDocClick);
+			doc.removeEventListener('click', onDocClick);
 			window.removeEventListener('scroll', reposition, true);
 			window.removeEventListener('resize', reposition);
 			panel.remove();

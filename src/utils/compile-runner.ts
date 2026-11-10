@@ -12,6 +12,7 @@ import { SceneTree, flattenTree } from './scene-tree';
 import { buildDocx, DocxOptions } from './docx';
 import { buildEpub, chaptersFromItems, EpubCover } from './epub';
 import { ConfirmModal } from '../modals/prompt-modal';
+import { runSafely } from './report-error';
 import { writeSceneSnapshot } from './scene-snapshots';
 
 /**
@@ -172,7 +173,7 @@ export async function writeManuscript(
 			app,
 			`"${path.split('/').pop()}" already exists. Overwrite it with the new compile?`,
 			'Overwrite',
-			write
+			() => { runSafely(write()); }
 		).open();
 	} else {
 		await write();
@@ -209,7 +210,7 @@ export async function writeTextManuscript(
 		}
 	};
 	if (existing) {
-		new ConfirmModal(app, `"${path.split('/').pop()}" already exists. Overwrite it?`, 'Overwrite', write).open();
+		new ConfirmModal(app, `"${path.split('/').pop()}" already exists. Overwrite it?`, 'Overwrite', () => { runSafely(write()); }).open();
 	} else {
 		await write();
 	}
@@ -264,7 +265,7 @@ export async function exportDocx(
 	};
 	const existing = app.vault.getAbstractFileByPath(docxPath);
 	if (existing) {
-		new ConfirmModal(app, `"${docxPath.split('/').pop()}" already exists. Overwrite it?`, 'Overwrite', write).open();
+		new ConfirmModal(app, `"${docxPath.split('/').pop()}" already exists. Overwrite it?`, 'Overwrite', () => { runSafely(write()); }).open();
 	} else {
 		await write();
 	}

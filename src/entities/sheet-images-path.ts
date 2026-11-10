@@ -15,7 +15,9 @@ export const DEFAULT_IMAGES_FOLDER = 'Images';
 export const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'avif'] as const;
 
 /** Characters Obsidian (or Windows/iOS file systems) refuse in a file or folder name. */
-const FORBIDDEN_CHARS = /[\\/:*?"<>|#^[\]\u0000-\u001f\u007f]/g;
+const FORBIDDEN_CHARS = /[\\/:*?"<>|#^[\]]/g;
+/** ASCII control characters (0-31 and 127), checked by char code. */
+const isControlChar = (ch: string): boolean => ch.charCodeAt(0) <= 0x1f || ch.charCodeAt(0) === 0x7f;
 /** Names Windows will not create, with or without an extension. */
 const WINDOWS_RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
 
@@ -25,7 +27,7 @@ const WINDOWS_RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
  * folders, `..`), no trailing dots or spaces (Windows drops them silently).
  */
 export function safePathSegment(name: string, fallback: string): string {
-	let s = (name ?? '').replace(FORBIDDEN_CHARS, '-').replace(/\s+/g, ' ').trim();
+	let s = Array.from(name ?? '', (ch) => (isControlChar(ch) ? '-' : ch)).join('').replace(FORBIDDEN_CHARS, '-').replace(/\s+/g, ' ').trim();
 	s = s.replace(/^[.\s]+/, '').replace(/[.\s]+$/, '');
 	if (!s || /^-+$/.test(s)) s = fallback;
 	if (WINDOWS_RESERVED.test(s)) s = `${s}_`;

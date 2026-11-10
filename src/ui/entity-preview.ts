@@ -130,6 +130,11 @@ export async function renderEntityPreview(el: HTMLElement, opts: EntityPreviewOp
 						component: opts.component,
 						sourcePath: opts.file.path,
 					});
+					// Widgets with their own chrome (tag chips, slider track) sit in a
+					// slimmer box — see .sg-outline-preview-field-value--inset.
+					if (valEl.querySelector('.sg-chip-container, .sg-fw-slider-read')) {
+						valEl.addClass('sg-outline-preview-field-value--inset');
+					}
 				}
 			}
 		}
@@ -142,7 +147,7 @@ export async function renderEntityPreview(el: HTMLElement, opts: EntityPreviewOp
 	// ── In-card wikilink navigation — capture so Obsidian's own internal-link
 	// handler (which would open a main-pane tab) never gets a chance to fire. ──
 	root.addEventListener('click', (evt) => {
-		const a = (evt.target as HTMLElement).closest('a.internal-link') as HTMLAnchorElement | null;
+		const a = (evt.target as HTMLElement).closest<HTMLAnchorElement>('a.internal-link');
 		if (!a) return;
 		evt.preventDefault();
 		evt.stopPropagation();

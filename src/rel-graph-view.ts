@@ -144,14 +144,17 @@ export class RelGraphController {
 	private groupPopoverEl: HTMLElement | null = null;
 	private groupPopoverDocClick: ((e: MouseEvent) => void) | null = null;
 
-	private refreshTimer: ReturnType<typeof setTimeout> | null = null;
-	private settingsSaveTimer: ReturnType<typeof setTimeout> | null = null;
+	private refreshTimer: number | null = null;
+	private settingsSaveTimer: number | null = null;
 	/** Set by resetScope(): the next mount lays out a new project from scratch (fresh centre, fresh layout). */
 	private pendingFullReset = false;
 
 	/** Escape closes the settings panel or the group-color popover, whichever
 	 *  is open — registered for the lifetime of a mount, torn down in unmount(). */
 	private globalKeydownHandler: ((e: KeyboardEvent) => void) | null = null;
+	/** The document the keydown listener was attached to (a popout window has its own), so the remove matches. */
+	private globalKeydownDoc: Document | null = null;
+	private groupPopoverDoc: Document | null = null;
 
 	constructor(
 		private plugin: StorygridPlugin,
@@ -178,7 +181,7 @@ export class RelGraphController {
 		this.edgeLabelMode = s.connMapEdgeLabelMode ?? 'hover';
 		this.forceSettings = { ...DEFAULT_FORCE_SETTINGS, ...s.connMapForceSettings };
 
-		if (this.globalKeydownHandler) document.removeEventListener('keydown', this.globalKeydownHandler); // dedupe if mount() is ever called twice without an intervening unmount()
+		if (this.globalKeydownHandler) this.globalKeydownDoc?.removeEventListener('keydown', this.globalKeydownHandler); // dedupe if mount() is ever called twice without an intervening unmount()
 		this.globalKeydownHandler = (e: KeyboardEvent) => {
 			if (e.key !== 'Escape') return;
 			if (this.groupPopoverOpen) {
@@ -189,7 +192,8 @@ export class RelGraphController {
 				this.closeSettingsPanel();
 			}
 		};
-		document.addEventListener('keydown', this.globalKeydownHandler);
+		this.globalKeydownDoc = this.host.doc;
+		this.globalKeydownDoc.addEventListener('keydown', this.globalKeydownHandler);
 
 		const fullReset = this.pendingFullReset;
 		this.pendingFullReset = false;
@@ -203,11 +207,11 @@ export class RelGraphController {
 		// `host` (see SocialMapsView) and clobber it.
 		this._renderGen++;
 		this.sim?.stop();
-		if (this.refreshTimer) { clearTimeout(this.refreshTimer); this.refreshTimer = null; }
+		if (this.refreshTimer) { window.clearTimeout(this.refreshTimer); this.refreshTimer = null; }
 		if (this.settingsSaveTimer) {
 			// Flush rather than drop — a pending debounced save still reflects
 			// real user intent (e.g. mid force-slider drag when the tab closed).
-			clearTimeout(this.settingsSaveTimer);
+			window.clearTimeout(this.settingsSaveTimer);
 			this.settingsSaveTimer = null;
 			void this.plugin.saveSettingsQuiet();
 		}
@@ -215,8 +219,9 @@ export class RelGraphController {
 		this.egoAnchorSelectHandle = null;
 		this.closeGroupPopover();
 		if (this.globalKeydownHandler) {
-			document.removeEventListener('keydown', this.globalKeydownHandler);
+			this.globalKeydownDoc?.removeEventListener('keydown', this.globalKeydownHandler);
 			this.globalKeydownHandler = null;
+			this.globalKeydownDoc = null;
 		}
 		this.host.empty();
 	}
@@ -232,8 +237,8 @@ export class RelGraphController {
 	 *  every other open Plotverk view (Writers Panel, Dashboard, Grid) to
 	 *  re-render on each drag tick. */
 	private scheduleSettingsSave(): void {
-		if (this.settingsSaveTimer) clearTimeout(this.settingsSaveTimer);
-		this.settingsSaveTimer = setTimeout(() => {
+		if (this.settingsSaveTimer) window.clearTimeout(this.settingsSaveTimer);
+		this.settingsSaveTimer = window.setTimeout(() => {
 			this.settingsSaveTimer = null;
 			void this.plugin.saveSettingsQuiet();
 		}, 400);
@@ -285,7 +290,7 @@ export class RelGraphController {
 			migrated = true;
 		}
 		if (s.connMapForceSettings === undefined && state.forceSettings && typeof state.forceSettings === 'object') {
-			s.connMapForceSettings = state.forceSettings as Partial<ForceSettings>;
+			s.connMapForceSettings = state.forceSettings;
 			migrated = true;
 		}
 		if (migrated) void this.plugin.saveSettingsQuiet();
@@ -296,7 +301,7 @@ export class RelGraphController {
 		) {
 			this.perspective = state.perspective;
 		}
-		if (typeof state.egoAnchor === 'string' || state.egoAnchor === null) this.egoAnchor = state.egoAnchor as string | null;
+		if (typeof state.egoAnchor === 'string' || state.egoAnchor === null) this.egoAnchor = state.egoAnchor;
 		if (typeof state.egoDegrees === 'number') this.egoDegrees = state.egoDegrees;
 		if (Array.isArray(state.selectedGroups)) this.selectedGroups = new Set(state.selectedGroups as string[]);
 		if (typeof state.chronoEpoch === 'string') this.chronoEpoch = state.chronoEpoch;
@@ -536,7 +541,7 @@ export class RelGraphController {
 		if (preserveView) {
 			this.applyTransform();
 		} else {
-			requestAnimationFrame(() => this.centerViewport(svg));
+			window.requestAnimationFrame(() => this.centerViewport(svg));
 		}
 	}
 
@@ -687,7 +692,8 @@ export class RelGraphController {
 		this.groupPopoverDocClick = (e: MouseEvent) => {
 			if (!wrap.contains(e.target as Node)) this.closeGroupPopover();
 		};
-		document.addEventListener('click', this.groupPopoverDocClick);
+		this.groupPopoverDoc = wrap.doc;
+		this.groupPopoverDoc.addEventListener('click', this.groupPopoverDocClick);
 	}
 
 	private closeGroupPopover(): void {
@@ -695,8 +701,9 @@ export class RelGraphController {
 		this.groupPopoverEl?.remove();
 		this.groupPopoverEl = null;
 		if (this.groupPopoverDocClick) {
-			document.removeEventListener('click', this.groupPopoverDocClick);
+			this.groupPopoverDoc?.removeEventListener('click', this.groupPopoverDocClick);
 			this.groupPopoverDocClick = null;
+			this.groupPopoverDoc = null;
 		}
 	}
 
@@ -840,7 +847,7 @@ export class RelGraphController {
 				const makeSeg = (twin: boolean) => {
 					const path = makeSvg('path', twin ? { ...attrs, 'data-twin': '1' } : attrs);
 					if (twin) path.removeAttribute('marker-end'); // one arrowhead per pair, not two
-					const t = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+					const t = createSvg('title');
 					t.textContent = tip;
 					path.appendChild(t);
 					this.edgeGroup!.appendChild(path);
@@ -1210,7 +1217,7 @@ export class RelGraphController {
 				this.isPinching = true;
 				this.panning = false;
 				this.panPointerId = null;
-				svg.setCssStyles({ cursor: '' });
+				svg.removeClass('sg-rg-svg--panning');
 				this.pinchPointerIds = [others[0], e.pointerId];
 				const a = this.activePointers.get(others[0]);
 				const b = this.activePointers.get(e.pointerId);
@@ -1232,7 +1239,7 @@ export class RelGraphController {
 				this.panClientStart = { x: e.clientX, y: e.clientY };
 				this.panTxStart = this.tx;
 				this.panTyStart = this.ty;
-				svg.setCssStyles({ cursor: 'grabbing' });
+				svg.addClass('sg-rg-svg--panning');
 			}
 		});
 
@@ -1307,7 +1314,7 @@ export class RelGraphController {
 					this.panClientStart = { x: pt.x, y: pt.y };
 					this.panTxStart = this.tx;
 					this.panTyStart = this.ty;
-					svg.setCssStyles({ cursor: 'grabbing' });
+					svg.addClass('sg-rg-svg--panning');
 				}
 			}
 
@@ -1331,7 +1338,7 @@ export class RelGraphController {
 			if (this.panning && e.pointerId === this.panPointerId) {
 				this.panning = false;
 				this.panPointerId = null;
-				svg.setCssStyles({ cursor: '' });
+				svg.removeClass('sg-rg-svg--panning');
 			}
 		};
 
@@ -1706,7 +1713,7 @@ export class RelGraphController {
 	 * own graph settings.
 	 *
 	 * Every section starts FOLDED: four open sections at once read as a wall
-	 * of controls (demo feedback 2026-11-03: "messy and scary"). The user
+	 * of controls. The user
 	 * opens only the one they need.
 	 */
 	private renderFoldableSection(parent: HTMLElement, title: string): HTMLElement {
@@ -1780,9 +1787,7 @@ export class RelGraphController {
 		}
 		if (bare > 0) {
 			const item = legend.createDiv({ cls: 'sg-rg-legend-item' });
-			const swatch = item.createDiv({ cls: 'sg-rg-legend-swatch' });
-			swatch.setCssStyles({ background: 'var(--text-faint)' });
-			swatch.setCssStyles({ height: '1px' });
+			item.createDiv({ cls: 'sg-rg-legend-swatch sg-rg-legend-swatch--bare' });
 			item.createSpan({ cls: 'sg-rg-legend-label', text: `Unspecified (${bare})` });
 		}
 	}
@@ -1817,7 +1822,7 @@ export class StorygridRelGraphView extends ItemView {
 
 	async setState(state: Record<string, unknown>): Promise<void> {
 		// An old saved layout's project is stale: Social Maps follows the Dashboard's project.
-		setTimeout(() => {
+		window.setTimeout(() => {
 			void this.plugin.openSocialMaps('map');
 			this.leaf.detach();
 		}, 0);

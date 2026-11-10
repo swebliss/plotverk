@@ -20,7 +20,7 @@ export const moment = {
 
 /**
  * Bare vault node classes, so code that checks `instanceof TFile` / `TFolder` can run
- * against the in-memory vault in `src/test-support/fake-vault.ts`.
+ * against the in-memory vault in `src/test/fake-vault.ts`.
  */
 export class TAbstractFile {
 	path = '';

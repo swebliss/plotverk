@@ -1,4 +1,4 @@
-import { FakeVault, fakeApp } from '../test-support/fake-vault';
+import { FakeVault, fakeApp } from '../test/fake-vault';
 import { sceneSnapshotFolderFor, sceneSnapshotRoot } from './scene-snapshots-paths';
 import {
 	ensureDailySnapshot,

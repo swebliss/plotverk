@@ -2,7 +2,7 @@ import { canUse, setEntitlementState, getEntitlementState, FEATURE_TIERS, type F
 import { PUBLIC_BUILD } from '../build-flags';
 
 describe('entitlements — v1 defaults', () => {
-	test('every feature is on in Emma\'s build, and every Pro feature is off in the public release', () => {
+	test('every feature is on in the private build, and every Pro feature is off in the public release', () => {
 		const allIds = Object.keys(FEATURE_TIERS) as FeatureId[];
 		for (const id of allIds) {
 			expect(canUse(id)).toBe(PUBLIC_BUILD ? FEATURE_TIERS[id] === 'free' : true);

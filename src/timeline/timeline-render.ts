@@ -64,6 +64,12 @@ import { ERA_LABEL_LINE, ERA_LABEL_PAD, EraBand, defaultEraColor, eraBandRect, e
 import { EVENT_ICONS, EventIconEntry, fallbackEventIcon, phosphorIconValue, resolveEventIcon } from '../utils/event-icons';
 import { EntityModal } from '../modals/entity-modal';
 import { t } from '../i18n';
+import { runSafely } from '../utils/report-error';
+
+/** An event target as a Node, or null (focus/pointer targets may also be a Window). */
+function asNode(target: EventTarget | null): Node | null {
+	return target && 'nodeType' in target ? (target as Node) : null;
+}
 
 /**
  * Renders the plotline-lane timeline into a host element supplied by the
@@ -87,9 +93,8 @@ const BASE_PX_PER_DAY = DEFAULT_LAYOUT_SPEC.pxPerDay;
 const MIN_ZOOM = TIMELINE_MIN_ZOOM;
 const MAX_ZOOM = TIMELINE_MAX_ZOOM;
 /**
- * Plotline lanes on the canvas — OFF for now (Emma, 2026-11-03: "Remove the
- * plotlines from the timeline for now — it's enough to have events"). With it
- * off, events pack into compact columns beside the main line
+ * Plotline lanes on the canvas — OFF for now: the events alone carry the
+ * timeline. With it off, events pack into compact columns beside the main line
  * (computeColumnLayout), and the Plotlines button, the plotline row in the key,
  * the plotline slider/spacing controls and the add-event Plotline choice are
  * hidden. Plotline DATA (plotlines, eventDisplay.plotlineId) is never touched,
@@ -114,7 +119,7 @@ function showRangeNotice(text: string): void {
 /** Max event-name characters shown on a node label, matching rel-graph's convention. */
 const NODE_LABEL_MAX = 26;
 
-// ── Badges (2026-11-03 redesign) ─────────────────────────────────────────────
+// ── Badges ───────────────────────────────────────────────────────────────────
 // Every event is a round badge: a disc in the event's colour, a light ring,
 // and its Phosphor icon centred in a contrasting colour. All sizes below are
 // on-screen px — the badge group is counter-scaled against the camera (see
@@ -152,7 +157,6 @@ function makeIconGlyph(icon: EventIconEntry, x: number, y: number, size: number,
 		width: String(size), height: String(size),
 		viewBox: '0 0 256 256',
 	}) as SVGSVGElement;
-	svg.setCssStyles({ pointerEvents: 'none' });
 	// The glyph sits on a fill the WRITER chose, where a fixed light color
 	// disappears the moment that fill is a pastel — so the caller passes
 	// glyphColorOn()'s dark-or-light pick (the same rule that keeps grid card
@@ -215,7 +219,7 @@ export class TimelineController {
 	private eras: TimelineEvent[] = [];
 	private orientation: 'horizontal' | 'vertical' = 'vertical';
 
-	// Viewport transform. `scale` stretches ONLY the time axis (2026-11-03):
+	// Viewport transform. `scale` stretches ONLY the time axis:
 	// across-axis px are always screen px, so lane spacing and every size stay
 	// put while zoom changes the distance between dates.
 	private tx = 0;
@@ -231,7 +235,7 @@ export class TimelineController {
 	private eraLabels: Array<{ id: string; el: SVGGElement; startPx: number; endPx: number; slot: number; length: number }> = [];
 	/** The era whose band the mouse rests on — its card waits a moment (eraHoverTimer) so sweeping across the background doesn't flash cards. */
 	private hoveredEraId: string | null = null;
-	private eraHoverTimer: ReturnType<typeof setTimeout> | null = null;
+	private eraHoverTimer: number | null = null;
 	/** The press began on an era's name (not just its band): a mouse click there opens the sheet; on the bare band it acts like the background. */
 	private tapOnEraLabel = false;
 	/** The key's "Era" row — hidden while the timeline has none. */
@@ -244,7 +248,7 @@ export class TimelineController {
 	/** Screen-independent thread spans from the last layout, so the pinned names can follow pans without re-running the layout. */
 	private pinnedTracks: Array<{ trackId: string; name: string; color: string; across: number; startAlong: number; endAlong: number }> = [];
 	private defsEl: SVGDefsElement | null = null;
-	/** The spine's own <rect> (B3) — kept so the color picker can read its live computed `fill` as the "current color" swatch when no override is set, rather than duplicating styles.css's color as a second hardcoded default. */
+	/** The spine's own <rect> — kept so the color picker can read its live computed `fill` as the "current color" swatch when no override is set, rather than duplicating styles.css's color as a second hardcoded default. */
 	private spineEl: SVGRectElement | null = null;
 	/**
 	 * SVG cannot fill a shape with a CSS gradient string — it needs a real
@@ -261,7 +265,7 @@ export class TimelineController {
 	private plotlinePanelEl: HTMLElement | null = null;
 	private plotlineKeydownHandler: ((e: KeyboardEvent) => void) | null = null;
 	private plotlineOutsideClickHandler: ((e: MouseEvent) => void) | null = null;
-	// Appearance panel (B2). Docks in the same right-side slot as the
+	// Appearance panel. Docks in the same right-side slot as the
 	// plotline panel and is mutually exclusive with it (opening one closes
 	// the other) so the two never literally overlap — see toggleAppearancePanel/
 	// togglePlotlinePanel. Its own document keydown listener mirrors the event
@@ -312,9 +316,9 @@ export class TimelineController {
 	private tapCandidateId: string | null = null;
 
 	private renderScheduled = false;
-	private cullTimer: ReturnType<typeof setTimeout> | null = null;
+	private cullTimer: number | null = null;
 	/** Waits for event edits to settle before "Years shown" may grow — see refresh(). */
-	private rangeCheckTimer: ReturnType<typeof setTimeout> | null = null;
+	private rangeCheckTimer: number | null = null;
 	/** A growth put off because the writer is still in that event's sheet — retried when they leave it. */
 	private rangeDeferred = false;
 	private leafChangeRef: EventRef | null = null;
@@ -335,8 +339,7 @@ export class TimelineController {
 	/** Which event the card shows — a repaint re-anchors a tapped card to it, or closes the card if the event is gone. */
 	private cardEventId: string | null = null;
 	/**
-	 * The date guide (Emma, 2026-11-03: "when hovering an event I want it to
-	 * connect to the main timeline so I can see what date it is exactly"):
+	 * The date guide, so a hovered event shows exactly which date it sits on:
 	 * while the card is open, a line from the event to the main line, a dot
 	 * on it and the exact date beside it. Lines sit under the badges, the date
 	 * tags above them; both live in the camera's group, so they pan and zoom
@@ -384,13 +387,13 @@ export class TimelineController {
 		});
 		this.buildSkeleton();
 		this.fitPending = true;
-		requestAnimationFrame(() => this.centerOnEvents());
+		window.requestAnimationFrame(() => this.centerOnEvents());
 	}
 
 	unmount(): void {
-		if (this.cullTimer) { clearTimeout(this.cullTimer); this.cullTimer = null; }
-		if (this.rangeCheckTimer) { clearTimeout(this.rangeCheckTimer); this.rangeCheckTimer = null; }
-		if (this.eraHoverTimer) { clearTimeout(this.eraHoverTimer); this.eraHoverTimer = null; }
+		if (this.cullTimer) { window.clearTimeout(this.cullTimer); this.cullTimer = null; }
+		if (this.rangeCheckTimer) { window.clearTimeout(this.rangeCheckTimer); this.rangeCheckTimer = null; }
+		if (this.eraHoverTimer) { window.clearTimeout(this.eraHoverTimer); this.eraHoverTimer = null; }
 		if (this.leafChangeRef) { this.app.workspace.offref(this.leafChangeRef); this.leafChangeRef = null; }
 		this.resizeObserver?.disconnect();
 		this.resizeObserver = null;
@@ -445,8 +448,8 @@ export class TimelineController {
 	 * leave that sheet — and at least 4s after the last change otherwise.
 	 */
 	private scheduleRangeCheck(): void {
-		if (this.rangeCheckTimer) clearTimeout(this.rangeCheckTimer);
-		this.rangeCheckTimer = setTimeout(() => {
+		if (this.rangeCheckTimer) window.clearTimeout(this.rangeCheckTimer);
+		this.rangeCheckTimer = window.setTimeout(() => {
 			this.rangeCheckTimer = null;
 			if (!this.checkShownRange({ waitWhileEditing: true })) return;
 			// The main line got longer — redraw it, its caps and year labels.
@@ -532,7 +535,7 @@ export class TimelineController {
 		this.activePointers.clear();
 		this.tapCandidateId = null;
 		this.hoveredEraId = null;
-		if (this.eraHoverTimer) { clearTimeout(this.eraHoverTimer); this.eraHoverTimer = null; }
+		if (this.eraHoverTimer) { window.clearTimeout(this.eraHoverTimer); this.eraHoverTimer = null; }
 		this.panning = false;
 		this.isPinching = false;
 		this.pointerDownWasDrag = false;
@@ -643,7 +646,7 @@ export class TimelineController {
 		this.orientation = this.orientation === 'horizontal' ? 'vertical' : 'horizontal';
 		this.ctrlHost.mutate((d) => ({ ...d, viewSettings: { ...d.viewSettings, orientation: this.orientation } }));
 		this.buildSkeleton();
-		requestAnimationFrame(() => this.centerOnEvents());
+		window.requestAnimationFrame(() => this.centerOnEvents());
 	}
 
 	// ── Layout (all geometry from timeline-layout.ts) ──────────────────────────
@@ -772,7 +775,7 @@ export class TimelineController {
 		for (const [id, text] of texts) if (!crowded.has(id)) group.appendChild(text);
 	}
 
-	/** Plain-text key under the timeline: what the spine, a plotline, a dot and a stitch mean. No frame (Emma's rule). */
+	/** Plain-text key under the timeline: what the spine, a plotline, a dot and a stitch mean. No frame, on purpose. */
 	private syncEraKeyRow(): void {
 		if (this.eraKeyRow) this.eraKeyRow.style.display = this.eras.length > 0 ? '' : 'none';
 	}
@@ -937,7 +940,7 @@ export class TimelineController {
 	 * picked by its path (always the same one).
 	 */
 	private eraColor(era: TimelineEvent): string {
-		const own = this.app.metadataCache.getFileCache(era.file)?.frontmatter?.['color'];
+		const own: unknown = this.app.metadataCache.getFileCache(era.file)?.frontmatter?.['color'];
 		if (typeof own === 'string' && own.trim()) return own.trim();
 		return this.data().eventDisplay[era.notePath]?.color ?? defaultEraColor(era.notePath);
 	}
@@ -1003,7 +1006,7 @@ export class TimelineController {
 		const days = this.events.flatMap((e) => [
 			this.absoluteDay(e),
 			...(e.end ? [storyDateToAbsoluteDay(cal, e.end)] : []),
-			...(this.isDrawnOngoing(e, present) ? [present as number] : []),
+			...(this.isDrawnOngoing(e, present) ? [present] : []),
 		]);
 		this.applyFit(days);
 	}
@@ -1107,7 +1110,7 @@ export class TimelineController {
 			this.panClientStart = { x: e.clientX, y: e.clientY };
 			this.panTxStart = this.tx;
 			this.panTyStart = this.ty;
-			svg.setCssStyles({ cursor: 'grabbing' });
+			svg.addClass('sg-tl-svg--panning');
 		});
 
 		svg.addEventListener('pointermove', (e: PointerEvent) => {
@@ -1166,13 +1169,13 @@ export class TimelineController {
 					this.panClientStart = { x: pt.x, y: pt.y };
 					this.panTxStart = this.tx;
 					this.panTyStart = this.ty;
-					svg.setCssStyles({ cursor: 'grabbing' });
+					svg.addClass('sg-tl-svg--panning');
 				} else {
 					// Gesture over, and it ended as a pinch: the 'grabbing' cursor set
 					// back when it began as a pan was never cleared, and the zoom that
 					// just happened needs the same off-screen-culling refresh a
 					// finished pan gets — neither used to run on this path.
-					svg.setCssStyles({ cursor: '' });
+					svg.removeClass('sg-tl-svg--panning');
 					this.scheduleCullRefresh();
 				}
 			}
@@ -1183,7 +1186,7 @@ export class TimelineController {
 			if (this.panning && e.pointerId === this.panPointerId) {
 				this.panning = false;
 				this.panPointerId = null;
-				svg.setCssStyles({ cursor: '' });
+				svg.removeClass('sg-tl-svg--panning');
 				this.scheduleCullRefresh();
 			}
 
@@ -1198,7 +1201,7 @@ export class TimelineController {
 				// identical ring via is-active anyway.
 				this.setHovered(null);
 				this.setHoveredEra(null);
-				if (this.eraHoverTimer) { clearTimeout(this.eraHoverTimer); this.eraHoverTimer = null; }
+				if (this.eraHoverTimer) { window.clearTimeout(this.eraHoverTimer); this.eraHoverTimer = null; }
 				if (e.type === 'pointerup' && !this.pointerDownWasDrag) {
 					const evt = this.drawnById(this.tapCandidateId);
 					const somethingOpen = this.cardPinned || this.activeEventId !== null || this.activeUndatedPath !== null;
@@ -1275,8 +1278,7 @@ export class TimelineController {
 		// Era names stay in view at the band's start edge as the camera moves.
 		this.positionEraLabels();
 		// The axis ticks sit inside svgViewport, so this one transform also
-		// carries them every frame (Emma, 2026-11-03: dates must stay attached
-		// while dragging).
+		// carries them every frame, so dates stay attached while dragging.
 		// Ticks are NOT rebuilt here — that used to make every scheduleRender()
 		// animation frame during a pan/zoom drag do a full axisGroup.empty() +
 		// rebuild (real per-frame DOM churn). scheduleRender() now settles the
@@ -1317,7 +1319,7 @@ export class TimelineController {
 	private scheduleRender(): void {
 		if (this.renderScheduled) return;
 		this.renderScheduled = true;
-		requestAnimationFrame(() => {
+		window.requestAnimationFrame(() => {
 			this.renderScheduled = false;
 			this.applyTransform();
 			this.scheduleCullRefresh();
@@ -1326,8 +1328,8 @@ export class TimelineController {
 
 	/** Rebuilds the culled DOM node/lane set AND the axis ticks once panning/zooming settles — not on every frame. Shares one timer so both land together, ~150ms after the last pan/zoom/wheel event. */
 	private scheduleCullRefresh(): void {
-		if (this.cullTimer) clearTimeout(this.cullTimer);
-		this.cullTimer = setTimeout(() => {
+		if (this.cullTimer) window.clearTimeout(this.cullTimer);
+		this.cullTimer = window.setTimeout(() => {
 			this.renderLanesAndNodes();
 			this.renderAxisTicks();
 		}, 150);
@@ -1355,8 +1357,8 @@ export class TimelineController {
 		const start = visible.start - pad;
 		const end = visible.end + pad;
 		// Unit comes from the appearance model: 'auto' keeps the zoom-derived
-		// granularity, the explicit units pin it (Emma asked for a say in the
-		// measurement; the picker itself lands with B2's panel).
+		// granularity, the explicit units pin it so the writer chooses the
+		// measurement.
 		// Year chips stay apart on screen when zoomed far out (a horizontal chip is ~70px wide, a vertical one 20px tall).
 		// The range is twice what it was (a full view each side), so the tick cap is too — else days give way to months early.
 		const minYearGapPx = this.orientation === 'horizontal' ? 96 : 48;
@@ -1374,8 +1376,7 @@ export class TimelineController {
 		}
 
 		// Ticks live in the camera's group at their WORLD position, counter-
-		// scaled like the badges (Emma, 2026-11-03: dates "not attached" while
-		// dragging) — so they ride every pan/zoom/pinch frame with the main
+		// scaled like the badges — so they ride every pan/zoom/pinch frame with the main
 		// line and nothing is rebuilt per frame. This settle pass only decides
 		// WHICH ticks show: a tick that stays keeps its element untouched (it
 		// can't jump), new ones fade in (CSS), gone ones are removed.
@@ -1437,7 +1438,7 @@ export class TimelineController {
 	// ── Scene paint (dumb painter over computeTimelineLayout) ──────────────────
 
 	/**
-	 * Eras (Emma, 2026-11-03: "Add era … that should be on a timeline"): one
+	 * Eras: one
 	 * soft, translucent band per era across its years and the full width,
 	 * under the main line and every event, its name calm at the band's start
 	 * edge. Overlapping eras share the width and get softer (layoutEraBands).
@@ -1488,8 +1489,6 @@ export class TimelineController {
 				}) as SVGLineElement;
 				edge.style.stroke = color;
 				edge.style.strokeOpacity = eraOpacity(0.45);
-				edge.setCssStyles({ strokeWidth: '1px' });
-				edge.setCssStyles({ pointerEvents: 'none' });
 				bandLayer.appendChild(edge);
 			}
 			// The name: a dot in the era's colour and its name, in plain screen
@@ -1500,8 +1499,6 @@ export class TimelineController {
 			if (Platform.isMobile) {
 				// The name is small; a finger gets a 44pt-tall target along it (sized once measured, below).
 				const hit = makeSvg('rect', { class: 'sg-tl-era-label-hit', x: '-6', y: String(-TOUCH_HIT_RADIUS), height: String(2 * TOUCH_HIT_RADIUS), width: '0' }) as SVGRectElement;
-				hit.setCssStyles({ fill: 'transparent' });
-				hit.setCssStyles({ pointerEvents: 'all' });
 				k.appendChild(hit);
 			}
 			const dot = makeSvg('circle', { cx: '4', cy: '0', r: '4' }) as SVGCircleElement;
@@ -1509,10 +1506,6 @@ export class TimelineController {
 			k.appendChild(dot);
 			const text = makeSvg('text', { class: 'sg-tl-era-name', x: '13', y: '0', 'dominant-baseline': 'central' }) as SVGTextElement;
 			text.textContent = truncate(era.name, NODE_LABEL_MAX + 4);
-			// Inline too (CSS adds only the halo): readable before a reloaded stylesheet, in the theme's own muted text colour.
-			text.setCssStyles({ fill: 'var(--text-muted)' });
-			text.setCssStyles({ fontSize: '12px' });
-			text.setCssStyles({ fontWeight: '600' });
 			k.appendChild(text);
 			at.appendChild(k);
 			nameLayer.appendChild(at);
@@ -1569,8 +1562,8 @@ export class TimelineController {
 		target.addEventListener('pointerenter', (e: PointerEvent) => {
 			if (e.pointerType !== 'mouse' || this.activePointers.size > 0) return;
 			this.setHoveredEra(era.id);
-			if (this.eraHoverTimer) clearTimeout(this.eraHoverTimer);
-			this.eraHoverTimer = setTimeout(() => {
+			if (this.eraHoverTimer) window.clearTimeout(this.eraHoverTimer);
+			this.eraHoverTimer = window.setTimeout(() => {
 				this.eraHoverTimer = null;
 				if (this.hoveredEraId === era.id && !this.cardPinned && this.hoveredId === null) this.showEventCard(era, false);
 			}, 250);
@@ -1578,9 +1571,9 @@ export class TimelineController {
 		target.addEventListener('pointerleave', (e: PointerEvent) => {
 			if (e.pointerType !== 'mouse' || this.activePointers.size > 0) return;
 			// Band → its own name (or back) is still the same era.
-			const to = e.relatedTarget instanceof Element ? e.relatedTarget.closest('[data-era-id]') : null;
+			const to = asNode(e.relatedTarget)?.instanceOf(Element) ? (e.relatedTarget as Element).closest('[data-era-id]') : null;
 			if (to?.getAttribute('data-era-id') === era.id) return;
-			if (this.eraHoverTimer) { clearTimeout(this.eraHoverTimer); this.eraHoverTimer = null; }
+			if (this.eraHoverTimer) { window.clearTimeout(this.eraHoverTimer); this.eraHoverTimer = null; }
 			this.setHoveredEra(null);
 			if (!this.cardPinned && this.cardEventId === era.id) this.hideEventCard();
 		});
@@ -1734,8 +1727,7 @@ export class TimelineController {
 		// `url(#…)` def. Lines and text go through `solidFromColor` instead —
 		// an axis-aligned <line> has a zero-area bounding box, and an
 		// objectBoundingBox gradient on a zero-area box renders nothing at all.
-		// Gradients run ALONG the time axis (Emma, 2026-08-31: "up and down,
-		// not side to side"): a fade that travels with time reads as duration,
+		// Gradients run ALONG the time axis, never across it: a fade that travels with time reads as duration,
 		// and a straight 90°/180° vector is the one that survives a thin
 		// shape's aspect-ratio stretch exactly.
 		const gradientAngle = horizontal ? 90 : 180;
@@ -1780,12 +1772,9 @@ export class TimelineController {
 			if (Platform.isMobile) {
 				// Invisible, finger-sized target around a badge that may be smaller.
 				const hit = makeSvg('circle', { class: 'sg-tl-node-hit', r: String(Math.max(TOUCH_HIT_RADIUS, r + badgeHaloFor(r))) }) as SVGCircleElement;
-				hit.setCssStyles({ fill: 'transparent' });
-				hit.setCssStyles({ pointerEvents: 'all' });
 				k.appendChild(hit);
 			}
 			const halo = makeSvg('circle', { class: 'sg-tl-node-halo', r: String(r + badgeHaloFor(r)) }) as SVGCircleElement;
-			halo.setCssStyles({ fill: 'var(--background-primary)' });
 			k.appendChild(halo);
 			// The ring is the disc's own stroke, inset so the badge's outer edge sits at exactly r.
 			const ringWidth = badgeRingWidthFor(r);
@@ -1823,12 +1812,9 @@ export class TimelineController {
 			const pts = horizontal
 				? [[-2, -half], [length, 0], [-2, half]]
 				: [[-half, -2], [0, length], [half, -2]];
-			const arrow = makeSvg('polygon', { points: pts.map((p) => p.join(',')).join(' ') }) as SVGPolygonElement;
+			const arrow = makeSvg('polygon', { class: 'sg-tl-bar-arrow', points: pts.map((p) => p.join(',')).join(' ') }) as SVGPolygonElement;
 			// The bar's gradient runs along time, so the arrow carries on in its LAST colour.
 			arrow.style.fill = solidFromColor(colorOf(evt.id), 'last');
-			arrow.setCssStyles({ stroke: 'var(--background-primary)' });
-			arrow.setCssStyles({ strokeWidth: '1.5px' });
-			arrow.setCssStyles({ strokeLinejoin: 'round' });
 			k.appendChild(arrow);
 			at.appendChild(k);
 			parent.appendChild(at);
@@ -1841,7 +1827,7 @@ export class TimelineController {
 			// Label anchors differ from the centre only ACROSS the time axis,
 			// which is plain screen px — so the offset is valid as-is inside
 			// the counter-scaled group. Direction is the labelDirection
-			// setting, decoupled from orientation (Emma's A2 verdict).
+			// setting, decoupled from orientation.
 			const label = makeSvg('text', this.labelAttrs(labelLayout.anchor.x - center.x, labelLayout.anchor.y - center.y, labelLayout.side, appearance));
 			label.textContent = truncate(evt.name, NODE_LABEL_MAX);
 			if (crowded.has(evt.id)) label.classList.add('is-crowded');
@@ -1875,20 +1861,19 @@ export class TimelineController {
 
 		// 1 · Spine, under everything, between the line's two ends (lineEnds):
 		// the chosen years, or the first event to the last (or the present).
-		// A line that stopped next to the only event read as a broken stub
-		// (Emma, 2026-08-31); the round end caps now make the ends deliberate,
+		// A line that stopped next to the only event read as a broken stub;
+		// the round end caps make the ends deliberate,
 		// and a one-day line covers that whole year instead of being a stub.
 		this.spineEl = null;
 		// Chosen years: the main line runs exactly from their first day to the
 		// end of their last year — drawn even before any event exists.
 		// Automatic: first event to the last (or the story's present). Both
-		// ends get a round cap with the year (Emma, 2026-11-03: "Is there an
-		// end on the timeline now? I can't see it.").
+		// ends get a round cap with the year, so the line's end is visible.
 		const ends = this.lineEnds();
 		if (ends) {
 			const spineFrom = axisPoint(ends.startDay * spec.pxPerDay, 0, this.orientation);
 			const spineTo = axisPoint(ends.endDay * spec.pxPerDay, 0, this.orientation);
-			// A <rect>, not a <line> (B3): an axis-aligned line has a zero-area
+			// A <rect>, not a <line>: an axis-aligned line has a zero-area
 			// bounding box, so an objectBoundingBox gradient on it renders
 			// nothing. Its thickness runs across the time axis, which the
 			// camera never scales — so it is spineWidth on-screen px at any zoom.
@@ -1942,11 +1927,11 @@ export class TimelineController {
 		layout.tracks.forEach((track, idx) => {
 			if (!track.line) return;
 			const plotline = lanes[idx];
-			// Per-track thickness override (B2.1) — paint only, resolved right
+			// Per-track thickness override — paint only, resolved right
 			// here. clampKnob answers undefined for an absent or malformed
 			// plotline.width, which falls through to the appearance default.
 			const trackWidth = clampKnob(plotline.width, APPEARANCE_LIMITS.trackWidth) ?? appearance.trackWidth;
-			// Solid lanes are a <rect> (B3) so a gradient can genuinely paint on
+			// Solid lanes are a <rect> so a gradient can genuinely paint on
 			// them. Dashed/dotted need a real stroke to carve the dash pattern
 			// out of, so those stay a <line> — non-scaling, so neither the width
 			// nor the dashes stretch with zoom.
@@ -1977,7 +1962,7 @@ export class TimelineController {
 			}
 			this.laneGroup!.appendChild(threadEl);
 
-			// Right-click → track color (B3). Skipped for the synthetic Unsorted
+			// Right-click → track color. Skipped for the synthetic Unsorted
 			// lane (plotline.id === '') — it has no persisted Plotline record.
 			if (plotline.id) {
 				threadEl.addEventListener('contextmenu', (e: MouseEvent) => {
@@ -2048,15 +2033,13 @@ export class TimelineController {
 					x: String(horizontal ? b.rect.x : b.rect.x - grow), y: String(horizontal ? b.rect.y - grow : b.rect.y),
 					width: String(horizontal ? b.rect.width : b.rect.width + 2 * grow), height: String(horizontal ? b.rect.height + 2 * grow : b.rect.height),
 				}) as SVGRectElement;
-				hit.setCssStyles({ fill: 'transparent' });
-				hit.setCssStyles({ pointerEvents: 'all' });
 				g.appendChild(hit);
 			}
 			if (b.ongoing) paintArrow(g, b.endCenter, horizontal ? b.rect.height : b.rect.width, evt);
 			else paintBadge(g, b.endCenter, b.endRadius, evt, false);
 			paintLabel(paintBadge(g, b.startCenter, b.startRadius, evt, true), evt, b.startCenter);
 			wireNode(g, evt);
-			this.nodeGroup!.appendChild(g);
+			this.nodeGroup.appendChild(g);
 		}
 
 		// 5 · Moments: one badge each, with its name nested inside so the
@@ -2071,7 +2054,7 @@ export class TimelineController {
 			}) as SVGGElement;
 			paintLabel(paintBadge(g, m.center, m.radius, evt, true), evt, m.center);
 			wireNode(g, evt);
-			this.nodeGroup!.appendChild(g);
+			this.nodeGroup.appendChild(g);
 		}
 		this.renderPinnedTrackNames();
 
@@ -2144,7 +2127,7 @@ export class TimelineController {
 	 * events; refreshed in the same cycle as the dots (renderLanesAndNodes).
 	 */
 	private renderShelf(): void {
-		const root = this.host.querySelector('.sg-tl-root') as HTMLElement | null;
+		const root = this.host.querySelector('.sg-tl-root');
 		if (!root) return;
 
 		if (this.undatedEvents.length === 0) {
@@ -2203,11 +2186,11 @@ export class TimelineController {
 	}
 
 	// ── Selection, sidebar preview, event card & context menu ──────────────────
-	// Clicking an event shows its sheet in the writer sidebar like Social Maps
-	// (Emma's A2 verdict). Since the 2026-11-03 redesign a small card also
-	// answers "what is this?" in place: on hover with a mouse, or on tap on a
-	// phone — where it carries the button that opens the sheet, because
-	// jumping straight to the sidebar drawer on every tap hid the timeline.
+	// Clicking an event shows its sheet in the writer sidebar, like Social Maps
+	// does. A small card also answers "what is this?" in place: on hover with
+	// a mouse, or on tap on a phone — where it carries the button that opens
+	// the sheet, because jumping straight to the sidebar drawer on every tap
+	// hid the timeline.
 
 	/** Tap/click on a dated badge: select it and (by default) preview its sheet in the sidebar. */
 	private selectEvent(evt: TimelineEvent, preview = true): void {
@@ -2591,7 +2574,7 @@ export class TimelineController {
 		});
 	}
 
-	// ── Track & spine color (B3) ────────────────────────────────────────────
+	// ── Track & spine color ────────────────────────────────────────────
 	// Same picker/menu pattern as event colors above, scoped to a track's
 	// Plotline.color or the spine's viewSettings.appearance.spineColor.
 
@@ -2651,7 +2634,7 @@ export class TimelineController {
 		});
 	}
 
-	/** Sparse-patches viewSettings.appearance.spineColor through the same seam setAppearance() uses for the B2 sliders. */
+	/** Sparse-patches viewSettings.appearance.spineColor through the same seam setAppearance() uses for the Appearance sliders. */
 	private setSpineColor(color: string): void {
 		this.ctrlHost.mutate((d) => ({
 			...d,
@@ -2672,8 +2655,8 @@ export class TimelineController {
 	}
 
 	/**
-	 * Sparse-patches one B2.1 per-event size override through the standard
-	 * mutate seam, then repaints via the same throttled path the B2 Appearance
+	 * Sparse-patches one per-event size override through the standard
+	 * mutate seam, then repaints via the same throttled path the Appearance
 	 * sliders use (scheduleAppearanceRepaint) — never renderLanesAndNodes()
 	 * called directly here, since a slider drag fires many of these per
 	 * second and this popover/the event editor panel must survive the
@@ -2724,20 +2707,20 @@ export class TimelineController {
 	 * Context menu's "Size…" and the A5 panel's size row share this popover —
 	 * mirrors openDatePopover's shape (sg-tl-add-popover container, so the
 	 * event editor's and appearance panel's own Escape guards leave it alone)
-	 * but reuses the B2 Appearance panel's own slider-row atoms
+	 * but reuses the Appearance panel's own slider-row atoms
 	 * (sg-tl-appearance-*) since this is the exact same kind of control.
 	 * Shows ONE slider — marker size for a point, bar thickness for a bar —
 	 * never both, per the "an event is either a dot or a bar" rule.
 	 */
 	private openEventSizePopover(anchor: Element, notePath: string, isBar: boolean): void {
-		const existing = document.querySelector('.sg-tl-add-popover');
+		const existing = this.host.doc.querySelector('.sg-tl-add-popover');
 		existing?.remove();
 
 		const key: 'markerSize' | 'barThickness' = isBar ? 'barThickness' : 'markerSize';
 		const limit = APPEARANCE_LIMITS[key];
 		const appearanceDefault = this.appearance()[key];
 
-		const popover = document.body.createDiv({ cls: 'sg-tl-add-popover' });
+		const popover = this.host.doc.body.createDiv({ cls: 'sg-tl-add-popover' });
 		popover.createDiv({ cls: 'sg-tl-add-title', text: t('timeline.size.title') });
 
 		const row = popover.createDiv({ cls: 'sg-tl-appearance-row' });
@@ -2769,13 +2752,13 @@ export class TimelineController {
 		};
 		const close = () => {
 			popover.remove();
-			document.removeEventListener('click', onDocClick, { capture: true });
+			this.host.doc.removeEventListener('click', onDocClick, { capture: true });
 			this.closeAddPopover = null;
 		};
 		this.closeAddPopover = close;
 
 		this.positionPopover(popover, anchor);
-		setTimeout(() => document.addEventListener('click', onDocClick, { capture: true }), 0);
+		window.setTimeout(() => this.host.doc.addEventListener('click', onDocClick, { capture: true }), 0);
 	}
 
 	/**
@@ -2794,12 +2777,12 @@ export class TimelineController {
 	 * search box and scrolling grid.
 	 */
 	private openIconPicker(anchor: Element, currentValue: string | undefined, onSelect: (value: string | undefined) => void): void {
-		const existing = document.querySelector('.sg-tl-add-popover');
+		const existing = this.host.doc.querySelector('.sg-tl-add-popover');
 		existing?.remove();
 
 		const selectedId = resolveEventIcon(currentValue, undefined)?.id;
 
-		const popover = document.body.createDiv({ cls: 'sg-tl-add-popover sg-tl-icon-popover' });
+		const popover = this.host.doc.body.createDiv({ cls: 'sg-tl-add-popover sg-tl-icon-popover' });
 		popover.createDiv({ cls: 'sg-tl-add-title', text: t('timeline.icon.title') });
 
 		const searchInput = popover.createEl('input', {
@@ -2817,7 +2800,7 @@ export class TimelineController {
 
 		const close = () => {
 			popover.remove();
-			document.removeEventListener('click', onDocClick, { capture: true });
+			this.host.doc.removeEventListener('click', onDocClick, { capture: true });
 			this.closeAddPopover = null;
 		};
 
@@ -2859,8 +2842,8 @@ export class TimelineController {
 		this.closeAddPopover = close;
 
 		this.positionPopover(popover, anchor);
-		setTimeout(() => {
-			document.addEventListener('click', onDocClick, { capture: true });
+		window.setTimeout(() => {
+			this.host.doc.addEventListener('click', onDocClick, { capture: true });
 			if (!Platform.isMobile) searchInput.focus();
 		}, 0);
 	}
@@ -2899,7 +2882,7 @@ export class TimelineController {
 		this.editorFlush = null;
 		this.editorFile = null;
 		if (this.editorKeydownHandler) {
-			document.removeEventListener('keydown', this.editorKeydownHandler);
+			this.host.doc.removeEventListener('keydown', this.editorKeydownHandler);
 			this.editorKeydownHandler = null;
 		}
 		const el = this.editorEl;
@@ -2920,7 +2903,7 @@ export class TimelineController {
 	 * the panel stays on its event until closed or another Edit is invoked.
 	 */
 	private async openEventEditor(file: TFile): Promise<void> {
-		const root = this.host.querySelector('.sg-tl-root') as HTMLElement | null;
+		const root = this.host.querySelector('.sg-tl-root');
 		if (!root) return;
 
 		// Another event already open: commit its pending edits, then swap
@@ -2944,7 +2927,7 @@ export class TimelineController {
 		const wasOpen = !!this.editorEl;
 		if (!this.editorEl) {
 			this.editorEl = root.createDiv({ cls: 'sg-tl-editor' });
-			requestAnimationFrame(() => this.editorEl?.addClass('is-open'));
+			window.requestAnimationFrame(() => this.editorEl?.addClass('is-open'));
 		}
 		if (wasOpen) this.editorEl.addClass('is-open');
 		this.editorFile = file;
@@ -2953,13 +2936,13 @@ export class TimelineController {
 
 		// Escape closes — with the grid panel's stacked-layer guards, so a menu,
 		// modal, color popover, or date popover above the panel keeps its Escape.
-		if (this.editorKeydownHandler) document.removeEventListener('keydown', this.editorKeydownHandler);
+		if (this.editorKeydownHandler) this.host.doc.removeEventListener('keydown', this.editorKeydownHandler);
 		this.editorKeydownHandler = (e: KeyboardEvent) => {
 			if (e.key !== 'Escape') return;
-			if (document.querySelector('.modal-container, .menu, .sg-color-popover, .sg-tl-add-popover')) return;
+			if (this.host.doc.querySelector('.modal-container, .menu, .sg-color-popover, .sg-tl-add-popover')) return;
 			this.closeEventEditor(true);
 		};
-		document.addEventListener('keydown', this.editorKeydownHandler);
+		this.host.doc.addEventListener('keydown', this.editorKeydownHandler);
 
 		// ── Header: editable title + close ──────────────────────────────────
 		const header = panel.createDiv({ cls: 'sg-tl-editor-header' });
@@ -3056,7 +3039,8 @@ export class TimelineController {
 			// from Year to Month must not write a half-entered date.
 			const onGroupBlur = (group: HTMLElement, commitFn: () => void) => {
 				group.addEventListener('focusout', (e: FocusEvent) => {
-					if (e.relatedTarget instanceof Node && group.contains(e.relatedTarget)) return;
+					const next = asNode(e.relatedTarget);
+					if (next && group.contains(next)) return;
 					commitFn();
 				});
 			};
@@ -3155,7 +3139,7 @@ export class TimelineController {
 		synLabel.createSpan({ text: synField === 'Description' ? t('timeline.editor.description') : t('timeline.editor.whatHappened') });
 		const synWrapper = synSection.createDiv({ cls: 'sg-panel-textarea-wrapper' });
 		const synToolbar = synWrapper.createDiv({ cls: 'sg-md-toolbar' });
-		const synEditor = synWrapper.createEl('div', {
+		const synEditor = synWrapper.createDiv({
 			cls: 'sg-panel-richtext',
 			attr: { contenteditable: 'true', 'data-placeholder': t('timeline.editor.synopsisPlaceholder'), spellcheck: 'true' },
 		});
@@ -3167,7 +3151,7 @@ export class TimelineController {
 		synEditor.addEventListener('paste', (e) => {
 			e.preventDefault();
 			const text = e.clipboardData?.getData('text/plain') ?? '';
-			document.execCommand('insertText', false, text);
+			activeDocument.execCommand('insertText', false, text);
 		});
 		buildPanelRichToolbar(synToolbar, synEditor, updateSynPlaceholder);
 		const commitSynopsis = () => {
@@ -3180,7 +3164,8 @@ export class TimelineController {
 		};
 		// Commit when focus leaves the editor — but not into its own toolbar.
 		synWrapper.addEventListener('focusout', (e: FocusEvent) => {
-			if (e.relatedTarget instanceof Node && synWrapper.contains(e.relatedTarget)) return;
+			const next = asNode(e.relatedTarget);
+			if (next && synWrapper.contains(next)) return;
 			commitSynopsis();
 		});
 
@@ -3351,7 +3336,7 @@ export class TimelineController {
 		renderIconRow();
 
 		// Size row — same one-slider rule as the context menu popover's, and
-		// the same sg-tl-appearance-* atoms as the B2 panel's sliders. Rebuilt
+		// the same sg-tl-appearance-* atoms as the Appearance panel's sliders. Rebuilt
 		// (not just re-read) by renderSizeRow() so toggling the "Has an end"
 		// switch above swaps marker-size for bar-thickness live.
 		const sizeContainer = appearanceSection.createDiv();
@@ -3395,14 +3380,14 @@ export class TimelineController {
 		};
 		renderSizeRow();
 
-		// ── Footer: explicit navigation, Emma's choice — never the default ───
+		// ── Footer: explicit navigation — never the default ─────────────────
 		const footer = panel.createDiv({ cls: 'sg-tl-editor-footer' });
 		const openBtn = footer.createEl('button', { cls: 'sg-tl-btn sg-tl-btn-labeled sg-tl-editor-open-sheet' });
 		setPhosphorIcon(openBtn.createSpan(), 'file-text', '📄');
 		openBtn.createSpan({ text: t('timeline.editor.openSheet') });
 		openBtn.addEventListener('click', () => void openOrReveal(this.app, file));
 
-		if (!Platform.isMobile) requestAnimationFrame(() => titleInput.focus());
+		if (!Platform.isMobile) window.requestAnimationFrame(() => titleInput.focus());
 	}
 
 	/**
@@ -3497,10 +3482,10 @@ export class TimelineController {
 	 * date instead of silently swapping or closing on a rejected entry).
 	 */
 	private openDatePopover(anchor: Element, title: string, onSave: (date: StoryDate) => boolean | void): void {
-		const existing = document.querySelector('.sg-tl-add-popover');
+		const existing = this.host.doc.querySelector('.sg-tl-add-popover');
 		existing?.remove();
 
-		const popover = document.body.createDiv({ cls: 'sg-tl-add-popover' });
+		const popover = this.host.doc.body.createDiv({ cls: 'sg-tl-add-popover' });
 		popover.createDiv({ cls: 'sg-tl-add-title', text: title });
 
 		const dateRow = popover.createDiv({ cls: 'sg-tl-add-row sg-tl-add-date-row' });
@@ -3524,13 +3509,13 @@ export class TimelineController {
 		// IS one, so that would always match itself and Escape would never fire.)
 		const onKeydown = (e: KeyboardEvent) => {
 			if (e.key !== 'Escape') return;
-			if (document.querySelector('.modal-container, .menu, .sg-color-popover')) return;
+			if (this.host.doc.querySelector('.modal-container, .menu, .sg-color-popover')) return;
 			close();
 		};
 		const close = () => {
 			popover.remove();
-			document.removeEventListener('click', onDocClick, { capture: true });
-			document.removeEventListener('keydown', onKeydown);
+			this.host.doc.removeEventListener('click', onDocClick, { capture: true });
+			this.host.doc.removeEventListener('keydown', onKeydown);
 			this.closeAddPopover = null;
 		};
 		this.closeAddPopover = close;
@@ -3550,9 +3535,9 @@ export class TimelineController {
 		this.positionPopover(popover, anchor);
 		yearInput.focus();
 
-		setTimeout(() => {
-			document.addEventListener('click', onDocClick, { capture: true });
-			document.addEventListener('keydown', onKeydown);
+		window.setTimeout(() => {
+			this.host.doc.addEventListener('click', onDocClick, { capture: true });
+			this.host.doc.addEventListener('keydown', onKeydown);
 		}, 0);
 	}
 
@@ -3636,10 +3621,12 @@ export class TimelineController {
 			},
 			{
 				savedTemplates: era ? [] : eventTemplates,
-				onSaveTemplate: era ? undefined : async (tpl) => {
-					eventTemplates.push(tpl);
-					await this.plugin.saveSettings();
-					new Notice(t('codex.notice.templateSaved', { name: tpl.name }));
+				onSaveTemplate: era ? undefined : (tpl) => {
+					runSafely((async () => {
+						eventTemplates.push(tpl);
+						await this.plugin.saveSettings();
+						new Notice(t('codex.notice.templateSaved', { name: tpl.name }));
+					})());
 				},
 				projectRoot,
 				plugin: this.plugin,
@@ -3682,11 +3669,11 @@ export class TimelineController {
 	 */
 	private closePlotlinePanel(): void {
 		if (this.plotlineKeydownHandler) {
-			document.removeEventListener('keydown', this.plotlineKeydownHandler);
+			this.host.doc.removeEventListener('keydown', this.plotlineKeydownHandler);
 			this.plotlineKeydownHandler = null;
 		}
 		if (this.plotlineOutsideClickHandler) {
-			document.removeEventListener('click', this.plotlineOutsideClickHandler, { capture: true });
+			this.host.doc.removeEventListener('click', this.plotlineOutsideClickHandler, { capture: true });
 			this.plotlineOutsideClickHandler = null;
 		}
 		this.plotlinePanelEl?.remove();
@@ -3727,10 +3714,10 @@ export class TimelineController {
 		// stealing it.
 		this.plotlineKeydownHandler = (e: KeyboardEvent) => {
 			if (e.key !== 'Escape') return;
-			if (document.querySelector('.modal-container, .menu, .sg-color-popover, .sg-tl-add-popover')) return;
+			if (this.host.doc.querySelector('.modal-container, .menu, .sg-color-popover, .sg-tl-add-popover')) return;
 			this.closePlotlinePanel();
 		};
-		document.addEventListener('keydown', this.plotlineKeydownHandler);
+		this.host.doc.addEventListener('keydown', this.plotlineKeydownHandler);
 
 		// Outside-click closes too — this panel (unlike the editor/appearance
 		// panels) had no dismissal but its own × button. Mirrors the add-event/
@@ -3748,7 +3735,7 @@ export class TimelineController {
 			this.closePlotlinePanel();
 		};
 		this.plotlineOutsideClickHandler = onPlotlineOutsideClick;
-		setTimeout(() => document.addEventListener('click', onPlotlineOutsideClick, { capture: true }), 0);
+		window.setTimeout(() => this.host.doc.addEventListener('click', onPlotlineOutsideClick, { capture: true }), 0);
 
 		const list = panel.createDiv({ cls: 'sg-tl-plotline-list' });
 		const plotlines = this.data().plotlines;
@@ -3806,8 +3793,8 @@ export class TimelineController {
 			});
 			styleSelect.addEventListener('change', () => this.updatePlotline(p.id, { lineStyle: styleSelect.value as LineStyle }));
 
-			// Per-track thread thickness (B2.1) — paint only, bounds shared with
-			// the B2 Appearance panel's trackWidth slider so a track's own
+			// Per-track thread thickness — paint only, bounds shared with
+			// the Appearance panel's trackWidth slider so a track's own
 			// override can never exceed what the global default allows.
 			const widthLimit = APPEARANCE_LIMITS.trackWidth;
 			const widthInput = row.createEl('input', {
@@ -3895,7 +3882,7 @@ export class TimelineController {
 		if (ends.endDay !== ends.startDay) cap(ends.endDay, ends.endLabel, 1);
 	}
 
-	// ── Appearance panel (B2) ────────────────────────────────────────────────
+	// ── Appearance panel ────────────────────────────────────────────────
 	// Docks in the same right-side slot as the plotline panel (toggleAppearancePanel/
 	// togglePlotlinePanel close whichever sibling is open, so the two panels
 	// never stack). Every control writes straight through ctrlHost.mutate,
@@ -3910,10 +3897,10 @@ export class TimelineController {
 	private closeAppearancePanel(): void {
 		// A year still being typed (Escape, the close button) is saved, not lost:
 		// leaving the box fires its change.
-		const focused = document.activeElement;
-		if (focused instanceof HTMLInputElement && this.appearancePanelEl?.contains(focused)) focused.blur();
+		const focused = this.host.doc.activeElement;
+		if (focused?.instanceOf(HTMLInputElement) && this.appearancePanelEl?.contains(focused)) focused.blur();
 		if (this.appearanceKeydownHandler) {
-			document.removeEventListener('keydown', this.appearanceKeydownHandler);
+			this.host.doc.removeEventListener('keydown', this.appearanceKeydownHandler);
 			this.appearanceKeydownHandler = null;
 		}
 		this.appearancePanelEl?.remove();
@@ -3953,10 +3940,10 @@ export class TimelineController {
 		// panel keeps its own Escape instead of this one stealing it.
 		this.appearanceKeydownHandler = (e: KeyboardEvent) => {
 			if (e.key !== 'Escape') return;
-			if (document.querySelector('.modal-container, .menu, .sg-color-popover, .sg-tl-add-popover')) return;
+			if (this.host.doc.querySelector('.modal-container, .menu, .sg-color-popover, .sg-tl-add-popover')) return;
 			this.closeAppearancePanel();
 		};
-		document.addEventListener('keydown', this.appearanceKeydownHandler);
+		this.host.doc.addEventListener('keydown', this.appearanceKeydownHandler);
 
 		const body = panel.createDiv({ cls: 'sg-tl-appearance-body' });
 		const appearance = this.appearance();
@@ -4087,10 +4074,10 @@ export class TimelineController {
 		const show = (b: { era: HTMLSelectElement | null; input: HTMLInputElement }, absYear: number): void => {
 			const date = yearAsStoryDate(cal, absYear);
 			// Never overwrite a box the writer is typing in (a growth can land mid-typing).
-			if (b.input === document.activeElement) return;
+			if (b.input === this.host.doc.activeElement) return;
 			if (b.era) {
 				// A year before the first era has no era to pick: offer that one choice.
-				let none = b.era.querySelector('option[value=""]') as HTMLOptionElement | null;
+				let none = b.era.querySelector('option[value=""]');
 				if (!date.era && !none) none = b.era.insertBefore(createEl('option', { text: t('timeline.range.noEra'), value: '' }), b.era.firstChild);
 				b.era.value = date.era ?? '';
 			}
@@ -4164,7 +4151,7 @@ export class TimelineController {
 			const days = this.events.flatMap((evt) => [
 				this.absoluteDay(evt),
 				...(evt.end ? [storyDateToAbsoluteDay(cal, evt.end)] : []),
-				...(this.isDrawnOngoing(evt, present) ? [present as number] : []),
+				...(this.isDrawnOngoing(evt, present) ? [present] : []),
 			]).filter((d) => Number.isFinite(d));
 			let startYear: number;
 			let endYear: number;
@@ -4213,7 +4200,7 @@ export class TimelineController {
 	private scheduleAppearanceRepaint(): void {
 		if (this.appearanceRenderScheduled) return;
 		this.appearanceRenderScheduled = true;
-		requestAnimationFrame(() => {
+		window.requestAnimationFrame(() => {
 			this.appearanceRenderScheduled = false;
 			this.renderLanesAndNodes();
 			this.applyTransform();
@@ -4221,7 +4208,7 @@ export class TimelineController {
 		});
 	}
 
-	/** Repaints via scheduleAppearanceRepaint (rAF-coalesced) rather than a bare renderLanesAndNodes() — the width slider (B2.1) fires many `input` events per drag, same as the B2 Appearance sliders, and this is the one scheduling helper for that. */
+	/** Repaints via scheduleAppearanceRepaint (rAF-coalesced) rather than a bare renderLanesAndNodes() — the width slider fires many `input` events per drag, same as the B2 Appearance sliders, and this is the one scheduling helper for that. */
 	private updatePlotline(id: string, patch: Partial<Plotline>): void {
 		this.ctrlHost.mutate((d) => ({ ...d, plotlines: d.plotlines.map((p) => (p.id === id ? { ...p, ...patch } : p)) }));
 		this.scheduleAppearanceRepaint();

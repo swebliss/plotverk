@@ -137,8 +137,8 @@ export async function migrateSafetyFolders(app: App): Promise<void> {
  * Merges one older safety folder into `pvbackup/` beside it. Only touched
  * when it carries our "What is this folder" note — a writer's own folder with
  * the same name is never touched — and only our own entries move. When a
- * file exists on both sides the newer one is kept and the other goes to
- * Obsidian's trash (recoverable, never deleted outright). The old note is
+ * file exists on both sides the newer one is kept and the other is removed
+ * the way the writer's "Deleted files" setting says. The old note is
  * never carried over (its wording predates the rename) and the old folder is
  * removed only once it is empty.
  */
@@ -164,7 +164,7 @@ async function mergeSafetyFolder(app: App, oldPath: string): Promise<void> {
 		}
 		// Last, as it marks the folder as ours: a failed run above leaves it, so the next start retries.
 		const oldNote = app.vault.getAbstractFileByPath(joinVaultPath(oldPath, README_FILE));
-		if (oldNote instanceof TFile) await app.vault.trash(oldNote, false);
+		if (oldNote instanceof TFile) await app.fileManager.trashFile(oldNote);
 		await removeIfEmpty(app, oldPath);
 	} catch (err) {
 		console.error('Plotverk: could not move the old safety folder', oldPath, err);
@@ -185,10 +185,10 @@ async function mergeInto(app: App, item: TAbstractFile, target: string): Promise
 	if (item instanceof TFile && existing instanceof TFile) {
 		// Keep whichever copy is newer: an older build may have written the old folder after pvbackup existed.
 		if (item.stat.mtime > existing.stat.mtime) {
-			await app.vault.trash(existing, false);
+			await app.fileManager.trashFile(existing);
 			await app.vault.rename(item, target);
 		} else {
-			await app.vault.trash(item, false);
+			await app.fileManager.trashFile(item);
 		}
 	}
 }

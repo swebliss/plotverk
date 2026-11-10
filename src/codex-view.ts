@@ -1,9 +1,11 @@
+import { plotverkEvents } from './utils/plotverk-events';
 import { ItemView, WorkspaceLeaf, TFile, Notice, Menu, FuzzySuggestModal, App, MarkdownRenderer, Platform, ViewStateResult } from 'obsidian';
 import type StorygridPlugin from './main';
 import type { SocialMapsTab } from './social-maps-view';
 import { setPhosphorIcon, GRID_VIEW_ICON } from './utils/icons';
+import { runSafely } from './utils/report-error';
 import { CharacterField, CharacterFieldTemplate, GridData } from './grid-data';
-import { ERA_SHEET, EntityKind, UNTYPED_KIND, getKindSpec, getCodexKindOrder, getCodexGroups, groupFieldsIntoSections, iconForCustomLabel } from './entities/entity-kinds';
+import { ERA_SHEET, EntityKind, UNTYPED_KIND, getKindSpec, getCodexKindOrder, getCodexGroups, groupFieldsIntoSections } from './entities/entity-kinds';
 import { isEraHowLong } from './timeline/timeline-eras';
 import { buildRelationGraph, RelEntity, nonRelationText, parseRelationLines, relationChoices, fieldsToRelationSections, partitionRelationLines, classifyRelation, buildCustomRegistry, RELATIONSHIP_TYPE_OTHER, RelationLine } from './utils/relations';
 import {
@@ -188,7 +190,7 @@ export class StorygridCodexView extends ItemView {
 		// full teardown/rebuild of a Codex that isn't showing that project.
 		const scheduleRefresh = () => {
 			if (this.refreshTimer) window.clearTimeout(this.refreshTimer);
-			this.refreshTimer = window.setTimeout(() => this.renderAll(), 400);
+			this.refreshTimer = window.setTimeout(() => { void this.renderAll(); }, 400);
 		};
 		this.registerEvent(this.app.vault.on('create', (f) => {
 			this._projectsDirty = true;
@@ -210,11 +212,11 @@ export class StorygridCodexView extends ItemView {
 			this.projectRoot = '';
 			void this.renderAll();
 		};
-		document.addEventListener('storygrid:project-changed', this._projectChangedHandler);
+		plotverkEvents.addEventListener('storygrid:project-changed', this._projectChangedHandler);
 
 		// Paste a picture while a sheet is open here (Ctrl+V / Cmd+V, or the
 		// paste box on a phone): it joins that sheet's images.
-		this.registerDomEvent(document, 'paste', (e: ClipboardEvent) => this.handleImagePaste(e));
+		this.registerDomEvent(this.containerEl.doc, 'paste', (e: ClipboardEvent) => this.handleImagePaste(e));
 
 		await this.renderAll();
 	}
@@ -227,7 +229,7 @@ export class StorygridCodexView extends ItemView {
 		this.galleryResizeObserver = null;
 		if (this.galleryResizeTimer) window.clearTimeout(this.galleryResizeTimer);
 		if (this._projectChangedHandler) {
-			document.removeEventListener('storygrid:project-changed', this._projectChangedHandler);
+			plotverkEvents.removeEventListener('storygrid:project-changed', this._projectChangedHandler);
 			this._projectChangedHandler = null;
 		}
 	}
@@ -241,7 +243,7 @@ export class StorygridCodexView extends ItemView {
 			this.projectRoot = state['projectRoot'];
 		}
 		if (state && typeof state['activeKind'] === 'string') {
-			this.activeKind = state['activeKind'] as EntityKind;
+			this.activeKind = state['activeKind'];
 			this.viewMode = this.defaultViewModeForKind(this.activeKind);
 			this.revealKindInSidebar(this.activeKind);
 		}
@@ -370,7 +372,7 @@ export class StorygridCodexView extends ItemView {
 		for (const gridFile of project.gridFiles) {
 			let grid: GridData;
 			try {
-				grid = JSON.parse(await this.app.vault.read(gridFile));
+				grid = JSON.parse(await this.app.vault.read(gridFile)) as GridData;
 			} catch {
 				continue;
 			}
@@ -532,6 +534,7 @@ export class StorygridCodexView extends ItemView {
 		const origin = this.origin;
 		if (origin && this.plugin.isSocialMapsLeafOpen(origin.leaf)) {
 			const label = t(origin.tab === 'tree' ? 'codex.detail.backToStoryTree' : 'codex.detail.backToConnectionsMap');
+			band.addClass('sg-detail-band--has-origin');
 			const backToMaps = band.createEl('button', { cls: 'sg-detail-back sg-detail-back--origin', title: label });
 			setPhosphorIcon(backToMaps.createSpan(), 'arrow-left', '‹');
 			backToMaps.createSpan({ text: label });
@@ -543,6 +546,7 @@ export class StorygridCodexView extends ItemView {
 		const prevFile = prevPath ? this.app.vault.getAbstractFileByPath(prevPath) : null;
 		if (prevFile instanceof TFile) {
 			const label = t('codex.detail.backToEntry', { name: prevFile.basename });
+			band.addClass('sg-detail-band--has-origin');
 			const backToEntry = band.createEl('button', { cls: 'sg-detail-back sg-detail-back--origin', title: label });
 			setPhosphorIcon(backToEntry.createSpan(), 'arrow-left', '‹');
 			backToEntry.createSpan({ text: label });
@@ -570,6 +574,7 @@ export class StorygridCodexView extends ItemView {
 		// A Bloodline (or a faction whose Type says Family / House): open its family in the Story Tree.
 		const projectRoot = this.projectRoot;
 		if (projectRoot && isFamilyGroup(kind, fields)) {
+			band.addClass('sg-detail-band--has-tree');
 			const treeBtn = band.createEl('button', { cls: 'sg-detail-action sg-detail-action--tree' });
 			setPhosphorIcon(treeBtn.createSpan(), 'tree-structure', '⌥');
 			treeBtn.createSpan({ text: t('codex.detail.viewFamilyTree') });
@@ -579,6 +584,7 @@ export class StorygridCodexView extends ItemView {
 		// A character with family on either sheet: open the Family tree focused on them.
 		// Shown once the project's sheets are read, so it never offers an empty tree.
 		if (projectRoot && kind === 'character') {
+			band.addClass('sg-detail-band--has-tree');
 			const personBtn = band.createEl('button', { cls: 'sg-detail-action sg-detail-action--tree' });
 			setPhosphorIcon(personBtn.createSpan(), 'tree-structure', '⌥');
 			personBtn.createSpan({ text: t('codex.detail.viewFamilyTree') });
@@ -589,6 +595,7 @@ export class StorygridCodexView extends ItemView {
 
 		// Every faction: open its own org chart in the Story Tree (after the family button when both apply).
 		if (projectRoot && kind === 'faction') {
+			band.addClass('sg-detail-band--has-tree');
 			const factionBtn = band.createEl('button', { cls: 'sg-detail-action sg-detail-action--tree' });
 			setPhosphorIcon(factionBtn.createSpan(), 'users-three', '⌥');
 			factionBtn.createSpan({ text: t('codex.detail.viewFactionTree') });
@@ -596,7 +603,7 @@ export class StorygridCodexView extends ItemView {
 		}
 
 		const editBtn = band.createEl('button', { cls: 'sg-detail-action sg-detail-action--primary', text: t('codex.detail.edit') });
-		editBtn.addEventListener('click', () => this.editEntity(entity));
+		editBtn.addEventListener('click', () => { runSafely(this.editEntity(entity)); });
 
 		const moreBtn = band.createEl('button', { cls: 'sg-detail-action', title: t('codex.detail.more'), attr: { 'aria-label': t('codex.detail.more') } });
 		setPhosphorIcon(moreBtn, 'dots-three', '⋯');
@@ -692,7 +699,7 @@ export class StorygridCodexView extends ItemView {
 					row.createSpan({ cls: 'sg-detail-appearance-title', text: a.cardTitle });
 					const openGrid = () => {
 						const g = this.app.vault.getAbstractFileByPath(a.gridPath);
-						if (g instanceof TFile) this.plugin.openGridFile(g);
+						if (g instanceof TFile) runSafely(this.plugin.openGridFile(g));
 					};
 					row.addEventListener('click', openGrid);
 					row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') openGrid(); });
@@ -882,7 +889,7 @@ export class StorygridCodexView extends ItemView {
 			setPhosphorIcon(addBtn.createSpan(), 'image', '+');
 			addBtn.createSpan({ text: t('codex.images.add') });
 			addBtn.addEventListener('click', () => {
-				const picker = document.createElement('input');
+				const picker = createEl('input');
 				picker.type = 'file';
 				picker.accept = 'image/*';
 				picker.multiple = true;
@@ -975,9 +982,10 @@ export class StorygridCodexView extends ItemView {
 		if (!this.detailPath || this.app.workspace.getActiveViewOfType(StorygridCodexView) !== this) return;
 		// Never while a dialog is open (the sheet editor would then save over it),
 		// and only from inside this view or with nothing focused at all.
-		if (document.querySelector('.modal-container')) return;
-		const target = e.target instanceof HTMLElement ? e.target : null;
-		if (target && target !== document.body && !this.containerEl.contains(target)) return;
+		if (this.containerEl.doc.querySelector('.modal-container')) return;
+		const rawTarget = e.target as Node | null;
+		const target = rawTarget?.instanceOf(HTMLElement) ? rawTarget : null;
+		if (target && target !== this.containerEl.doc.body && !this.containerEl.contains(target)) return;
 		const inPasteBox = !!target?.closest('.sg-detail-images-paste');
 		if (!inPasteBox && target && (target.isContentEditable || target.closest('input, textarea'))) return;
 		const files = imagesFromDataTransfer(e.clipboardData);
@@ -1022,7 +1030,7 @@ export class StorygridCodexView extends ItemView {
 			.onClick(() => openOrReveal(this.app, entity.file, { state: { mode: 'preview' } })));
 		menu.addItem((item) => item.setTitle(t('codex.menu.rename')).setIcon('pencil')
 			.onClick(() => {
-				new TextPromptModal(this.app, t('codex.rename.title', { name: entity.name }), entity.name, async (newName) => {
+				new TextPromptModal(this.app, t('codex.rename.title', { name: entity.name }), entity.name, (newName) => { runSafely((async () => {
 					if (!newName || newName === entity.name) return;
 					const safe = newName.replace(/[\\/:*?"<>|#^[\]]/g, '-');
 					const newPath = `${entity.file.parent?.path}/${safe}.md`;
@@ -1033,7 +1041,7 @@ export class StorygridCodexView extends ItemView {
 					} catch (err) {
 						new Notice(t('codex.notice.renameFailed', { msg: err instanceof Error ? err.message : '' }));
 					}
-				}).open();
+				})()); }).open();
 			}));
 		menu.addSeparator();
 		menu.addItem((item) => item.setTitle(t('common.delete')).setIcon('trash')
@@ -1053,7 +1061,7 @@ export class StorygridCodexView extends ItemView {
 		empty.createEl('h2', { text: t('codex.noProjects.title') });
 		empty.createEl('p', { text: t('codex.noProjects.desc') });
 		const btn = empty.createEl('button', { cls: 'sg-codex-btn sg-codex-btn--primary', text: t('codex.noProjects.cta') });
-		btn.addEventListener('click', () => this.plugin.createNewGrid());
+		btn.addEventListener('click', () => { runSafely(this.plugin.createNewGrid()); });
 	}
 
 	private renderIntro(parent: HTMLElement): void {
@@ -1098,12 +1106,12 @@ export class StorygridCodexView extends ItemView {
 		searchInput.addEventListener('input', () => {
 			this.searchQuery = searchInput.value;
 			const body = this.contentEl.querySelector('.sg-codex-body');
-			if (body instanceof HTMLElement) {
+			if (body?.instanceOf(HTMLElement)) {
 				body.empty();
 				this.renderSidebar(body, project);
 				this.renderGallery(body, project);
 				const refocus = this.contentEl.querySelector('.sg-codex-search input');
-				if (refocus instanceof HTMLInputElement) {
+				if (refocus?.instanceOf(HTMLInputElement)) {
 					refocus.value = this.searchQuery;
 				}
 			}
@@ -1173,7 +1181,7 @@ export class StorygridCodexView extends ItemView {
 				item.createSpan({ cls: 'sg-codex-nav-label', text: spec.plural });
 				if (count > 0) item.createSpan({ cls: 'sg-codex-nav-count', text: String(count) });
 
-				const activateKind = () => { onPick?.(); this.activeKind = kind; this.viewMode = this.defaultViewModeForKind(kind); this.renderAll(); };
+				const activateKind = () => { onPick?.(); this.activeKind = kind; this.viewMode = this.defaultViewModeForKind(kind); void this.renderAll(); };
 				item.addEventListener('click', activateKind);
 				item.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') activateKind(); });
 			}
@@ -1460,7 +1468,7 @@ export class StorygridCodexView extends ItemView {
 					e.stopPropagation();
 					if (collapsed) this.collapsedLocations.delete(entity.file.path);
 					else this.collapsedLocations.add(entity.file.path);
-					this.renderAll();
+					void this.renderAll();
 				});
 			} else {
 				chev.addClass('sg-codex-tree-chevron--leaf');
@@ -1485,7 +1493,7 @@ export class StorygridCodexView extends ItemView {
 			});
 
 			row.addEventListener('click', () => {
-				openOrReveal(this.app, entity.file, { state: { mode: 'preview' } });
+				runSafely(openOrReveal(this.app, entity.file, { state: { mode: 'preview' } }));
 			});
 			row.addEventListener('contextmenu', (e) => {
 				e.preventDefault();
@@ -1513,9 +1521,9 @@ export class StorygridCodexView extends ItemView {
 		const blocked = descendantNames(all, entity.name);
 		const candidates = all.filter((e) => !blocked.has(e.name.toLowerCase()));
 
-		new ParentPickModal(this.app, candidates, async (parent) => {
+		new ParentPickModal(this.app, candidates, (parent) => { runSafely((async () => {
 			try {
-				await this.app.fileManager.processFrontMatter(entity.file, (fm) => {
+				await this.app.fileManager.processFrontMatter(entity.file, (fm: Record<string, unknown>) => {
 					// Stored as a wikilink so Obsidian keeps it valid on renames
 					if (parent) fm['storygrid-parent'] = `[[${parent.name}]]`;
 					else delete fm['storygrid-parent'];
@@ -1528,7 +1536,7 @@ export class StorygridCodexView extends ItemView {
 			} catch (err) {
 				new Notice(t('codex.notice.moveFailed', { name: entity.name, msg: err instanceof Error ? err.message : '' }));
 			}
-		}).open();
+		})()); }).open();
 	}
 
 	/** Faded, inert preview of what a filled character card looks like — reuses the real card markup so it's an honest preview, not a mockup. */
@@ -1619,7 +1627,7 @@ export class StorygridCodexView extends ItemView {
 					badge.addEventListener('click', (e) => {
 						e.stopPropagation();
 						const file = this.app.vault.getAbstractFileByPath(appearances[0].gridPath);
-						if (file instanceof TFile) this.plugin.openGridFile(file);
+						if (file instanceof TFile) runSafely(this.plugin.openGridFile(file));
 					});
 				}
 			}
@@ -1643,7 +1651,7 @@ export class StorygridCodexView extends ItemView {
 			setPhosphorIcon(editBtn, 'note-pencil', '✎');
 			editBtn.addEventListener('click', (e) => {
 				e.stopPropagation();
-				this.editEntity(entity);
+				runSafely(this.editEntity(entity));
 			});
 			card.addEventListener('click', () => this.showDetail(entity));
 			card.addEventListener('contextmenu', (e) => {
@@ -1684,7 +1692,7 @@ export class StorygridCodexView extends ItemView {
 		setPhosphorIcon(editBtn, 'note-pencil', '✎');
 		editBtn.addEventListener('click', (e) => {
 			e.stopPropagation();
-			this.editEntity(entity);
+			runSafely(this.editEntity(entity));
 		});
 		card.addEventListener('click', () => this.showDetail(entity));
 		card.addEventListener('contextmenu', (e) => {
@@ -1743,7 +1751,7 @@ export class StorygridCodexView extends ItemView {
 				badge.addEventListener('click', (e) => {
 					e.stopPropagation();
 					const file = this.app.vault.getAbstractFileByPath(appearances[0].gridPath);
-					if (file instanceof TFile) this.plugin.openGridFile(file);
+					if (file instanceof TFile) runSafely(this.plugin.openGridFile(file));
 				});
 			}
 		}
@@ -1753,7 +1761,7 @@ export class StorygridCodexView extends ItemView {
 		setPhosphorIcon(editBtn, 'note-pencil', '✎');
 		editBtn.addEventListener('click', (e) => {
 			e.stopPropagation();
-			this.editEntity(entity);
+			runSafely(this.editEntity(entity));
 		});
 
 		// Interactions — open the rendered detail page inside the Codex
@@ -1791,7 +1799,7 @@ export class StorygridCodexView extends ItemView {
 			.setTitle(t('codex.menu.rename'))
 			.setIcon('pencil')
 			.onClick(() => {
-				new TextPromptModal(this.app, t('codex.rename.title', { name: entity.name }), entity.name, async (newName) => {
+				new TextPromptModal(this.app, t('codex.rename.title', { name: entity.name }), entity.name, (newName) => { runSafely((async () => {
 					if (newName === entity.name) return;
 					const safe = newName.replace(/[\\/:*?"<>|#^[\]]/g, '-');
 					const newPath = `${entity.file.parent?.path}/${safe}.md`;
@@ -1801,7 +1809,7 @@ export class StorygridCodexView extends ItemView {
 					} catch (err) {
 						new Notice(t('codex.notice.renameFailed', { msg: err instanceof Error ? err.message : '' }));
 					}
-				}).open();
+				})()); }).open();
 			}));
 		menu.addSeparator();
 		menu.addItem((item) => item
@@ -1925,10 +1933,9 @@ export class StorygridCodexView extends ItemView {
 			},
 			{
 				savedTemplates: this.templatesForKind(kind),
-				onSaveTemplate: async (tpl) => {
+				onSaveTemplate: (tpl) => {
 					this.templatesForKind(kind).push(tpl);
-					await this.plugin.saveSettings();
-					new Notice(t('codex.notice.templateSaved', { name: tpl.name }));
+					runSafely(this.plugin.saveSettings().then(() => { new Notice(t('codex.notice.templateSaved', { name: tpl.name })); }));
 				},
 				projectRoot: this.projectRoot ?? undefined,
 				initialAliases: parsed.aliases,
@@ -1986,7 +1993,7 @@ export class StorygridCodexView extends ItemView {
 					const file = await createEntityFile(this.app, project.rootPath, kind, name, fields, aliases, start?.cleanSlate);
 					if (parentName) {
 						// Stored as a wikilink so Obsidian keeps it valid on renames
-						await this.app.fileManager.processFrontMatter(file, (fm) => {
+						await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
 							fm['storygrid-parent'] = `[[${parentName}]]`;
 						});
 					}
@@ -2006,10 +2013,9 @@ export class StorygridCodexView extends ItemView {
 			},
 			{
 				savedTemplates: this.templatesForKind(kind),
-				onSaveTemplate: async (tpl) => {
+				onSaveTemplate: (tpl) => {
 					this.templatesForKind(kind).push(tpl);
-					await this.plugin.saveSettings();
-					new Notice(t('codex.notice.templateSaved', { name: tpl.name }));
+					runSafely(this.plugin.saveSettings().then(() => { new Notice(t('codex.notice.templateSaved', { name: tpl.name })); }));
 				},
 				projectRoot: project.rootPath,
 				relationChoices: relationChoices(this.plugin.settings.customRelationshipTypes),

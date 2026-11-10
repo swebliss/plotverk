@@ -153,7 +153,7 @@ function hueHex(h: number): string {
 function el<K extends keyof HTMLElementTagNameMap>(
 	tag: K, cls: string, parent?: HTMLElement, text?: string
 ): HTMLElementTagNameMap[K] {
-	const e = document.createElement(tag);
+	const e = createEl(tag);
 	if (cls) e.className = cls;
 	if (text !== undefined) e.textContent = text;
 	parent?.appendChild(e);
@@ -385,7 +385,7 @@ export class InlineColorPicker {
 		this._saveAsBtn.textContent = 'Save as palette';
 		this._saveAsBtn.title = 'Turn your saved colors into a reusable palette';
 		this._saveAsBtn.addEventListener('click', () => this._saveAsPalette());
-		if (!this._opts.onCreatePalette) this._saveAsBtn.setCssStyles({ display: 'none' });
+		if (!this._opts.onCreatePalette) this._saveAsBtn.hide();
 
 		this._savedGrid = div('sg-cpick-saved-grid', controls);
 		this._renderSaved();
@@ -495,7 +495,7 @@ export class InlineColorPicker {
 		this._hueThumb.style.left = `${(this._h / 360) * 100}%`;
 		this._hueThumb.style.background = hueHex(this._h);
 		this._dot.style.background = this._value;
-		if (!skipHexInput && document.activeElement !== this._hexInput) {
+		if (!skipHexInput && this._hexInput.doc.activeElement !== this._hexInput) {
 			this._hexInput.value = this._activeStopHex().toUpperCase();
 		}
 		if (this._mode === 'gradient') {
@@ -582,29 +582,36 @@ export class InlineColorPicker {
 
 	/** Smoothly grow/shrink a collapsible section. */
 	private _setCollapsed(elm: HTMLElement, collapsed: boolean, animate = true): void {
+		// The shut state (max-height: 0) is the .sg-cpick-shut class; the measured
+		// heights the animation runs between stay inline.
 		if (!animate) {
 			elm.classList.toggle('sg-cpick-collapsed', collapsed);
-			elm.style.display = collapsed ? 'none' : '';
-			elm.style.maxHeight = collapsed ? '0px' : '';
+			elm.toggle(!collapsed);
+			elm.toggleClass('sg-cpick-shut', collapsed);
+			elm.style.maxHeight = '';
 			return;
 		}
 		if (collapsed) {
 			elm.style.maxHeight = `${elm.scrollHeight}px`;
 			void elm.offsetWidth;
 			elm.classList.add('sg-cpick-collapsed');
-			elm.setCssStyles({ maxHeight: '0px' });
+			elm.addClass('sg-cpick-shut');
+			elm.style.maxHeight = '';
 			window.setTimeout(() => {
-				if (elm.classList.contains('sg-cpick-collapsed')) elm.setCssStyles({ display: 'none' });
+				if (elm.classList.contains('sg-cpick-collapsed')) elm.hide();
 			}, 260);
 		} else {
-			elm.setCssStyles({ display: '' });
+			elm.show();
 			elm.classList.remove('sg-cpick-collapsed');
 			const h = elm.scrollHeight;
-			elm.setCssStyles({ maxHeight: '0px' });
+			elm.addClass('sg-cpick-shut');
 			void elm.offsetWidth;
 			elm.style.maxHeight = `${h}px`;
 			window.setTimeout(() => {
-				if (!elm.classList.contains('sg-cpick-collapsed')) elm.setCssStyles({ maxHeight: '' });
+				if (!elm.classList.contains('sg-cpick-collapsed')) {
+					elm.style.maxHeight = '';
+					elm.removeClass('sg-cpick-shut');
+				}
 			}, 260);
 		}
 	}
@@ -702,22 +709,23 @@ export class ColorPickerPopover {
 		// anywhere in the app, silently committing a stale color.
 		activeCleanup?.();
 		activeCleanup = null;
-		document.querySelector('.sg-color-popover')?.remove();
+		const doc = anchor.doc;
+		doc.querySelector('.sg-color-popover')?.remove();
 
 		let selected = opts.currentColor;
 
-		const popover = document.createElement('div');
+		const popover = createDiv();
 		popover.className = 'sg-color-popover sg-color-popover--v2';
 
 		// Draggable handle — lets the user slide the picker aside to see cards
-		const handle = document.createElement('div');
+		const handle = createDiv();
 		handle.className = 'sg-color-popover-handle';
 		setStaticMarkup(handle,
 			'<span class="sg-color-popover-grip"><svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor"><circle cx="2.5" cy="3" r="1.2"/><circle cx="7.5" cy="3" r="1.2"/><circle cx="2.5" cy="7" r="1.2"/><circle cx="7.5" cy="7" r="1.2"/><circle cx="2.5" cy="11" r="1.2"/><circle cx="7.5" cy="11" r="1.2"/></svg></span>'
 			+ '<span class="sg-color-popover-title">Pick a color</span>');
 		popover.appendChild(handle);
 
-		const host = document.createElement('div');
+		const host = createDiv();
 		popover.appendChild(host);
 		new InlineColorPicker(host, {
 			currentColor: opts.currentColor,
@@ -730,19 +738,19 @@ export class ColorPickerPopover {
 			onChange: (c) => { selected = c; opts.onPreview?.(c); },
 		});
 
-		const footer = document.createElement('div');
+		const footer = createDiv();
 		footer.className = 'sg-color-popover-footer';
-		const cancelBtn = document.createElement('button');
+		const cancelBtn = createEl('button');
 		cancelBtn.className = 'sg-color-popover-btn';
 		cancelBtn.textContent = 'Cancel';
-		const doneBtn = document.createElement('button');
+		const doneBtn = createEl('button');
 		doneBtn.className = 'sg-color-popover-btn sg-color-popover-btn--done';
 		doneBtn.textContent = 'Done';
 		footer.appendChild(cancelBtn);
 		footer.appendChild(doneBtn);
 		popover.appendChild(footer);
 
-		document.body.appendChild(popover);
+		doc.body.appendChild(popover);
 
 		// Position below the anchor, flipping/clamping to stay on screen
 		const rect = anchor.getBoundingClientRect();
@@ -781,7 +789,7 @@ export class ColorPickerPopover {
 
 		function cleanup(): void {
 			popover.remove();
-			document.removeEventListener('mousedown', onOutside);
+			doc.removeEventListener('mousedown', onOutside);
 			// Idempotent guard: only clear the module-level pointer if it's
 			// still ours, so a stray second call can't null out a newer
 			// (superseding) instance's cleanup.
@@ -799,6 +807,6 @@ export class ColorPickerPopover {
 
 		cancelBtn.addEventListener('click', () => { opts.onPreview?.(opts.currentColor); cleanup(); });
 		doneBtn.addEventListener('click', commit);
-		setTimeout(() => document.addEventListener('mousedown', onOutside), 50);
+		window.setTimeout(() => doc.addEventListener('mousedown', onOutside), 50);
 	}
 }

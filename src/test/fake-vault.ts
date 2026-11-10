@@ -255,5 +255,9 @@ export class FakeVault {
 }
 
 export function fakeApp(vault: FakeVault): App {
-	return { vault } as unknown as App;
+	// fileManager.trashFile is what the plugin calls to remove files; here it lands in `vault.trashed`.
+	return {
+		vault,
+		fileManager: { trashFile: (file: TFile | TFolder) => vault.trash(file as TFile, true) },
+	} as unknown as App;
 }

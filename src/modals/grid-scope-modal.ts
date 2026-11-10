@@ -106,7 +106,7 @@ export class GridScopeModal extends Modal {
 		const mkOpt = (kind: ProjectKind, label: string, desc: string) => {
 			const btn = opts.createEl('button', { cls: 'sg-scope-modal-opt' });
 			btn.createEl('strong', { text: label });
-			btn.createEl('span', { text: desc });
+			btn.createSpan({ text: desc });
 			btn.addEventListener('click', () => {
 				this.kind = kind;
 				this.step = 2;
@@ -136,7 +136,7 @@ export class GridScopeModal extends Modal {
 		});
 		input.value = this.novelName;
 		input.addEventListener('input', () => { this.novelName = input.value; });
-		setTimeout(() => input.focus(), 50);
+		window.setTimeout(() => input.focus(), 50);
 
 		this.renderAuthorRow(contentEl);
 

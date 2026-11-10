@@ -210,7 +210,7 @@ export function parseCssGradient(value: unknown): ParsedGradient | null {
 		let next = i + 1;
 		while (next < offsets.length && offsets[next] === undefined) next++;
 		const from = offsets[i - 1] as number;
-		const to = (offsets[next] as number | undefined) ?? 1;
+		const to = offsets[next] ?? 1;
 		const span = next - (i - 1);
 		for (let k = i; k < next; k++) offsets[k] = from + ((to - from) * (k - (i - 1))) / span;
 	}
@@ -304,7 +304,7 @@ export class SvgGradientDefs {
 
 		const id = `${this.idPrefix}${++this.seq}`;
 		const ns = 'http://www.w3.org/2000/svg';
-		const grad = document.createElementNS(ns, parsed.kind === 'radial' ? 'radialGradient' : 'linearGradient');
+		const grad = activeDocument.createElementNS(ns, parsed.kind === 'radial' ? 'radialGradient' : 'linearGradient');
 		grad.setAttribute('id', id);
 		if (parsed.kind === 'radial') {
 			// Centered circle standing in for any CSS radial config; 0.7071 is
@@ -320,7 +320,7 @@ export class SvgGradientDefs {
 			grad.setAttribute('y2', String(v.y2));
 		}
 		for (const stop of parsed.stops) {
-			const el = document.createElementNS(ns, 'stop');
+			const el = activeDocument.createElementNS(ns, 'stop');
 			el.setAttribute('offset', String(stop.offset));
 			el.setAttribute('stop-color', stop.color);
 			if (stop.opacity < 1) el.setAttribute('stop-opacity', String(stop.opacity));

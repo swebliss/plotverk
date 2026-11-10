@@ -1,4 +1,5 @@
 import { App, Notice, PluginSettingTab, Setting } from 'obsidian';
+import { runSafely } from '../utils/report-error';
 import type StorygridPlugin from '../main';
 import { getAllTemplates } from '../templates/story-templates';
 import { generateId, CardStatus, QuickLinkKey, QuickLinkPlacement } from '../grid-data';
@@ -169,7 +170,7 @@ export class StorygridSettingsTab extends PluginSettingTab {
 		// Modules — the main-feature switches. Positions start from the first-launch
 		// answers (profession + writing style); an explicit flip here always wins.
 		// Nothing is ever deleted. Folds like every other section and starts folded,
-		// so the first settings page opens calm (Emma, 2026-11-06).
+		// so the first settings page opens calm.
 		const featureSec = this.section(parent, t('settings.general.customizePlugin.title'),
 			t('settings.general.customizePlugin.desc'),
 			{ startCollapsed: true });
@@ -201,7 +202,7 @@ export class StorygridSettingsTab extends PluginSettingTab {
 		const mainWrap = featureSec.createDiv({ cls: 'sg-feature-list' });
 		for (const mod of MODULES.filter((m) => m.mainFeature)) {
 			featureToggle(mainWrap, mod, true);
-			// The Writers Panel's four tabs sit right under its own switch (Emma, 2026-11-06).
+			// The Writers Panel's four tabs sit right under its own switch.
 			if (mod.id === 'writersPanel') this.renderWritersPanelTabs(mainWrap);
 		}
 
@@ -288,7 +289,7 @@ export class StorygridSettingsTab extends PluginSettingTab {
 			await this.plugin.saveSettings();
 		};
 
-		// Two genuinely different places, picked one at a time (Emma, 2026-09-06):
+		// Two genuinely different places, picked one at a time:
 		// INSIDE the Writers Panel's own header row, or ABOVE it in Obsidian's
 		// sidebar tab strip beside the Writers Panel tab. 'Both' exists, but only
 		// as a deliberate choice made here — never a default, and never something
@@ -323,14 +324,14 @@ export class StorygridSettingsTab extends PluginSettingTab {
 					b.setAttribute('aria-checked', String(on));
 				};
 				mark();
-				b.addEventListener('click', async () => {
-					await setPlacement(key, p.id);
-					radios.forEach((x) => {
-						const on = x === b;
-						x.toggleClass('is-active', on);
-						x.setAttribute('aria-checked', String(on));
-					});
-				});
+				b.addEventListener('click', () => { runSafely((async () => {
+						await setPlacement(key, p.id);
+						radios.forEach((x) => {
+							const on = x === b;
+							x.toggleClass('is-active', on);
+							x.setAttribute('aria-checked', String(on));
+						});
+					})()); });
 				radios.push(b);
 			}
 
@@ -402,28 +403,28 @@ export class StorygridSettingsTab extends PluginSettingTab {
 			}
 			sel.value = existingBook?.seriesId ?? '';
 
-			sel.addEventListener('change', async () => {
-				const newSid = sel.value;
-				if (!newSid) {
-					if (existingBid) {
-						delete this.plugin.settings.bookRegistry![existingBid];
-						if (this.plugin.settings.activeBookId === existingBid) {
-							delete this.plugin.settings.activeBookId;
+			sel.addEventListener('change', () => { runSafely((async () => {
+					const newSid = sel.value;
+					if (!newSid) {
+						if (existingBid) {
+							delete this.plugin.settings.bookRegistry![existingBid];
+							if (this.plugin.settings.activeBookId === existingBid) {
+								delete this.plugin.settings.activeBookId;
+							}
+						}
+					} else {
+						const gridPath = project.gridFiles[0]?.path;
+						if (!gridPath) return;
+						if (existingBid) {
+							this.plugin.settings.bookRegistry![existingBid].seriesId = newSid;
+						} else {
+							const bid = 'book_' + generateId().slice(0, 8);
+							this.plugin.settings.bookRegistry![bid] = { name: project.name, seriesId: newSid, gridPath };
 						}
 					}
-				} else {
-					const gridPath = project.gridFiles[0]?.path;
-					if (!gridPath) return;
-					if (existingBid) {
-						this.plugin.settings.bookRegistry![existingBid].seriesId = newSid;
-					} else {
-						const bid = 'book_' + generateId().slice(0, 8);
-						this.plugin.settings.bookRegistry![bid] = { name: project.name, seriesId: newSid, gridPath };
-					}
-				}
-				await this.plugin.saveSettings();
-				this.display();
-			});
+					await this.plugin.saveSettings();
+					this.display();
+				})()); });
 		}
 
 		if (projects.length === 0) {
@@ -438,18 +439,18 @@ export class StorygridSettingsTab extends PluginSettingTab {
 				chip.createSpan({ text: sr.name });
 				const del = chip.createEl('button', { cls: 'sg-series-mgr-del', text: '✕' });
 				del.setAttribute('aria-label', t('settings.projects.deleteSeriesAria', { name: sr.name }));
-				del.addEventListener('click', async () => {
-					delete this.plugin.settings.seriesRegistry![sid];
-					for (const [bid, bk] of Object.entries(this.plugin.settings.bookRegistry ?? {})) {
-						if (bk.seriesId === sid) delete this.plugin.settings.bookRegistry![bid];
-					}
-					if (this.plugin.settings.activeSeriesId === sid) {
-						delete this.plugin.settings.activeSeriesId;
-						delete this.plugin.settings.activeBookId;
-					}
-					await this.plugin.saveSettings();
-					this.display();
-				});
+				del.addEventListener('click', () => { runSafely((async () => {
+						delete this.plugin.settings.seriesRegistry![sid];
+						for (const [bid, bk] of Object.entries(this.plugin.settings.bookRegistry ?? {})) {
+							if (bk.seriesId === sid) delete this.plugin.settings.bookRegistry![bid];
+						}
+						if (this.plugin.settings.activeSeriesId === sid) {
+							delete this.plugin.settings.activeSeriesId;
+							delete this.plugin.settings.activeBookId;
+						}
+						await this.plugin.saveSettings();
+						this.display();
+					})()); });
 			}
 		}
 
@@ -463,35 +464,32 @@ export class StorygridSettingsTab extends PluginSettingTab {
 		});
 		const addSeriesBtn = addSeriesRow.createEl('button', { cls: 'sg-series-mgr-btn', text: t('settings.projects.addSeries.button') });
 		const newSeriesNameErr = parent.createDiv({ cls: 'sg-series-mgr-err-msg', attr: { 'aria-live': 'polite' } });
-		newSeriesNameErr.setCssStyles({ display: 'none' });
-		newSeriesNameErr.setCssStyles({ color: 'var(--text-error)' });
-		newSeriesNameErr.setCssStyles({ fontSize: '12px' });
-		newSeriesNameErr.setCssStyles({ marginTop: '4px' });
-		addSeriesBtn.addEventListener('click', async () => {
-			const name = newSeriesName.value.trim();
-			const rootPath = newSeriesRoot.value.trim();
-			if (!name) {
-				newSeriesName.addClass('sg-series-mgr-err');
-				newSeriesNameErr.setText('Enter a series name');
-				newSeriesNameErr.setCssStyles({ display: '' });
-				return;
-			}
-			newSeriesName.removeClass('sg-series-mgr-err');
-			newSeriesNameErr.setCssStyles({ display: 'none' });
-			if (!rootPath) {
-				newSeriesRoot.addClass('sg-series-mgr-err');
-				newSeriesNameErr.setText('Enter a folder path');
-				newSeriesNameErr.setCssStyles({ display: '' });
-				return;
-			}
-			newSeriesRoot.removeClass('sg-series-mgr-err');
-			newSeriesNameErr.setCssStyles({ display: 'none' });
-			const sid = 'series_' + generateId().slice(0, 8);
-			this.plugin.settings.seriesRegistry![sid] = { name, rootPath };
-			this.plugin.settings.activeSeriesId = sid;
-			await this.plugin.saveSettings();
-			this.display();
-		});
+		newSeriesNameErr.hide();
+		addSeriesBtn.addEventListener('click', () => { runSafely((async () => {
+				const name = newSeriesName.value.trim();
+				const rootPath = newSeriesRoot.value.trim();
+				if (!name) {
+					newSeriesName.addClass('sg-series-mgr-err');
+					newSeriesNameErr.setText('Enter a series name');
+					newSeriesNameErr.show();
+					return;
+				}
+				newSeriesName.removeClass('sg-series-mgr-err');
+				newSeriesNameErr.hide();
+				if (!rootPath) {
+					newSeriesRoot.addClass('sg-series-mgr-err');
+					newSeriesNameErr.setText('Enter a folder path');
+					newSeriesNameErr.show();
+					return;
+				}
+				newSeriesRoot.removeClass('sg-series-mgr-err');
+				newSeriesNameErr.hide();
+				const sid = 'series_' + generateId().slice(0, 8);
+				this.plugin.settings.seriesRegistry![sid] = { name, rootPath };
+				this.plugin.settings.activeSeriesId = sid;
+				await this.plugin.saveSettings();
+				this.display();
+			})()); });
 	}
 
 	// ── Plot Grid ─────────────────────────────────────────────────────────────
@@ -629,10 +627,10 @@ export class StorygridSettingsTab extends PluginSettingTab {
 				attr: { 'aria-label': `${t(labelKey)} status color` },
 			});
 			input.value = this.plugin.settings.statusColors[status as CardStatus];
-			input.addEventListener('input', async () => {
-				this.plugin.settings.statusColors[status as CardStatus] = input.value;
-				await this.plugin.saveSettings();
-			});
+			input.addEventListener('input', () => { runSafely((async () => {
+					this.plugin.settings.statusColors[status as CardStatus] = input.value;
+					await this.plugin.saveSettings();
+				})()); });
 			item.createSpan({ cls: 'sg-status-swatch-label', text: t(labelKey) });
 		}
 
@@ -687,7 +685,7 @@ export class StorygridSettingsTab extends PluginSettingTab {
 				}))
 				.addButton((btn) => btn
 					.setButtonText(t('common.delete'))
-					.setWarning()
+					.then((b) => b.buttonEl.addClass('mod-warning'))
 					.onClick(async () => {
 						this.plugin.settings.customTemplates =
 							this.plugin.settings.customTemplates.filter((tpl) => tpl.id !== template.id);
@@ -772,38 +770,38 @@ export class StorygridSettingsTab extends PluginSettingTab {
 			.setDesc(t('settings.codex.imagesFolder.desc'))
 			.addText((tx) => {
 				tx.setPlaceholder('Images').setValue(this.plugin.settings.codexImagesFolderName ?? 'Images');
-				// Saved when she leaves the box (not on every key), and every
+				// Saved when the writer leaves the box (not on every key), and every
 				// project's existing Images folder is renamed to match, so no
 				// sheet loses its pictures.
-				tx.inputEl.addEventListener('change', async () => {
-					const before = this.plugin.settings.codexImagesFolderName ?? 'Images';
-					const next = tx.getValue().trim() || 'Images';
-					if (next === before) return;
-					if (imagesFolderNameProblem(next)) {
-						new Notice(t('settings.codex.imagesFolder.taken', { name: next }));
-						tx.setValue(before);
-						return;
-					}
-					const roots = [
-						...findProjects(this.app).map((p) => p.rootPath),
-						...Object.values(this.plugin.settings.seriesRegistry ?? {}).map((s) => s.rootPath),
-					];
-					// All or nothing: if any project cannot follow, the old name stays.
-					try {
-						const { blocked } = await renameImagesFolders(this.app, roots, before, next);
-						if (blocked.length > 0) {
-							new Notice(t('settings.codex.imagesFolder.skipped', { paths: blocked.join(', ') }));
+				tx.inputEl.addEventListener('change', () => { runSafely((async () => {
+						const before = this.plugin.settings.codexImagesFolderName ?? 'Images';
+						const next = tx.getValue().trim() || 'Images';
+						if (next === before) return;
+						if (imagesFolderNameProblem(next)) {
+							new Notice(t('settings.codex.imagesFolder.taken', { name: next }));
 							tx.setValue(before);
 							return;
 						}
-					} catch (err) {
-						new Notice(t('codex.images.notice.actionFailed', { msg: err instanceof Error ? err.message : '' }));
-						tx.setValue(before);
-						return;
-					}
-					this.plugin.settings.codexImagesFolderName = next;
-					await this.plugin.saveSettings();
-				});
+						const roots = [
+							...findProjects(this.app).map((p) => p.rootPath),
+							...Object.values(this.plugin.settings.seriesRegistry ?? {}).map((s) => s.rootPath),
+						];
+						// All or nothing: if any project cannot follow, the old name stays.
+						try {
+							const { blocked } = await renameImagesFolders(this.app, roots, before, next);
+							if (blocked.length > 0) {
+								new Notice(t('settings.codex.imagesFolder.skipped', { paths: blocked.join(', ') }));
+								tx.setValue(before);
+								return;
+							}
+						} catch (err) {
+							new Notice(t('codex.images.notice.actionFailed', { msg: err instanceof Error ? err.message : '' }));
+							tx.setValue(before);
+							return;
+						}
+						this.plugin.settings.codexImagesFolderName = next;
+						await this.plugin.saveSettings();
+					})()); });
 			});
 		folderNameSetting.settingEl.toggle((this.plugin.settings.codexImageLocation ?? 'per-sheet') !== 'obsidian');
 
@@ -849,17 +847,17 @@ export class StorygridSettingsTab extends PluginSettingTab {
 						.addButton((btn) => btn
 							.setButtonText(t('settings.codex.fieldTemplates.edit'))
 							.onClick(() => {
-								new TemplateBuilderModal(this.app, kindLabel, template, async (updated) => {
-									const list = this.plugin.settings[section.key];
-									const idx = list.findIndex((tpl) => tpl.id === updated.id);
-									if (idx >= 0) list[idx] = updated;
-									await this.plugin.saveSettings();
-									this.display();
-								}).open();
+								new TemplateBuilderModal(this.app, kindLabel, template, (updated) => { runSafely((async () => {
+										const list = this.plugin.settings[section.key];
+										const idx = list.findIndex((tpl) => tpl.id === updated.id);
+										if (idx >= 0) list[idx] = updated;
+										await this.plugin.saveSettings();
+										this.display();
+									})()); }).open();
 							}))
 						.addButton((btn) => btn
 							.setButtonText(t('common.delete'))
-							.setWarning()
+							.then((b) => b.buttonEl.addClass('mod-warning'))
 							.onClick(async () => {
 								this.plugin.settings[section.key] =
 									this.plugin.settings[section.key].filter((tpl) => tpl.id !== template.id);
@@ -874,12 +872,12 @@ export class StorygridSettingsTab extends PluginSettingTab {
 			newBtnRow.addButton((btn) => btn
 				.setButtonText('+ ' + t('settings.codex.fieldTemplates.new'))
 				.onClick(() => {
-					new TemplateBuilderModal(this.app, kindLabel, null, async (created) => {
-						const list = this.plugin.settings[section.key] ?? [];
-						this.plugin.settings[section.key] = [...list, created];
-						await this.plugin.saveSettings();
-						this.display();
-					}).open();
+					new TemplateBuilderModal(this.app, kindLabel, null, (created) => { runSafely((async () => {
+							const list = this.plugin.settings[section.key] ?? [];
+							this.plugin.settings[section.key] = [...list, created];
+							await this.plugin.saveSettings();
+							this.display();
+						})()); }).open();
 				}));
 		}
 	}
@@ -954,10 +952,10 @@ export class StorygridSettingsTab extends PluginSettingTab {
 				}));
 
 			const styleWrap = sec.createDiv({ cls: 'sg-rtw-row-styles' });
-			renderLineStylePicker(styleWrap, type.lineStyle ?? 'solid', type.color, async (style) => {
-				type.lineStyle = style;
-				await this.plugin.saveSettings();
-			});
+			renderLineStylePicker(styleWrap, type.lineStyle ?? 'solid', type.color, (style) => { runSafely((async () => {
+					type.lineStyle = style;
+					await this.plugin.saveSettings();
+				})()); });
 		});
 
 		const wizardBtnRow = new Setting(sec)
@@ -965,15 +963,15 @@ export class StorygridSettingsTab extends PluginSettingTab {
 				.setButtonText(t('settings.relTypes.createButton'))
 				.setCta()
 				.onClick(() => {
-					wizardBtnRow.settingEl.setCssStyles({ display: 'none' });
-					wizardHost.setCssStyles({ display: '' });
+					wizardBtnRow.settingEl.hide();
+					wizardHost.show();
 					mountRelTypeWizard(wizardHost, this.plugin, {
 						onCreated: () => this.display(),
 						onCancel: () => this.display(),
 					});
 				}));
 		const wizardHost = sec.createDiv({ cls: 'sg-rtw-host' });
-		wizardHost.setCssStyles({ display: 'none' });
+		wizardHost.hide();
 	}
 
 	// ── Writing ───────────────────────────────────────────────────────────────
@@ -1129,7 +1127,7 @@ export class StorygridSettingsTab extends PluginSettingTab {
 				.setDesc(t('settings.tasksGoals.clearHistory.desc'))
 				.addButton((btn) => btn
 					.setButtonText(t('settings.tasksGoals.clearHistory.button'))
-					.setWarning()
+					.then((b) => b.buttonEl.addClass('mod-warning'))
 					.onClick(async () => {
 						this.plugin.settings.sprintHistory = [];
 						await this.plugin.saveData(this.plugin.settings);
@@ -1436,7 +1434,7 @@ export class StorygridSettingsTab extends PluginSettingTab {
 		});
 
 		const formEl = wrapper.createDiv({ cls: 'sg-custom-template-form-body' });
-		formEl.setCssStyles({ display: 'none' });
+		formEl.hide();
 
 		const refresh = () => {
 			formEl.empty();
@@ -1458,7 +1456,6 @@ export class StorygridSettingsTab extends PluginSettingTab {
 					type: 'text', value: label, cls: 'sg-character-field-label',
 					attr: { 'aria-label': `Row ${i + 1} label` },
 				});
-				input.setCssStyles({ flex: '1' });
 				input.addEventListener('input', () => { rowLabels[i] = input.value; });
 				const del = row.createEl('button', { text: '✕', cls: 'sg-character-field-delete' });
 				del.addEventListener('click', () => { rowLabels.splice(i, 1); refresh(); });
@@ -1474,7 +1471,6 @@ export class StorygridSettingsTab extends PluginSettingTab {
 					type: 'text', value: label, cls: 'sg-character-field-label',
 					attr: { 'aria-label': `Column ${i + 1} label` },
 				});
-				input.setCssStyles({ flex: '1' });
 				input.addEventListener('input', () => { colLabels[i] = input.value; });
 				const del = row.createEl('button', { text: '✕', cls: 'sg-character-field-delete' });
 				del.addEventListener('click', () => { colLabels.splice(i, 1); refresh(); });
@@ -1484,34 +1480,33 @@ export class StorygridSettingsTab extends PluginSettingTab {
 
 			// Save / Cancel
 			const actions = formEl.createDiv({ cls: 'sg-modal-actions' });
-			actions.setCssStyles({ marginTop: '12px' });
 
 			const saveBtn = actions.createEl('button', { cls: 'sg-modal-btn sg-modal-btn-primary', text: t('settings.customTemplateForm.save') });
-			saveBtn.addEventListener('click', async () => {
-				const name = templateName.trim() || t('settings.customTemplateForm.defaultName');
-				this.plugin.settings.customTemplates.push({
-					id: generateId(),
-					name,
-					description: t('settings.customTemplateForm.description', { rows: rowLabels.length, cols: colLabels.length }),
-					rows: rowLabels.filter(Boolean).map((label) => ({ label })),
-					columns: colLabels.filter(Boolean).map((label) => ({ label })),
-				});
-				await this.plugin.saveSettings();
-				this.display();
-			});
+			saveBtn.addEventListener('click', () => { runSafely((async () => {
+					const name = templateName.trim() || t('settings.customTemplateForm.defaultName');
+					this.plugin.settings.customTemplates.push({
+						id: generateId(),
+						name,
+						description: t('settings.customTemplateForm.description', { rows: rowLabels.length, cols: colLabels.length }),
+						rows: rowLabels.filter(Boolean).map((label) => ({ label })),
+						columns: colLabels.filter(Boolean).map((label) => ({ label })),
+					});
+					await this.plugin.saveSettings();
+					this.display();
+				})()); });
 
 			const cancelBtn = actions.createEl('button', { cls: 'sg-modal-btn', text: t('settings.customTemplateForm.cancel') });
 			cancelBtn.addEventListener('click', () => {
 				expanded = false;
-				formEl.setCssStyles({ display: 'none' });
-				addBtn.setCssStyles({ display: '' });
+				formEl.hide();
+				addBtn.show();
 			});
 		};
 
 		addBtn.addEventListener('click', () => {
 			expanded = !expanded;
-			formEl.style.display = expanded ? 'block' : 'none';
-			addBtn.style.display = expanded ? 'none' : '';
+			formEl.toggle(expanded);
+			addBtn.toggle(!expanded);
 			if (expanded) refresh();
 		});
 	}
@@ -1568,7 +1563,6 @@ export class StorygridSettingsTab extends PluginSettingTab {
 					btn.setIcon(active ? 'check-circle' : 'lock');
 					btn.setTooltip(active ? t('settings.pro.features.active') : t('settings.pro.features.requiresPro'));
 					btn.extraSettingsEl.addClass(active ? 'sg-pro-feature-active' : 'sg-pro-feature-locked');
-					btn.extraSettingsEl.setCssStyles({ cursor: 'default' });
 				});
 		}
 	}

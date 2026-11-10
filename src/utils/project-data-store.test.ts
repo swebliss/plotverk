@@ -1,5 +1,5 @@
 import { DashboardSettings } from '../grid-data';
-import { FakeVault, fakeApp } from '../test-support/fake-vault';
+import { FakeVault, fakeApp } from '../test/fake-vault';
 import {
 	flushProjectMirrors,
 	mirrorPath,
@@ -125,8 +125,15 @@ describe('Book order note', () => {
 });
 
 describe('scheduleProjectMirror (typing-rate callers)', () => {
-	beforeEach(() => jest.useFakeTimers());
-	afterEach(() => jest.useRealTimers());
+	// The store uses `window.setTimeout`; Jest's node environment has no `window`, so alias it.
+	beforeEach(() => {
+		(globalThis as { window?: unknown }).window = globalThis;
+		jest.useFakeTimers();
+	});
+	afterEach(() => {
+		jest.useRealTimers();
+		delete (globalThis as { window?: unknown }).window;
+	});
 
 	it('coalesces a burst into one write ~30 s later, with the latest data', async () => {
 		const v = new FakeVault();

@@ -61,11 +61,11 @@ export class TimelineView extends ItemView {
 		}));
 
 		// Live-refresh events on Codex sheet changes touching this project (~400ms, matches codex-view.ts).
-		let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+		let refreshTimer: number | null = null;
 		const scheduleRefresh = (file?: TAbstractFile) => {
 			if (file && isSafetyNetPath(file.path)) return;
-			if (refreshTimer) clearTimeout(refreshTimer);
-			refreshTimer = setTimeout(() => this.controller?.refresh(), 400);
+			if (refreshTimer) window.clearTimeout(refreshTimer);
+			refreshTimer = window.setTimeout(() => this.controller?.refresh(), 400);
 		};
 		this.registerEvent(this.app.metadataCache.on('changed', scheduleRefresh));
 		this.registerEvent(this.app.vault.on('create', scheduleRefresh));

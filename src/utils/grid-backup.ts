@@ -71,6 +71,8 @@ async function pruneOldBackups(app: App, filePath: string): Promise<void> {
 	const current = (await listGridBackups(app, filePath)).filter((b) => !b.legacy);
 	for (const backup of current.slice(MAX_BACKUPS)) {
 		try {
+			// Permanent on purpose: these are rolling copies Plotverk made itself and newer
+			// ones always exist; sending each to the trash would fill it during normal editing.
 			if (backup.file) await app.vault.delete(backup.file);
 		} catch {
 			// Best-effort cleanup; a stray old backup is harmless.

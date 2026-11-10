@@ -152,7 +152,7 @@ function decodeIconValue(value: string | undefined): EventIconEntry | undefined 
 /**
  * The one resolution rule for "what icon does this event show": its own
  * `EventDisplay.icon` wins; otherwise its track's `Plotline.icon`; otherwise
- * no icon at all. Matches the color/size B2.1 fallback shape exactly
+ * no icon at all. Matches the color/size fallback shape exactly
  * (eventDisplay[...].color ?? plotline.color) -- one override layer over one
  * default layer. An event holding a malformed or unknown value is NOT a
  * dead end: it falls through to the track's icon exactly as if the event
@@ -168,8 +168,8 @@ export function resolveEventIcon(
 
 /**
  * The picture an event's badge shows when neither the event nor its plotline
- * picked one (2026-11-03 redesign: every event is a round icon badge, and an
- * empty badge reads as a bug). Kind-aware so a character's birth and death
+ * picked one (every event is a round icon badge, and an empty badge reads as
+ * a bug). Kind-aware so a character's birth and death
  * still say what they are at a glance.
  */
 export function fallbackEventIcon(kind: 'event' | 'era' | 'character-born' | 'character-died'): EventIconEntry {

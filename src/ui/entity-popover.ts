@@ -5,17 +5,13 @@ import type StorygridPlugin from '../main';
 
 const HIDE_DELAY_MS = 150;
 
-// Last-known mouse position, tracked globally (one listener for the whole
-// plugin lifetime) so `show()` can tell whether the cursor is already
+// Last-known mouse position, tracked by one listener for the plugin's
+// lifetime (registered in registerEntityHover) so `show()` can tell whether the cursor is already
 // resting over the popover the instant it appears — browsers only fire
 // `mouseenter` on actual pointer movement, so a stationary cursor would
 // otherwise never cancel a pending hide and could flicker the popover shut.
 let lastMouseX = 0;
 let lastMouseY = 0;
-document.addEventListener('mousemove', (e) => {
-	lastMouseX = e.clientX;
-	lastMouseY = e.clientY;
-});
 
 // ─── Popover singleton ────────────────────────────────────────────────────────
 
@@ -25,8 +21,8 @@ export class EntityPopover {
 	private currentEntityId: string | null = null;
 
 	constructor(private readonly plugin: StorygridPlugin) {
-		this.el = document.body.createDiv({ cls: 'sg-entity-popover' });
-		this.el.setCssStyles({ display: 'none' });
+		this.el = activeDocument.body.createDiv({ cls: 'sg-entity-popover' });
+		this.el.hide();
 		this.el.addEventListener('mouseenter', () => this.cancelHide());
 		this.el.addEventListener('mouseleave', () => this.scheduleHide());
 	}
@@ -49,7 +45,7 @@ export class EntityPopover {
 		// that triggered it) without having moved since the popover appeared,
 		// no mouseenter will fire to cancel a pending hide — check directly
 		// and cancel one proactively so the popover doesn't flicker shut.
-		const atRest = document.elementFromPoint(lastMouseX, lastMouseY);
+		const atRest = this.el.doc.elementFromPoint(lastMouseX, lastMouseY);
 		if (
 			atRest &&
 			(atRest === this.el ||
@@ -63,7 +59,7 @@ export class EntityPopover {
 	scheduleHide(): void {
 		this.cancelHide();
 		this.hideTimer = window.setTimeout(() => {
-			this.el.setCssStyles({ display: 'none' });
+			this.el.hide();
 			this.currentEntityId = null;
 		}, HIDE_DELAY_MS);
 	}
@@ -119,8 +115,8 @@ export class EntityPopover {
 		}
 
 		// Show then measure for positioning
-		el.setCssStyles({ display: '' });
-		el.setCssStyles({ visibility: 'hidden' });
+		el.show();
+		el.addClass('sg-entity-popover--measuring');
 	}
 
 	private position(anchorRect: DOMRect): void {
@@ -142,7 +138,7 @@ export class EntityPopover {
 
 		el.style.top = `${top}px`;
 		el.style.left = `${left}px`;
-		el.setCssStyles({ visibility: '' });
+		el.removeClass('sg-entity-popover--measuring');
 	}
 }
 
@@ -152,8 +148,13 @@ export function registerEntityHover(plugin: StorygridPlugin): void {
 	const popover = new EntityPopover(plugin);
 	plugin.register(() => popover.destroy());
 
-	plugin.registerDomEvent(document.body, 'mouseover', (e: MouseEvent) => {
-		const link = (e.target as HTMLElement).closest('a.internal-link') as HTMLAnchorElement | null;
+	plugin.registerDomEvent(activeDocument, 'mousemove', (e: MouseEvent) => {
+		lastMouseX = e.clientX;
+		lastMouseY = e.clientY;
+	});
+
+	plugin.registerDomEvent(activeDocument.body, 'mouseover', (e: MouseEvent) => {
+		const link = (e.target as HTMLElement).closest<HTMLAnchorElement>('a.internal-link');
 		if (!link) return;
 
 		const linktext = link.getAttribute('data-href') ?? link.getAttribute('href') ?? '';
@@ -172,7 +173,7 @@ export function registerEntityHover(plugin: StorygridPlugin): void {
 		popover.show(entity, link.getBoundingClientRect(), link);
 	});
 
-	plugin.registerDomEvent(document.body, 'mouseout', (e: MouseEvent) => {
+	plugin.registerDomEvent(activeDocument.body, 'mouseout', (e: MouseEvent) => {
 		const link = (e.target as HTMLElement).closest('a.internal-link');
 		if (link) popover.scheduleHide();
 	});

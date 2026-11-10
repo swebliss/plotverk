@@ -132,7 +132,7 @@ export class GraphSimulation {
 			key: l.key ?? '',
 			pull: l.pull ?? 1,
 			degreeScale: 1 / Math.max(1, Math.min(degree.get(l.source) ?? 1, degree.get(l.target) ?? 1)),
-		} as D3Link));
+		}));
 
 		this._forces = { ...DEFAULT_FORCE_SETTINGS, ...opts.forces };
 		const f = this._forces;

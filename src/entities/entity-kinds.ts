@@ -97,7 +97,7 @@ export interface EntityKindSpec {
 const f = (label: string, type: CharacterField['type'], prompt: string): EntityFieldSpec => ({ label, type, prompt });
 
 /**
- * An Event's "How Long" choice (2026-11-03): a moment draws a round badge on
+ * An Event's "How Long" choice: a moment draws a round badge on
  * the Timeline; something that lasts a while draws a bar — to its End Date,
  * or up to the story's present when it has none; an era draws a soft colour
  * band behind everything across its years (same End Date rule). Left empty it
@@ -119,7 +119,7 @@ const ERA_COLOR_FIELD = f('Color', 'color', 'The colour of this era’s band on 
 const ERA_DESCRIPTION_FIELD = f('Description', 'textarea', 'This age in a sentence or two — it shows when you hover its band.');
 
 /**
- * "Add era" on the Timeline (2026-11-03). An era is an Event sheet whose How
+ * "Add era" on the Timeline. An era is an Event sheet whose How
  * Long is "An era" — one kind, one folder, so rename, delete and links work
  * like any event, and a sheet can switch between event and era. These are
  * the two starts the pop-up offers for it: a clean slate and a short guided era.

@@ -9,7 +9,7 @@ const preview = (other: string, self: string, word: string, ctx: MirrorContext, 
 	mirrorPreviewText(other, self, mirrorWord(word, ctx), locale);
 
 describe('relationSentence — the word names the linked person', () => {
-	it('reads Emma’s case the right way round', () => {
+	it('reads a Child line the right way round', () => {
 		// Konrad's sheet: `Child: [[Tobin Ferrow]]` means Tobin is Konrad's child.
 		expect(relationSentence('Tobin Ferrow', 'Konrad', 'Child', 'en')).toBe('Tobin Ferrow is Konrad’s child');
 	});
@@ -100,7 +100,7 @@ describe('relationSentenceParts — slots for the editor’s button and dropdown
 });
 
 describe('mirror preview — the real mirror, never a second table', () => {
-	it('Emma’s case: Tobin’s sheet will say Parent: Konrad', () => {
+	it('a Child line previews as Parent on the other sheet', () => {
 		expect(preview('Tobin Ferrow', 'Konrad', 'Child', chars())).toBe('Tobin Ferrow’s sheet will say: Parent: Konrad');
 	});
 

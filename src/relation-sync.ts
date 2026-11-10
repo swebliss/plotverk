@@ -76,7 +76,7 @@ export function mirrorTarget(
 		return { file: null, word: null };
 	}
 	const t: unknown = cache.getFileCache(f)?.frontmatter?.['storygrid-type'];
-	const targetKind = typeof t === 'string' && t ? (t as EntityKind) : null;
+	const targetKind = typeof t === 'string' && t ? (t) : null;
 	if (!targetKind) return { file: null, word: null };
 	return { file: f, word: mirrorWord(rel.label, { customTypes, ownerKind: owner.kind, targetKind, ownerGender: owner.gender }) };
 }

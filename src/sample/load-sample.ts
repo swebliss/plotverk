@@ -125,13 +125,13 @@ async function undoPartialLoad(plugin: StorygridPlugin, created: Created): Promi
 	for (const path of [...created.files].reverse()) {
 		const f = vault.getAbstractFileByPath(path);
 		if (f instanceof TFile) {
-			try { await vault.trash(f, true); } catch { /* leave it */ }
+			try { await plugin.app.fileManager.trashFile(f); } catch { /* leave it */ }
 		}
 	}
 	for (const path of [...created.folders].reverse()) {
 		const f = vault.getAbstractFileByPath(path);
 		if (f instanceof TFolder && f.children.length === 0) {
-			try { await vault.trash(f, true); } catch { /* leave it */ }
+			try { await plugin.app.fileManager.trashFile(f); } catch { /* leave it */ }
 		}
 	}
 }

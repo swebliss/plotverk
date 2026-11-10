@@ -2,11 +2,12 @@
 // Imported as `i18n`, not `t`: several callbacks in this file already bind `t` as a
 // tag/card parameter, and a shadowed translator fails silently rather than loudly.
 import { t as i18n } from './i18n';
-import { setPhosphorIcon, PHOSPHOR_ICONS, CODEX_ICON, DASHBOARD_ICON, CONNECTIONS_MAP_ICON } from './utils/icons';
+import { setPhosphorIcon, CODEX_ICON, DASHBOARD_ICON, CONNECTIONS_MAP_ICON } from './utils/icons';
 import { ColorPickerPopover, InlineColorPicker, type InlineColorPickerOptions } from './ui/color-picker-popover';
 import { showCoachMarkChain, isOnCoachMark } from './ui/coach-mark';
 import { measuredScale, toLayoutPx } from './utils/zoom-scale';
 import type StorygridPlugin from './main';
+import { onSettingsChanged } from './utils/obsidian-internals';
 import { EntityModal } from './modals/entity-modal';
 import { LinkDocModal } from './modals/link-doc-modal';
 import { EntityPickerModal } from './modals/entity-picker-modal';
@@ -14,8 +15,8 @@ import { SaveLayoutModal } from './modals/save-layout-modal';
 import { ConfirmModal } from './modals/prompt-modal';
 import { SnapshotBrowserModal } from './modals/snapshot-browser-modal';
 import { writeGridBackup, restoreNewestValidBackup } from './utils/grid-backup';
-import { STORY_TEMPLATES } from './templates/story-templates';
 import { getDocPreview } from './utils/doc-preview';
+import { runSafely } from './utils/report-error';
 import { getContrastColor } from './utils/color-contrast';
 import { axisLineColor } from './utils/axis-line';
 import { markdownToHtml, htmlToMarkdown } from './utils/rich-text';
@@ -56,7 +57,6 @@ import {
 	linkNewDocIfUnlinked,
 	addCharacterToCard,
 	commitCardDraft,
-	applyTemplate,
 	generateId,
 } from './grid-data';
 
@@ -92,6 +92,9 @@ export class StorygridView extends ItemView {
 	private touchGhost: HTMLElement | null = null;
 	private touchLongPressTimer: number | null = null;
 	private touchLastTarget: HTMLElement | null = null;
+	/** Phones only: the one empty cell ("rowId:colId") showing its plus right now — empty cells stay blank until tapped. */
+	private armedEmptyCellKey: string | null = null;
+	private _gridTapHandler: ((e: MouseEvent) => void) | null = null;
 
 	// Side panel state
 	private panelCardId: string | null = null;
@@ -127,6 +130,8 @@ export class StorygridView extends ItemView {
 
 	// Global keydown handler — stored so we can properly remove it
 	private _panelKeydownHandler: ((e: KeyboardEvent) => void) | null = null;
+	// The document the two panel listeners were attached to — removal must use the same one
+	private _panelDoc: Document | null = null;
 	// Global mousedown handler for click-outside-to-close
 	private _panelClickOutsideHandler: ((e: MouseEvent) => void) | null = null;
 
@@ -180,7 +185,7 @@ export class StorygridView extends ItemView {
 				// Only respond if this view is in the active leaf
 				if (this.leaf === this.app.workspace.getMostRecentLeaf()
 					&& (this.filePath !== file.path || !this.gridData)) {
-					this.loadGrid(file.path);
+					runSafely(this.loadGrid(file.path));
 				}
 			})
 		);
@@ -200,23 +205,24 @@ export class StorygridView extends ItemView {
 			// letting it fire would put the stale card straight back on top.
 			this.cancelDraftTimer();
 			this._panelDraft = null;
-			this.loadGrid(this.filePath);
+			runSafely(this.loadGrid(this.filePath));
 		}));
 
 		// Re-render default-colored cards when the Obsidian theme switches (light ↔ dark only)
-		let _lastTheme = document.body.classList.contains('theme-dark') ? 'dark' : 'light';
+		const themeBody = this.containerEl.doc.body;
+		let _lastTheme = themeBody.classList.contains('theme-dark') ? 'dark' : 'light';
 		this._themeObserver = new MutationObserver(() => {
-			const nowTheme = document.body.classList.contains('theme-dark') ? 'dark' : 'light';
+			const nowTheme = themeBody.classList.contains('theme-dark') ? 'dark' : 'light';
 			if (nowTheme !== _lastTheme && this.gridData) {
 				_lastTheme = nowTheme;
 				this.renderAll();
 			}
 		});
-		this._themeObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+		this._themeObserver.observe(themeBody, { attributes: true, attributeFilter: ['class'] });
 
 		// Re-render when plugin settings change (e.g. show/hide title, status frame)
 		this.registerEvent(
-			(this.app.workspace as any).on('storygrid:settings-changed', () => {
+			onSettingsChanged(this.app.workspace, () => {
 				if (this.gridData) this.renderAll();
 			})
 		);
@@ -264,17 +270,9 @@ export class StorygridView extends ItemView {
 			this._themeObserver.disconnect();
 			this._themeObserver = null;
 		}
-		if (this._panelKeydownHandler) {
-			document.removeEventListener('keydown', this._panelKeydownHandler);
-			this._panelKeydownHandler = null;
-		}
-		if (this._panelClickOutsideHandler) {
-			document.removeEventListener('mousedown', this._panelClickOutsideHandler);
-			this._panelClickOutsideHandler = null;
-		}
-	// Safety: restore body styles in case a resize drag was interrupted
-		document.body.setCssStyles({ userSelect: '' });
-		document.body.setCssStyles({ cursor: '' });
+		this.removePanelDocListeners();
+	// Safety: restore the body cursor in case a resize drag was interrupted
+		this.containerEl.doc.body.removeClass('sg-body-grabbing', 'sg-body-col-resize', 'sg-body-row-resize');
 		// Flush any pending panel edits before the final save
 		this.cancelDraftTimer();
 		if (this._panelDraft) {
@@ -352,7 +350,7 @@ export class StorygridView extends ItemView {
 			this.app,
 			i18n('grid.notice.corruptedRestorePrompt', { name: backup.backupName }),
 			i18n('grid.notice.restoreBackupCta'),
-			async () => {
+			() => { runSafely((async () => {
 				this._selfWrite = true;
 				try {
 					await this.app.vault.modify(file, backup.content);
@@ -365,13 +363,13 @@ export class StorygridView extends ItemView {
 				}
 				new Notice(i18n('grid.notice.restoredFromBackup'));
 				await this.loadGrid(this.filePath);
-			}
+			})()); }
 		).open();
 	}
 
 	private scheduleSave(): void {
 		if (this.saveTimer !== null) window.clearTimeout(this.saveTimer);
-		this.saveTimer = window.setTimeout(() => this.flushSave(), 800);
+		this.saveTimer = window.setTimeout(() => { runSafely(this.flushSave()); }, 800);
 	}
 
 	private async flushSave(): Promise<void> {
@@ -425,7 +423,7 @@ export class StorygridView extends ItemView {
 
 		const wrapper = this.contentEl.createDiv({ cls: 'sg-wrapper' });
 		if (this.plugin.settings.showGridTitle !== false) {
-			wrapper.createDiv({ cls: 'sg-grid-title', text: this.gridData!.name });
+			wrapper.createDiv({ cls: 'sg-grid-title', text: this.gridData.name });
 		}
 		this.renderToolbar(wrapper);
 		// A brand-new grid shows its two tips first; the Creator box joins after them (maybeStartNewGridTour).
@@ -495,8 +493,8 @@ export class StorygridView extends ItemView {
 		this.plugin.gridTourActive = true;
 		const finish = (): void => {
 			this._newGridTourRunning = false;
-			const live = this.contentEl.querySelector('.sg-wrapper') as HTMLElement | null;
-			if (live) this.renderCreatorIntro(live, live.querySelector('.sg-body') as HTMLElement | null);
+			const live = this.contentEl.querySelector<HTMLElement>('.sg-wrapper');
+			if (live) this.renderCreatorIntro(live, live.querySelector<HTMLElement>('.sg-body'));
 			this.plugin.endGridTour();
 		};
 		// Wait for the grid to settle (and a slide-in tab to finish) before measuring the anchors.
@@ -605,11 +603,11 @@ export class StorygridView extends ItemView {
 		if (this.plugin.quickLinkVisible('codex', 'panel')) {
 			mkBtn(navGroup, {
 				icon: CODEX_ICON, fallback: '🌐', label: i18n('grid.toolbar.codex'), tooltip: i18n('grid.toolbar.codexTooltip'),
-				onClick: () => { this.plugin.openCodex(projectRootFromGridPath(this.filePath)); },
+				onClick: () => { runSafely(this.plugin.openCodex(projectRootFromGridPath(this.filePath))); },
 			});
 		}
 
-		// No Export button here (Emma 2026-11-06): export lives on the Dashboard and in the Writers Panel,
+		// No Export button here: export lives on the Dashboard and in the Writers Panel,
 		// so the grid's bar stays simple.
 
 		// ⋯ — overflow for rare/advanced actions
@@ -667,6 +665,14 @@ export class StorygridView extends ItemView {
 		const rows = sortByOrder(this.gridData.rows);
 		const cols = sortByOrder(this.gridData.columns);
 
+		// An armed empty cell survives re-renders, unless it has gained a card or its row/column is gone.
+		if (this.armedEmptyCellKey) {
+			const [armedRow, armedCol] = this.armedEmptyCellKey.split(':');
+			const stillEmpty = rows.some((r) => r.id === armedRow) && cols.some((c) => c.id === armedCol)
+				&& !findCard(this.gridData.cards, armedRow, armedCol);
+			if (!stillEmpty) this.armedEmptyCellKey = null;
+		}
+
 		const table = parent.createEl('table', { cls: 'sg-grid' });
 
 		// ── Header row ──────────────────────────────────────────────────────
@@ -685,7 +691,6 @@ export class StorygridView extends ItemView {
 		cols.forEach((col, colIndex) => {
 			const th = headerRow.createEl('th', { cls: 'sg-col-header' });
 			th.setAttribute('data-col-id', col.id);
-			th.setCssStyles({ cursor: 'grab' });
 
 			const colW = col.width ?? DEFAULT_COL_W;
 			this.pinWidth(th, colW);
@@ -723,14 +728,15 @@ export class StorygridView extends ItemView {
 			if (row.color) {
 				rowHeader.addClass('sg-axis-tinted');
 				rowHeader.style.setProperty('--sg-axis-line', axisLineColor([row.color]));
+				// The fill reaches the header as a custom property (.sg-axis-tinted--* in styles.css).
 				if (row.color.includes('gradient(')) {
-					rowHeader.setCssStyles({ borderLeft: 'none' });
-					rowHeader.style.backgroundImage = row.color;
-					rowHeader.setCssStyles({ backgroundSize: 'cover' });
+					rowHeader.addClass('sg-axis-tinted--gradient');
+					rowHeader.setCssProps({ '--sg-axis-fill': row.color });
 				} else {
 					rowHeader.style.borderLeft = `4px solid ${row.color}`;
 					// Fill the whole header cell with the writer's own colour (see axisTint).
-					rowHeader.style.background = axisTint(row.color);
+					rowHeader.addClass('sg-axis-tinted--solid');
+					rowHeader.setCssProps({ '--sg-axis-fill': axisTint(row.color) });
 				}
 			}
 			if (row.height) tr.style.height = `${row.height}px`;
@@ -762,8 +768,8 @@ export class StorygridView extends ItemView {
 					td.style.minHeight = `${row.height}px`;
 				}
 
-				// Row/column colour: the writer's exact palette colour, flat (Emma: "use my exact
-				// colors first"). Strength lives in one place — --sg-axis-strength via axisTint.
+				// Row/column colour: the writer's exact palette colour, flat, so the grid shows
+				// the colour they picked. Strength lives in one place — --sg-axis-strength via axisTint.
 				const hasRowGradient = row.color?.includes('gradient(');
 				const hasColGradient = col.color?.includes('gradient(');
 
@@ -776,8 +782,8 @@ export class StorygridView extends ItemView {
 					td.style.backgroundColor = `color-mix(in srgb, ${axisTint(row.color)} 50%, ${axisTint(col.color)})`;
 				} else if (hasRowGradient || hasColGradient) {
 					// Palette gradients → the gradient at full strength
-					td.style.backgroundImage = (hasRowGradient ? row.color : col.color)!;
-					td.setCssStyles({ backgroundSize: 'cover' });
+					td.addClass('sg-axis-tinted--gradient');
+					td.setCssProps({ '--sg-axis-fill': (hasRowGradient ? row.color : col.color)! });
 				}
 				// A filled cell needs a dark divider — the default faint line vanishes on it.
 				if (row.color || col.color) {
@@ -804,13 +810,13 @@ export class StorygridView extends ItemView {
 		}
 		this._gridKeydownHandler = (e: KeyboardEvent) => {
 			// Only intercept when focus is inside the grid (not in a panel input)
-			const active = document.activeElement;
+			const active = parent.doc.activeElement;
 			if (!active || !parent.contains(active)) return;
-			if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement || active instanceof HTMLSelectElement) return;
+			if (active.instanceOf(HTMLInputElement) || active.instanceOf(HTMLTextAreaElement) || active.instanceOf(HTMLSelectElement)) return;
 			// A header label being renamed is a contenteditable div — let it receive Space/Enter
-			if (active instanceof HTMLElement && active.isContentEditable) return;
+			if (active.instanceOf(HTMLElement) && active.isContentEditable) return;
 			// Don't steal from modals or the side panel
-			if (document.querySelector('.modal-container, .menu, .sg-color-popover')) return;
+			if (parent.doc.querySelector('.modal-container, .menu, .sg-color-popover')) return;
 			if (active.closest('.sg-side-panel')) return;
 
 			if (!this.selectedCardId) return;
@@ -833,6 +839,35 @@ export class StorygridView extends ItemView {
 			}
 		};
 		parent.addEventListener('keydown', this._gridKeydownHandler);
+
+		// ── Phones: tap an empty cell to show its plus ───────────────────────
+		// Hover can't reveal the plus on touch, and a plus in every empty cell is noise.
+		// A tap arms one cell; a tap anywhere else in the grid disarms it. The plus
+		// button and the card edit button stop propagation, so they never reach here.
+		if (Platform.isMobile) {
+			if (this._gridTapHandler) {
+				parent.removeEventListener('click', this._gridTapHandler);
+			}
+			this._gridTapHandler = (e: MouseEvent) => {
+				const wrapper = (e.target as HTMLElement | null)?.closest<HTMLElement>('.sg-cell-content--empty') ?? null;
+				this.armEmptyCell(parent, wrapper);
+			};
+			parent.addEventListener('click', this._gridTapHandler);
+		}
+	}
+
+	/** Phones only: show the plus in exactly one empty cell (null = none). */
+	private armEmptyCell(parent: HTMLElement, wrapper: HTMLElement | null): void {
+		parent.querySelectorAll<HTMLElement>('.sg-cell-content--armed').forEach((el) => {
+			if (el !== wrapper) el.removeClass('sg-cell-content--armed');
+		});
+		const cell = wrapper?.closest<HTMLElement>('[data-row-id][data-col-id]');
+		if (!wrapper || !cell) {
+			this.armedEmptyCellKey = null;
+			return;
+		}
+		this.armedEmptyCellKey = `${cell.getAttribute('data-row-id')}:${cell.getAttribute('data-col-id')}`;
+		wrapper.addClass('sg-cell-content--armed');
 	}
 
 	// ─── Card rendering ───────────────────────────────────────────────────────
@@ -890,10 +925,13 @@ export class StorygridView extends ItemView {
 				frameColorSolid = match ? match[0] : '#888888';
 			}
 			// box-shadow spread renders OUTSIDE the card, above overflow:hidden, respects border-radius
-			cardEl.style.boxShadow = `0 0 0 2px ${frameColorSolid}, var(--sg-shadow-xs)`;
+			// (.sg-card--framed in styles.css reads the colour from the custom property)
+			cardEl.addClass('sg-card--framed');
+			cardEl.setCssProps({ '--sg-card-frame': frameColorSolid });
 		} else if (this.plugin.settings.statusFrameEnabled) {
 			const statusColor = this.plugin.settings.statusColors[card.status] ?? '#cccccc';
-			cardEl.style.borderLeft = `4px solid ${statusColor}`;
+			cardEl.addClass('sg-card--status-frame');
+			cardEl.setCssProps({ '--sg-card-status': statusColor });
 		}
 
 		// Restore selected state after re-render
@@ -941,14 +979,14 @@ export class StorygridView extends ItemView {
 			} else if (card.linkDisplayMode === 'first-lines') {
 				const notesEl = cardEl.createDiv({ cls: 'sg-card-synopsis sg-card-notes--loading' });
 				notesEl.setText('…');
-				getDocPreview(this.app, card.linkedDocPath, this.plugin.settings.showFirstLinesCount)
+				void getDocPreview(this.app, card.linkedDocPath, this.plugin.settings.showFirstLinesCount)
 					.then((preview) => {
 						notesEl.removeClass('sg-card-notes--loading');
 						notesEl.empty();
 						if (preview) {
 							this.renderCardText(notesEl, preview);
 						} else {
-							notesEl.setCssStyles({ display: 'none' });
+							notesEl.hide();
 						}
 					});
 			}
@@ -977,7 +1015,7 @@ export class StorygridView extends ItemView {
 			linkBadge.title = fileName;
 			linkBadge.addEventListener('click', (e) => {
 				e.stopPropagation();
-				this.openLinkedDoc(card.linkedDocPath!);
+				runSafely(this.openLinkedDoc(card.linkedDocPath!));
 			});
 		}
 
@@ -1005,7 +1043,7 @@ export class StorygridView extends ItemView {
 			const goal = card.wordGoal;
 			const goalBar = cardEl.createDiv({ cls: 'sg-card-goalbar' });
 			const fill = goalBar.createDiv({ cls: 'sg-card-goalbar-fill' });
-			this.getDocWordCount(card.linkedDocPath).then((w) => {
+			void this.getDocWordCount(card.linkedDocPath).then((w) => {
 				if (w === null || !goalBar.isConnected) return;
 				const pct = Math.min(100, Math.round((w / goal) * 100));
 				fill.style.width = `${pct}%`;
@@ -1056,7 +1094,7 @@ export class StorygridView extends ItemView {
 			const name = charPath.split('/').pop()?.replace(/\.md$/, '') || charPath;
 			const av = wrap.createDiv({ cls: 'sg-card-avatar' });
 			av.title = name;
-			av.style.zIndex = String(paths.length - i);
+			av.setCssProps({ '--sg-avatar-z': String(paths.length - i) });
 
 			const file = this.app.vault.getAbstractFileByPath(charPath);
 			let hasImage = false;
@@ -1086,7 +1124,7 @@ export class StorygridView extends ItemView {
 			av.addEventListener('click', (e) => {
 				e.stopPropagation();
 				if (file instanceof TFile) {
-					openOrReveal(this.app, file);
+					runSafely(openOrReveal(this.app, file));
 				} else {
 					new Notice(i18n('grid.notice.characterDocNotFound', { path: charPath }));
 				}
@@ -1097,6 +1135,9 @@ export class StorygridView extends ItemView {
 	private renderEmptyCell(parent: HTMLElement, rowId: string, colId: string): void {
 		// The empty wrapper fills the whole cell so the plus centers vertically too
 		const wrapper = parent.createDiv({ cls: 'sg-cell-content sg-cell-content--empty' });
+		if (Platform.isMobile && this.armedEmptyCellKey === `${rowId}:${colId}`) {
+			wrapper.addClass('sg-cell-content--armed');
+		}
 
 		// Ghost hint on the very first story cell while the grid has no scene cards yet.
 		// A template's Beat guide cards don't count, and their column is skipped.
@@ -1188,7 +1229,7 @@ export class StorygridView extends ItemView {
 	private renderCardText(el: HTMLElement, text: string): void {
 		// Use Obsidian's MarkdownRenderer for rich rendering.
 		// Fire-and-forget async — the element is in the DOM so updates will appear.
-		MarkdownRenderer.render(this.app, text, el, this.filePath, this);
+		runSafely(MarkdownRenderer.render(this.app, text, el, this.filePath, this));
 
 		// Wire up link clicks — MarkdownRenderer renders <a> tags but doesn't
 		// attach Obsidian-aware handlers in this context. We handle them here
@@ -1202,7 +1243,7 @@ export class StorygridView extends ItemView {
 			if (href.startsWith('http://') || href.startsWith('https://')) {
 				window.open(href, '_blank');
 			} else if (href) {
-				this.app.workspace.openLinkText(href, this.filePath ?? '');
+				runSafely(this.app.workspace.openLinkText(href, this.filePath ?? ''));
 			}
 		});
 	}
@@ -1257,7 +1298,7 @@ export class StorygridView extends ItemView {
 					savedColors: this.plugin.settings.savedColors ?? [],
 					...this.colorPersistCallbacks(),
 					onPreview: (color) => {
-						const el = this.contentEl.querySelector(`[data-card-id="${card.id}"]`) as HTMLElement | null;
+						const el = this.contentEl.querySelector<HTMLElement>(`[data-card-id="${card.id}"]`);
 						if (el) this.applyCardBackground(el, color);
 					},
 					onCommit: (color) => {
@@ -1372,7 +1413,7 @@ export class StorygridView extends ItemView {
 				.setTitle(i18n('grid.menu.renameRow'))
 				.setIcon('pencil')
 				.onClick(() => {
-					const labelEl = el.querySelector('.sg-header-label') as HTMLElement | null;
+					const labelEl = el.querySelector<HTMLElement>('.sg-header-label');
 					if (labelEl) this.makeHeaderEditable(labelEl, row.label, (newLabel) => {
 						if (!this.gridData) return;
 						this.gridData = renameRow(this.gridData, row.id, newLabel);
@@ -1474,7 +1515,7 @@ export class StorygridView extends ItemView {
 				.setTitle(i18n('grid.menu.renameColumn'))
 				.setIcon('pencil')
 				.onClick(() => {
-					const labelEl = el.querySelector('.sg-header-label') as HTMLElement | null;
+					const labelEl = el.querySelector<HTMLElement>('.sg-header-label');
 					if (labelEl) this.makeHeaderEditable(labelEl, col.label, (newLabel) => {
 						if (!this.gridData) return;
 						this.gridData = renameColumn(this.gridData, col.id, newLabel);
@@ -1576,6 +1617,7 @@ export class StorygridView extends ItemView {
 	}
 
 	private bindCardDrag(el: HTMLElement, card: SceneCard): void {
+		const doc = el.doc;
 		let startX = 0;
 		let startY = 0;
 		let cursorX = 0;
@@ -1590,19 +1632,17 @@ export class StorygridView extends ItemView {
 
 		const restoreLiveSwap = (animate: boolean) => {
 			if (!liveSwapEl) return;
-			liveSwapEl.style.transition = animate
-				? 'transform 0.45s cubic-bezier(0.25, 1, 0.5, 1)'
-				: 'none';
+			liveSwapEl.toggleClass('sg-slide', animate);
+			liveSwapEl.toggleClass('sg-no-transition', !animate);
 			liveSwapEl.setCssStyles({ transform: '' });
-			liveSwapEl.setCssStyles({ zIndex: '' });
-			liveSwapEl.setCssStyles({ boxShadow: '' });
+			liveSwapEl.removeClass('sg-card--live-swap');
 			const prev = liveSwapEl;
-			if (animate) setTimeout(() => { prev.setCssStyles({ transition: '' }); }, 220);
+			if (animate) window.setTimeout(() => { prev.removeClass('sg-slide'); }, 220);
 			liveSwapEl = null;
 		};
 
 		const cleanup = () => {
-			if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
+			if (rafId !== null) { window.cancelAnimationFrame(rafId); rafId = null; }
 			this.dragGhost?.remove();
 			this.dragGhost = null;
 			el.classList.remove('sg-dragging');
@@ -1612,8 +1652,7 @@ export class StorygridView extends ItemView {
 			this.dragCardId = null;
 			this.dragType = null;
 			isDragging = false;
-			document.body.setCssStyles({ userSelect: '' });
-			document.body.setCssStyles({ cursor: '' });
+			doc.body.removeClass('sg-body-grabbing', 'sg-body-col-resize', 'sg-body-row-resize');
 		};
 
 		const onPointerMove = (e: PointerEvent) => {
@@ -1627,8 +1666,7 @@ export class StorygridView extends ItemView {
 				dragScale = this.measureGridScale();
 				this.dragType = 'card';
 				this.dragCardId = card.id;
-				document.body.setCssStyles({ userSelect: 'none' });
-				document.body.setCssStyles({ cursor: 'grabbing' });
+				doc.body.addClass('sg-body-grabbing');
 
 				// Collapse before cloning — must also reset inline minHeight or ghost inherits expanded size
 				el.classList.remove('sg-card--expanded');
@@ -1658,7 +1696,7 @@ export class StorygridView extends ItemView {
 				ghost.style.transform = `scale(${z * 1.06})`;
 				ghost.style.left = `${cursorX - glx}px`;
 				ghost.style.top  = `${cursorY - gly}px`;
-				document.body.appendChild(ghost);
+				doc.body.appendChild(ghost);
 				this.dragGhost = ghost;
 
 				// rAF loop — updates ghost position each frame, GPU-smooth
@@ -1667,14 +1705,14 @@ export class StorygridView extends ItemView {
 					this.dragGhost.style.left = `${cursorX - glx}px`;
 					this.dragGhost.style.top  = `${cursorY - gly}px`;
 					this.autoScrollGrid(cursorX, cursorY);
-					rafId = requestAnimationFrame(tick);
+					rafId = window.requestAnimationFrame(tick);
 				};
-				rafId = requestAnimationFrame(tick);
+				rafId = window.requestAnimationFrame(tick);
 			}
 
 			// Highlight the cell under the cursor
 			// (ghost has pointer-events:none so elementFromPoint sees through it)
-			const hit    = document.elementFromPoint(cursorX, cursorY) as HTMLElement | null;
+			const hit    = doc.elementFromPoint(cursorX, cursorY) as HTMLElement | null;
 			const cell   = hit?.closest<HTMLElement>('[data-row-id][data-col-id]') ?? null;
 
 			if (cell !== lastCell) {
@@ -1695,9 +1733,9 @@ export class StorygridView extends ItemView {
 							const srcRect = sourceCell.getBoundingClientRect();
 							const dx = toLayoutPx(srcRect.left - occRect.left, dragScale);
 							const dy = toLayoutPx(srcRect.top  - occRect.top,  dragScale);
-							occupant.setCssStyles({ zIndex: '1' });
-							occupant.setCssStyles({ boxShadow: 'none' }); // slide flat, not lifted
-							occupant.setCssStyles({ transition: 'transform 0.45s cubic-bezier(0.25, 1, 0.5, 1)' });
+							occupant.addClass('sg-card--live-swap'); // slide flat, not lifted
+							occupant.removeClass('sg-no-transition');
+							occupant.addClass('sg-slide');
 							occupant.style.transform  = `translate(${dx}px, ${dy}px)`;
 							liveSwapEl = occupant;
 						}
@@ -1709,21 +1747,21 @@ export class StorygridView extends ItemView {
 		// Drag aborted by the browser (e.g. gesture claimed for scrolling) —
 		// restore everything without committing a move.
 		const onPointerCancel = () => {
-			document.removeEventListener('pointermove',   onPointerMove);
-			document.removeEventListener('pointerup',     onPointerUp);
-			document.removeEventListener('pointercancel', onPointerCancel);
+			doc.removeEventListener('pointermove',   onPointerMove);
+			doc.removeEventListener('pointerup',     onPointerUp);
+			doc.removeEventListener('pointercancel', onPointerCancel);
 			cleanup();
 		};
 
 		const onPointerUp = (e: PointerEvent) => {
-			document.removeEventListener('pointermove',   onPointerMove);
-			document.removeEventListener('pointerup',     onPointerUp);
-			document.removeEventListener('pointercancel', onPointerCancel);
+			doc.removeEventListener('pointermove',   onPointerMove);
+			doc.removeEventListener('pointerup',     onPointerUp);
+			doc.removeEventListener('pointercancel', onPointerCancel);
 
 			if (!isDragging) { cleanup(); return; }
 
 			// Find drop target while ghost is still alive
-			const hit  = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+			const hit  = doc.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
 			const cell = hit?.closest<HTMLElement>('[data-row-id][data-col-id]') ?? null;
 
 			// Capture the displaced card's current visual position + the source cell
@@ -1735,7 +1773,7 @@ export class StorygridView extends ItemView {
 			const srcColId = srcCellEl?.getAttribute('data-col-id') ?? null;
 
 			// ── Drop sequence ─────────────────────────────────────────────────
-			if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
+			if (rafId !== null) { window.cancelAnimationFrame(rafId); rafId = null; }
 			const ghost = this.dragGhost;
 			this.dragGhost = null;
 			// Reset shared state — don't restore liveSwapEl; re-render will replace it
@@ -1745,8 +1783,7 @@ export class StorygridView extends ItemView {
 			this.dragCardId = null;
 			this.dragType   = null;
 			isDragging = false;
-			document.body.setCssStyles({ userSelect: '' });
-			document.body.setCssStyles({ cursor: '' });
+			doc.body.removeClass('sg-body-grabbing', 'sg-body-col-resize', 'sg-body-row-resize');
 			if (!cell) {
 				ghost?.remove();
 				el.classList.remove('sg-dragging');
@@ -1763,7 +1800,7 @@ export class StorygridView extends ItemView {
 			this.renderGridOnly();
 			this.scheduleSave();
 			// FLIP dragged card from ghost position into new cell
-			requestAnimationFrame(() => {
+			window.requestAnimationFrame(() => {
 				const newCell = this.contentEl.querySelector<HTMLElement>(
 					`td[data-row-id="${rowId}"][data-col-id="${colId}"]`
 				);
@@ -1774,13 +1811,14 @@ export class StorygridView extends ItemView {
 					const dy = toLayoutPx(ghostRect.top  - nr.top,  dragScale);
 					// Flat slide into place — same easing/duration as the displaced-card
 					// slide, no scale/opacity pop, so it settles smoothly (no snap).
-					droppedCard.setCssStyles({ transition: 'none' });
+					droppedCard.addClass('sg-no-transition');
 					droppedCard.style.transform  = `translate(${dx}px, ${dy}px)`;
-					droppedCard.offsetHeight;
-					droppedCard.setCssStyles({ transition: 'transform 0.45s cubic-bezier(0.25, 1, 0.5, 1)' });
+					void droppedCard.offsetHeight;
+					droppedCard.removeClass('sg-no-transition');
+					droppedCard.addClass('sg-slide');
 					droppedCard.setCssStyles({ transform: '' });
-					setTimeout(() => {
-						droppedCard.setCssStyles({ transition: '' });
+					window.setTimeout(() => {
+						droppedCard.removeClass('sg-slide');
 						droppedCard.setCssStyles({ transform: '' });
 					}, 470);
 				} else {
@@ -1797,13 +1835,14 @@ export class StorygridView extends ItemView {
 						const mr = movedCard.getBoundingClientRect();
 						const dx = toLayoutPx(swapRect.left - mr.left, dragScale);
 						const dy = toLayoutPx(swapRect.top  - mr.top,  dragScale);
-						movedCard.setCssStyles({ transition: 'none' });
+						movedCard.addClass('sg-no-transition');
 						movedCard.style.transform  = `translate(${dx}px, ${dy}px)`;
-						movedCard.offsetHeight;
-						movedCard.setCssStyles({ transition: 'transform 0.45s cubic-bezier(0.25, 1, 0.5, 1)' });
+						void movedCard.offsetHeight;
+						movedCard.removeClass('sg-no-transition');
+						movedCard.addClass('sg-slide');
 						movedCard.setCssStyles({ transform: '' });
-						setTimeout(() => {
-							movedCard.setCssStyles({ transition: '' });
+						window.setTimeout(() => {
+							movedCard.removeClass('sg-slide');
 							movedCard.setCssStyles({ transform: '' });
 						}, 470);
 					}
@@ -1832,13 +1871,14 @@ export class StorygridView extends ItemView {
 			const offInCardY = (tr.top  - cardRect.top ) + e.offsetY;
 			grabFracX = cardRect.width  ? Math.max(0, Math.min(1, offInCardX / cardRect.width))  : 0.5;
 			grabFracY = cardRect.height ? Math.max(0, Math.min(1, offInCardY / cardRect.height)) : 0.5;
-			document.addEventListener('pointermove',   onPointerMove);
-			document.addEventListener('pointerup',     onPointerUp);
-			document.addEventListener('pointercancel', onPointerCancel);
+			doc.addEventListener('pointermove',   onPointerMove);
+			doc.addEventListener('pointerup',     onPointerUp);
+			doc.addEventListener('pointercancel', onPointerCancel);
 		});
 	}
 
 	private bindTouchDrag(el: HTMLElement, card: SceneCard): void {
+		const doc = el.doc;
 		el.addEventListener('touchstart', (e) => {
 			// Long-press (350ms) activates touch drag to distinguish from scroll
 			this.touchLongPressTimer = window.setTimeout(() => {
@@ -1850,7 +1890,7 @@ export class StorygridView extends ItemView {
 				this.touchGhost = el.cloneNode(true) as HTMLElement;
 				this.touchGhost.classList.add('sg-touch-ghost');
 				this.touchGhost.style.width = `${el.offsetWidth}px`;
-				document.body.appendChild(this.touchGhost);
+				doc.body.appendChild(this.touchGhost);
 
 				// Position ghost under the finger immediately
 				const touch = e.touches[0];
@@ -1875,7 +1915,7 @@ export class StorygridView extends ItemView {
 			this.autoScrollGrid(touch.clientX, touch.clientY);
 
 			// Highlight the cell under the finger
-			const target = document.elementFromPoint(touch.clientX, touch.clientY) as HTMLElement | null;
+			const target = doc.elementFromPoint(touch.clientX, touch.clientY) as HTMLElement | null;
 			const cell = target?.closest('[data-row-id][data-col-id]') as HTMLElement | null;
 
 			if (cell !== this.touchLastTarget) {
@@ -1893,7 +1933,7 @@ export class StorygridView extends ItemView {
 			if (!this.touchDragCardId) return;
 
 			const touch = e.changedTouches[0];
-			const target = document.elementFromPoint(touch.clientX, touch.clientY) as HTMLElement | null;
+			const target = doc.elementFromPoint(touch.clientX, touch.clientY) as HTMLElement | null;
 			const cell = target?.closest('[data-row-id][data-col-id]') as HTMLElement | null;
 
 			if (cell && this.gridData) {
@@ -1930,6 +1970,7 @@ export class StorygridView extends ItemView {
 	// ─── Drag and Drop — Rows ─────────────────────────────────────────────────
 
 	private bindRowHeaderDrag(el: HTMLElement, row: GridRow, rowIndex: number, rows: GridRow[]): void {
+		const doc = el.doc;
 		let startY = 0, cursorY = 0;
 		let isDragging = false;
 		let rafId: number | null = null;
@@ -1951,12 +1992,11 @@ export class StorygridView extends ItemView {
 		};
 
 		const resetAll = () => {
-			rowTrs.forEach(tr => { tr.setCssStyles({ transition: 'none' }); });
+			rowTrs.forEach(tr => { tr.removeClass('sg-slide'); tr.addClass('sg-no-transition'); });
 			void this.contentEl.offsetHeight; // one reflow to flush transition:none
 			rowTrs.forEach(tr => {
 				tr.setCssStyles({ transform: '' });
-				tr.setCssStyles({ willChange: '' });
-				tr.setCssStyles({ transition: '' });
+				tr.removeClass('sg-will-transform', 'sg-no-transition');
 			});
 			el.classList.remove('sg-header--lifted');
 			rowTrs.clear();
@@ -1969,8 +2009,7 @@ export class StorygridView extends ItemView {
 				isDragging = true;
 				this.dragType = 'row';
 				this.dragRowIndex = rowIndex;
-				document.body.setCssStyles({ userSelect: 'none' });
-				document.body.setCssStyles({ cursor: 'grabbing' });
+				doc.body.addClass('sg-body-grabbing');
 
 				// Build <tr> map and snapshot mid-Y — scoped to this contentEl only
 				rows.forEach((r, i) => {
@@ -1986,16 +2025,12 @@ export class StorygridView extends ItemView {
 
 				const dragTr = rowTrs.get(row.id)!;
 				rowHeight = dragTr.offsetHeight;
-				dragTr.setCssStyles({ transition: 'none' });
-				dragTr.setCssStyles({ willChange: 'transform' });
+				dragTr.addClass('sg-no-transition', 'sg-will-transform');
 
 				rows.forEach((r, i) => {
 					if (i === rowIndex) return;
 					const tr = rowTrs.get(r.id);
-					if (tr) {
-						tr.setCssStyles({ transition: 'transform 0.45s cubic-bezier(0.25, 1, 0.5, 1)' });
-						tr.setCssStyles({ willChange: 'transform' });
-					}
+					if (tr) tr.addClass('sg-slide', 'sg-will-transform');
 				});
 
 				el.classList.add('sg-header--lifted');
@@ -2017,32 +2052,31 @@ export class StorygridView extends ItemView {
 						lastHoverIndex = hoverIndex;
 						applyShifts(hoverIndex);
 					}
-					rafId = requestAnimationFrame(tick);
+					rafId = window.requestAnimationFrame(tick);
 				};
-				rafId = requestAnimationFrame(tick);
+				rafId = window.requestAnimationFrame(tick);
 			}
 		};
 
 		const onPointerCancel = () => {
-			document.removeEventListener('pointermove',   onPointerMove);
-			document.removeEventListener('pointerup',     onPointerUp);
-			document.removeEventListener('pointercancel', onPointerCancel);
-			if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
+			doc.removeEventListener('pointermove',   onPointerMove);
+			doc.removeEventListener('pointerup',     onPointerUp);
+			doc.removeEventListener('pointercancel', onPointerCancel);
+			if (rafId !== null) { window.cancelAnimationFrame(rafId); rafId = null; }
 			this.dragRowIndex = null;
 			this.dragType = null;
 			isDragging = false;
 			hoverIndex = rowIndex;
 			lastHoverIndex = -1;
-			document.body.setCssStyles({ userSelect: '' });
-			document.body.setCssStyles({ cursor: '' });
+			doc.body.removeClass('sg-body-grabbing', 'sg-body-col-resize', 'sg-body-row-resize');
 			resetAll();
 		};
 
 		const onPointerUp = () => {
-			document.removeEventListener('pointermove',   onPointerMove);
-			document.removeEventListener('pointerup',     onPointerUp);
-			document.removeEventListener('pointercancel', onPointerCancel);
-			if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
+			doc.removeEventListener('pointermove',   onPointerMove);
+			doc.removeEventListener('pointerup',     onPointerUp);
+			doc.removeEventListener('pointercancel', onPointerCancel);
+			if (rafId !== null) { window.cancelAnimationFrame(rafId); rafId = null; }
 
 			const toIndex = hoverIndex, didDrag = isDragging;
 			this.dragRowIndex = null;
@@ -2050,8 +2084,7 @@ export class StorygridView extends ItemView {
 			isDragging = false;
 			hoverIndex = rowIndex;
 			lastHoverIndex = -1;
-			document.body.setCssStyles({ userSelect: '' });
-			document.body.setCssStyles({ cursor: '' });
+			doc.body.removeClass('sg-body-grabbing', 'sg-body-col-resize', 'sg-body-row-resize');
 			resetAll();
 
 			if (!didDrag || toIndex === rowIndex || !this.gridData) return;
@@ -2074,15 +2107,16 @@ export class StorygridView extends ItemView {
 			e.preventDefault();
 			startY = e.clientY; cursorY = e.clientY;
 			hoverIndex = rowIndex; lastHoverIndex = -1;
-			document.addEventListener('pointermove',   onPointerMove);
-			document.addEventListener('pointerup',     onPointerUp);
-			document.addEventListener('pointercancel', onPointerCancel);
+			doc.addEventListener('pointermove',   onPointerMove);
+			doc.addEventListener('pointerup',     onPointerUp);
+			doc.addEventListener('pointercancel', onPointerCancel);
 		});
 	}
 
 	// ─── Drag and Drop — Columns ──────────────────────────────────────────────
 
 	private bindColHeaderDrag(el: HTMLElement, col: GridColumn, colIndex: number, cols: GridColumn[]): void {
+		const doc = el.doc;
 		let startX = 0, cursorX = 0;
 		let isDragging = false;
 		let rafId: number | null = null;
@@ -2105,15 +2139,14 @@ export class StorygridView extends ItemView {
 		};
 
 		const resetAll = () => {
-			colElems.forEach(elems => elems.forEach(e => { e.setCssStyles({ transition: 'none' }); }));
+			colElems.forEach(elems => elems.forEach(e => { e.removeClass('sg-slide'); e.addClass('sg-no-transition'); }));
 			void this.contentEl.offsetHeight;
 			colElems.forEach(elems => elems.forEach(e => {
 				e.setCssStyles({ transform: '' });
-				e.setCssStyles({ willChange: '' });
-				e.setCssStyles({ transition: '' });
+				e.removeClass('sg-will-transform', 'sg-no-transition');
 			}));
 			el.classList.remove('sg-header--lifted');
-			el.setCssStyles({ pointerEvents: '' });
+			el.removeClass('sg-no-pointer');
 			colElems.clear();
 		};
 
@@ -2124,8 +2157,7 @@ export class StorygridView extends ItemView {
 				isDragging = true;
 				this.dragType = 'col';
 				this.dragColIndex = colIndex;
-				document.body.setCssStyles({ userSelect: 'none' });
-				document.body.setCssStyles({ cursor: 'grabbing' });
+				doc.body.addClass('sg-body-grabbing');
 
 				// Snapshot column mid-X and build element map — scoped to this contentEl only
 				cols.forEach((c, i) => {
@@ -2143,18 +2175,12 @@ export class StorygridView extends ItemView {
 
 				colWidth = el.offsetWidth;
 				const dragElems = colElems.get(col.id) ?? [];
-				dragElems.forEach(e => {
-					e.setCssStyles({ transition: 'none' });
-					e.setCssStyles({ willChange: 'transform' });
-				});
-				el.setCssStyles({ pointerEvents: 'none' });
+				dragElems.forEach(e => { e.addClass('sg-no-transition', 'sg-will-transform'); });
+				el.addClass('sg-no-pointer');
 
 				cols.forEach((c, i) => {
 					if (i === colIndex) return;
-					(colElems.get(c.id) ?? []).forEach(e => {
-						e.setCssStyles({ transition: 'transform 0.45s cubic-bezier(0.25, 1, 0.5, 1)' });
-						e.setCssStyles({ willChange: 'transform' });
-					});
+					(colElems.get(c.id) ?? []).forEach(e => { e.addClass('sg-slide', 'sg-will-transform'); });
 				});
 
 				el.classList.add('sg-header--lifted');
@@ -2176,32 +2202,31 @@ export class StorygridView extends ItemView {
 						lastHoverIndex = hoverIndex;
 						applyShifts(hoverIndex);
 					}
-					rafId = requestAnimationFrame(tick);
+					rafId = window.requestAnimationFrame(tick);
 				};
-				rafId = requestAnimationFrame(tick);
+				rafId = window.requestAnimationFrame(tick);
 			}
 		};
 
 		const onPointerCancel = () => {
-			document.removeEventListener('pointermove',   onPointerMove);
-			document.removeEventListener('pointerup',     onPointerUp);
-			document.removeEventListener('pointercancel', onPointerCancel);
-			if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
+			doc.removeEventListener('pointermove',   onPointerMove);
+			doc.removeEventListener('pointerup',     onPointerUp);
+			doc.removeEventListener('pointercancel', onPointerCancel);
+			if (rafId !== null) { window.cancelAnimationFrame(rafId); rafId = null; }
 			this.dragColIndex = null;
 			this.dragType = null;
 			isDragging = false;
 			hoverIndex = colIndex;
 			lastHoverIndex = -1;
-			document.body.setCssStyles({ userSelect: '' });
-			document.body.setCssStyles({ cursor: '' });
+			doc.body.removeClass('sg-body-grabbing', 'sg-body-col-resize', 'sg-body-row-resize');
 			resetAll();
 		};
 
 		const onPointerUp = () => {
-			document.removeEventListener('pointermove',   onPointerMove);
-			document.removeEventListener('pointerup',     onPointerUp);
-			document.removeEventListener('pointercancel', onPointerCancel);
-			if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
+			doc.removeEventListener('pointermove',   onPointerMove);
+			doc.removeEventListener('pointerup',     onPointerUp);
+			doc.removeEventListener('pointercancel', onPointerCancel);
+			if (rafId !== null) { window.cancelAnimationFrame(rafId); rafId = null; }
 
 			const toIndex = hoverIndex, didDrag = isDragging;
 			this.dragColIndex = null;
@@ -2209,8 +2234,7 @@ export class StorygridView extends ItemView {
 			isDragging = false;
 			hoverIndex = colIndex;
 			lastHoverIndex = -1;
-			document.body.setCssStyles({ userSelect: '' });
-			document.body.setCssStyles({ cursor: '' });
+			doc.body.removeClass('sg-body-grabbing', 'sg-body-col-resize', 'sg-body-row-resize');
 			resetAll();
 
 			if (!didDrag || toIndex === colIndex || !this.gridData) return;
@@ -2232,9 +2256,9 @@ export class StorygridView extends ItemView {
 			e.preventDefault();
 			startX = e.clientX; cursorX = e.clientX;
 			hoverIndex = colIndex; lastHoverIndex = -1;
-			document.addEventListener('pointermove',   onPointerMove);
-			document.addEventListener('pointerup',     onPointerUp);
-			document.addEventListener('pointercancel', onPointerCancel);
+			doc.addEventListener('pointermove',   onPointerMove);
+			doc.addEventListener('pointerup',     onPointerUp);
+			doc.addEventListener('pointercancel', onPointerCancel);
 		});
 	}
 
@@ -2273,9 +2297,9 @@ export class StorygridView extends ItemView {
 
 		th.addEventListener('mousemove', (e) => {
 			const rect = th.getBoundingClientRect();
-			th.style.cursor = (e.clientX >= rect.right - this.EDGE_PX) ? 'col-resize' : 'grab';
+			th.toggleClass('sg-edge-col', e.clientX >= rect.right - this.EDGE_PX);
 		});
-		th.addEventListener('mouseleave', () => { th.setCssStyles({ cursor: 'grab' }); });
+		th.addEventListener('mouseleave', () => { th.removeClass('sg-edge-col'); });
 
 		th.addEventListener('pointerdown', (e) => {
 			if (e.button !== 0) return;
@@ -2286,14 +2310,14 @@ export class StorygridView extends ItemView {
 	}
 
 	private startColResize(e: PointerEvent, th: HTMLElement, col: GridColumn): void {
+		const doc = th.doc;
 		e.preventDefault();
 		e.stopPropagation();
 
 		const startX = e.clientX;
 		const startWidth = th.offsetWidth;
 		th.classList.add('sg-col-header--resizing');
-		document.body.setCssStyles({ userSelect: 'none' });
-		document.body.setCssStyles({ cursor: 'col-resize' });
+		doc.body.addClass('sg-body-col-resize');
 
 		// Cache cells once so pointermove doesn't query DOM every frame
 		const cells = Array.from(
@@ -2305,18 +2329,17 @@ export class StorygridView extends ItemView {
 		const cleanup = () => {
 			if (done) return;
 			done = true;
-			cancelAnimationFrame(rafId);
+			window.cancelAnimationFrame(rafId);
 			th.classList.remove('sg-col-header--resizing');
-			document.body.setCssStyles({ userSelect: '' });
-			document.body.setCssStyles({ cursor: '' });
-			document.removeEventListener('pointermove',   onMove);
-			document.removeEventListener('pointerup',     onUp);
-			document.removeEventListener('pointercancel', onUp);
+			doc.body.removeClass('sg-body-grabbing', 'sg-body-col-resize', 'sg-body-row-resize');
+			doc.removeEventListener('pointermove',   onMove);
+			doc.removeEventListener('pointerup',     onUp);
+			doc.removeEventListener('pointercancel', onUp);
 		};
 
 		const onMove = (moveEvt: PointerEvent) => {
-			cancelAnimationFrame(rafId);
-			rafId = requestAnimationFrame(() => {
+			window.cancelAnimationFrame(rafId);
+			rafId = window.requestAnimationFrame(() => {
 				// clientX deltas are screen px; the table lives in zoomed px.
 				const newWidth = Math.max(40, startWidth + (moveEvt.clientX - startX) / this.zoomLevel);
 				this.pinWidth(th, newWidth);
@@ -2325,7 +2348,7 @@ export class StorygridView extends ItemView {
 		};
 
 		const onUp = () => {
-			cancelAnimationFrame(rafId);
+			window.cancelAnimationFrame(rafId);
 			// Read the dragged target width from style — the last rAF may not
 			// have painted yet, and offsetWidth can lag behind it.
 			const finalWidth = Math.max(40, Math.round(parseFloat(th.style.width) || th.offsetWidth));
@@ -2343,9 +2366,9 @@ export class StorygridView extends ItemView {
 			this.scheduleSave();
 		};
 
-		document.addEventListener('pointermove',   onMove);
-		document.addEventListener('pointerup',     onUp);
-		document.addEventListener('pointercancel', onUp);
+		doc.addEventListener('pointermove',   onMove);
+		doc.addEventListener('pointerup',     onUp);
+		doc.addEventListener('pointercancel', onUp);
 	}
 
 	private bindRowEdgeResize(rowHeader: HTMLElement, row: GridRow, tr: HTMLElement): void {
@@ -2362,15 +2385,12 @@ export class StorygridView extends ItemView {
 
 		rowHeader.addEventListener('mousemove', (e) => {
 			const rect = rowHeader.getBoundingClientRect();
-			if (e.clientX >= rect.right - this.EDGE_PX) {
-				rowHeader.setCssStyles({ cursor: 'col-resize' });
-			} else if (e.clientY >= rect.bottom - this.EDGE_PX) {
-				rowHeader.setCssStyles({ cursor: 'row-resize' });
-			} else {
-				rowHeader.setCssStyles({ cursor: 'grab' });
-			}
+			const nearRight = e.clientX >= rect.right - this.EDGE_PX;
+			const nearBottom = !nearRight && e.clientY >= rect.bottom - this.EDGE_PX;
+			rowHeader.toggleClass('sg-edge-col', nearRight);
+			rowHeader.toggleClass('sg-edge-row', nearBottom);
 		});
-		rowHeader.addEventListener('mouseleave', () => { rowHeader.setCssStyles({ cursor: 'grab' }); });
+		rowHeader.addEventListener('mouseleave', () => { rowHeader.removeClass('sg-edge-col', 'sg-edge-row'); });
 
 		rowHeader.addEventListener('pointerdown', (e) => {
 			if (e.button !== 0) return;
@@ -2386,14 +2406,14 @@ export class StorygridView extends ItemView {
 
 	/** Right-edge drag on a row header — resizes ALL row headers together. */
 	private startRowWidthResize(e: PointerEvent, rowHeader: HTMLElement): void {
+		const doc = rowHeader.doc;
 		e.preventDefault();
 		e.stopPropagation();
 
 		const startX = e.clientX;
 		const startWidth = rowHeader.offsetWidth;
 		rowHeader.classList.add('sg-row-header--resizing');
-		document.body.setCssStyles({ userSelect: 'none' });
-		document.body.setCssStyles({ cursor: 'col-resize' });
+		doc.body.addClass('sg-body-col-resize');
 
 		// Get all row headers and the corner cell
 		const allRowHeaders = Array.from(
@@ -2406,18 +2426,17 @@ export class StorygridView extends ItemView {
 		const cleanup = () => {
 			if (done) return;
 			done = true;
-			cancelAnimationFrame(rafId);
+			window.cancelAnimationFrame(rafId);
 			rowHeader.classList.remove('sg-row-header--resizing');
-			document.body.setCssStyles({ userSelect: '' });
-			document.body.setCssStyles({ cursor: '' });
-			document.removeEventListener('pointermove',   onMove);
-			document.removeEventListener('pointerup',     onUp);
-			document.removeEventListener('pointercancel', onUp);
+			doc.body.removeClass('sg-body-grabbing', 'sg-body-col-resize', 'sg-body-row-resize');
+			doc.removeEventListener('pointermove',   onMove);
+			doc.removeEventListener('pointerup',     onUp);
+			doc.removeEventListener('pointercancel', onUp);
 		};
 
 		const onMove = (moveEvt: PointerEvent) => {
-			cancelAnimationFrame(rafId);
-			rafId = requestAnimationFrame(() => {
+			window.cancelAnimationFrame(rafId);
+			rafId = window.requestAnimationFrame(() => {
 				const newWidth = Math.max(40, startWidth + (moveEvt.clientX - startX) / this.zoomLevel);
 				allRowHeaders.forEach((rh) => this.pinWidth(rh, newWidth));
 				if (corner) this.pinWidth(corner, newWidth);
@@ -2425,7 +2444,7 @@ export class StorygridView extends ItemView {
 		};
 
 		const onUp = () => {
-			cancelAnimationFrame(rafId);
+			window.cancelAnimationFrame(rafId);
 			const finalWidth = Math.max(40, Math.round(parseFloat(rowHeader.style.width) || rowHeader.offsetWidth));
 			cleanup();
 			allRowHeaders.forEach((rh) => this.pinWidth(rh, finalWidth));
@@ -2440,39 +2459,38 @@ export class StorygridView extends ItemView {
 			this.scheduleSave();
 		};
 
-		document.addEventListener('pointermove',   onMove);
-		document.addEventListener('pointerup',     onUp);
-		document.addEventListener('pointercancel', onUp);
+		doc.addEventListener('pointermove',   onMove);
+		doc.addEventListener('pointerup',     onUp);
+		doc.addEventListener('pointercancel', onUp);
 	}
 
 	/** Bottom-edge drag on a row header — resizes that row's height. */
 	private startRowHeightResize(e: PointerEvent, rowHeader: HTMLElement, row: GridRow, tr: HTMLElement): void {
+		const doc = rowHeader.doc;
 		e.preventDefault();
 		e.stopPropagation();
 
 		const startY = e.clientY;
 		const startHeight = tr.offsetHeight;
 		rowHeader.classList.add('sg-row-header--resizing');
-		document.body.setCssStyles({ userSelect: 'none' });
-		document.body.setCssStyles({ cursor: 'row-resize' });
+		doc.body.addClass('sg-body-row-resize');
 
 		let rafId = 0;
 		let done = false;
 		const cleanup = () => {
 			if (done) return;
 			done = true;
-			cancelAnimationFrame(rafId);
+			window.cancelAnimationFrame(rafId);
 			rowHeader.classList.remove('sg-row-header--resizing');
-			document.body.setCssStyles({ userSelect: '' });
-			document.body.setCssStyles({ cursor: '' });
-			document.removeEventListener('pointermove',   onMove);
-			document.removeEventListener('pointerup',     onUp);
-			document.removeEventListener('pointercancel', onUp);
+			doc.body.removeClass('sg-body-grabbing', 'sg-body-col-resize', 'sg-body-row-resize');
+			doc.removeEventListener('pointermove',   onMove);
+			doc.removeEventListener('pointerup',     onUp);
+			doc.removeEventListener('pointercancel', onUp);
 		};
 
 		const onMove = (moveEvt: PointerEvent) => {
-			cancelAnimationFrame(rafId);
-			rafId = requestAnimationFrame(() => {
+			window.cancelAnimationFrame(rafId);
+			rafId = window.requestAnimationFrame(() => {
 				const newHeight = Math.max(40, startHeight + (moveEvt.clientY - startY) / this.zoomLevel);
 				tr.style.height = `${newHeight}px`;
 				// Keep cards in this row filling the cell as it resizes
@@ -2484,7 +2502,7 @@ export class StorygridView extends ItemView {
 		};
 
 		const onUp = () => {
-			cancelAnimationFrame(rafId);
+			window.cancelAnimationFrame(rafId);
 			const finalHeight = Math.max(40, parseInt(tr.style.height) || tr.offsetHeight);
 			cleanup();
 			if (!this.gridData) return;
@@ -2499,9 +2517,9 @@ export class StorygridView extends ItemView {
 			this.renderGridOnly();
 		};
 
-		document.addEventListener('pointermove',   onMove);
-		document.addEventListener('pointerup',     onUp);
-		document.addEventListener('pointercancel', onUp);
+		doc.addEventListener('pointermove',   onMove);
+		doc.addEventListener('pointerup',     onUp);
+		doc.addEventListener('pointercancel', onUp);
 	}
 
 	// ─── Grid Mutations ───────────────────────────────────────────────────────
@@ -2563,7 +2581,6 @@ export class StorygridView extends ItemView {
 		const cellEl = this.containerEl.querySelector<HTMLElement>(
 			`td[data-row-id="${rowId}"][data-col-id="${colId}"]`
 		);
-		let updated = false;
 		if (row && !row.height) {
 			const measuredHeight = cellEl ? cellEl.offsetHeight : 120;
 			this.gridData = {
@@ -2572,7 +2589,6 @@ export class StorygridView extends ItemView {
 					r.id === rowId ? { ...r, height: Math.max(40, measuredHeight) } : r
 				),
 			};
-			updated = true;
 		}
 		if (col && !col.width) {
 			const measuredWidth = cellEl ? cellEl.offsetWidth : 150;
@@ -2582,7 +2598,6 @@ export class StorygridView extends ItemView {
 					c.id === colId ? { ...c, width: Math.max(80, measuredWidth) } : c
 				),
 			};
-			updated = true;
 		}
 		// Render grid with new card, then open its editor without the flicker
 		this.renderAll();
@@ -2774,10 +2789,10 @@ export class StorygridView extends ItemView {
 
 	/** A notice carrying the message and an Undo button. Long enough to reach on a phone; one press only. */
 	private showUndoToast(message: string, onUndo: () => void): void {
-		const fragment = document.createDocumentFragment();
-		const text = document.createElement('span');
+		const fragment = createFragment();
+		const text = createSpan();
 		text.textContent = message;
-		const button = document.createElement('button');
+		const button = createEl('button');
 		button.className = 'mod-cta sg-undo-toast-btn';
 		button.textContent = i18n('grid.undo.button');
 		fragment.append(text, button);
@@ -2801,7 +2816,7 @@ export class StorygridView extends ItemView {
 		if (labelEl.contentEditable === 'true') return; // already editing
 
 		// Disable drag on parent while editing
-		const draggableParent = labelEl.closest('[draggable]') as HTMLElement | null;
+		const draggableParent = labelEl.closest<HTMLElement>('[draggable]');
 		if (draggableParent) draggableParent.draggable = false;
 
 		labelEl.contentEditable = 'true';
@@ -2809,7 +2824,7 @@ export class StorygridView extends ItemView {
 		labelEl.focus();
 
 		// Select all text
-		const range = document.createRange();
+		const range = labelEl.doc.createRange();
 		range.selectNodeContents(labelEl);
 		const sel = window.getSelection();
 		sel?.removeAllRanges();
@@ -2855,15 +2870,16 @@ export class StorygridView extends ItemView {
 	private readonly LIGHT_DEFAULT_COLORS = ['#fafafa', '#f5f4f2', '#f0f4ff', '#f5f7ff', '#ffffff'];
 
 	applyCardBackground(el: HTMLElement, color: string): void {
-		el.setCssStyles({ backgroundColor: '' });
-		if (this.LIGHT_DEFAULT_COLORS.includes(color.toLowerCase())) {
-			el.setCssStyles({ background: 'var(--sg-default-card-bg)' });
-		} else if (color.includes('gradient(')) {
-			el.style.background = color;
-		} else {
-			el.setCssStyles({ background: '' });
-			el.style.backgroundColor = color;
+		// The fill reaches the card as a custom property (.sg-card--filled in styles.css);
+		// no colour at all means the stylesheet's own card background.
+		if (!color) {
+			el.removeClass('sg-card--filled');
+			el.setCssProps({ '--sg-card-fill': '' });
+			return;
 		}
+		const fill = this.LIGHT_DEFAULT_COLORS.includes(color.toLowerCase()) ? 'var(--sg-default-card-bg)' : color;
+		el.addClass('sg-card--filled');
+		el.setCssProps({ '--sg-card-fill': fill });
 	}
 
 	/** Shared persist callbacks for the color picker's Saved-colors strip + Save-as-palette. */
@@ -2899,7 +2915,7 @@ export class StorygridView extends ItemView {
 	private promptRowColor(row: GridRow): void {
 		// Find the row header element to anchor the popover
 		const anchor = this.contentEl.querySelector(`[data-row-id="${row.id}"].sg-row-header`) as HTMLElement
-			?? document.body;
+			?? this.contentEl.doc.body;
 
 		ColorPickerPopover.show(anchor, {
 			currentColor: row.color || '#cccccc',
@@ -2918,7 +2934,7 @@ export class StorygridView extends ItemView {
 
 	private promptColColor(col: GridColumn): void {
 		const anchor = this.contentEl.querySelector(`[data-col-id="${col.id}"].sg-col-header`) as HTMLElement
-			?? document.body;
+			?? this.contentEl.doc.body;
 
 		ColorPickerPopover.show(anchor, {
 			currentColor: col.color || '#cccccc',
@@ -2967,11 +2983,11 @@ export class StorygridView extends ItemView {
 			.filter((c) => !guideCols.has(c.id) || this.gridData!.cards.some((k) => k.colId === c.id && !k.guide))
 			.map(({ label, color }) => ({ label, color }));
 
-		new SaveLayoutModal(this.app, rows, columns, async (template) => {
+		new SaveLayoutModal(this.app, rows, columns, (template) => { runSafely((async () => {
 			this.plugin.settings.customTemplates.push(template);
 			await this.plugin.saveSettings();
 			new Notice(i18n('grid.notice.templateSaved', { name: template.name }));
-		}).open();
+		})()); }).open();
 	}
 
 
@@ -3045,11 +3061,11 @@ export class StorygridView extends ItemView {
 			},
 			{
 				savedTemplates: this.plugin.settings.sceneFieldTemplates,
-				onSaveTemplate: async (tpl) => {
+				onSaveTemplate: (tpl) => { runSafely((async () => {
 					this.plugin.settings.sceneFieldTemplates.push(tpl);
 					await this.plugin.saveSettings();
 					new Notice(i18n('grid.notice.fieldTemplateSaved', { name: tpl.name }));
-				},
+				})()); },
 			}
 		).open();
 	}
@@ -3093,11 +3109,11 @@ export class StorygridView extends ItemView {
 			},
 			{
 				savedTemplates: this.plugin.settings.characterFieldTemplates,
-				onSaveTemplate: async (tpl) => {
+				onSaveTemplate: (tpl) => { runSafely((async () => {
 					this.plugin.settings.characterFieldTemplates.push(tpl);
 					await this.plugin.saveSettings();
 					new Notice(i18n('grid.notice.fieldTemplateSaved', { name: tpl.name }));
-				},
+				})()); },
 				projectRoot: this.resolveProjectRoot(),
 			}
 		).open();
@@ -3130,11 +3146,11 @@ export class StorygridView extends ItemView {
 			},
 			{
 				savedTemplates: this.plugin.settings.locationFieldTemplates,
-				onSaveTemplate: async (tpl) => {
+				onSaveTemplate: (tpl) => { runSafely((async () => {
 					this.plugin.settings.locationFieldTemplates.push(tpl);
 					await this.plugin.saveSettings();
 					new Notice(i18n('grid.notice.fieldTemplateSaved', { name: tpl.name }));
-				},
+				})()); },
 			}
 		).open();
 	}
@@ -3228,23 +3244,20 @@ export class StorygridView extends ItemView {
 		this.scrollContainerEl?.addClass('sg-scroll-container--panel-open');
 
 		// Close on Escape key — remove any previous listener first to prevent stacking
-		if (this._panelKeydownHandler) {
-			document.removeEventListener('keydown', this._panelKeydownHandler);
-		}
+		this.removePanelDocListeners();
+		const panelDoc = panel.doc;
+		this._panelDoc = panelDoc;
 		this._panelKeydownHandler = (e: KeyboardEvent) => {
 			if (e.key !== 'Escape') return;
 			// Don't steal Escape from layers stacked above the panel —
 			// Obsidian modals, context menus, the color picker popover, or a tip
 			// bubble (Escape dismisses the tip, it should not also close the editor).
-			if (document.querySelector('.modal-container, .menu, .sg-color-popover, .sg-coach-mark')) return;
+			if (panelDoc.querySelector('.modal-container, .menu, .sg-color-popover, .sg-coach-mark')) return;
 			this.closeSidePanel();
 		};
-		document.addEventListener('keydown', this._panelKeydownHandler);
+		panelDoc.addEventListener('keydown', this._panelKeydownHandler);
 
 		// Close panel on click outside (not inside the panel or the grid)
-		if (this._panelClickOutsideHandler) {
-			document.removeEventListener('mousedown', this._panelClickOutsideHandler);
-		}
 		this._panelClickOutsideHandler = (e: MouseEvent) => {
 			const target = e.target as HTMLElement;
 			if (!this.panelEl || !this.scrollContainerEl) return;
@@ -3253,10 +3266,10 @@ export class StorygridView extends ItemView {
 			// A tip bubble floats over the panel it points at; its Next / Got it buttons are not "outside".
 			if (isOnCoachMark(target)) return;
 			// Don't close if a modal, menu, or color picker is open above the panel
-			if (document.querySelector('.modal-container, .menu, .sg-color-popover')) return;
+			if (panelDoc.querySelector('.modal-container, .menu, .sg-color-popover')) return;
 			this.closeSidePanel();
 		};
-		document.addEventListener('mousedown', this._panelClickOutsideHandler);
+		panelDoc.addEventListener('mousedown', this._panelClickOutsideHandler);
 
 		// ── Header ──────────────────────────────────────────────────────────
 		const header = panel.createDiv({ cls: 'sg-panel-header' });
@@ -3277,9 +3290,6 @@ export class StorygridView extends ItemView {
 		closeBtn.addEventListener('click', () => this.closeSidePanel());
 
 		const body = panel.createDiv({ cls: 'sg-panel-body' });
-		const getActivePalette = () =>
-			this.plugin.settings.colorPalettes
-				.find((p) => p.id === this.plugin.settings.activeColorPaletteId)?.colors ?? [];
 
 		// ── CORE (always visible): Title · Status · Synopsis ────────────────
 		this.panelField(body, i18n('grid.panel.title'), (row) => {
@@ -3316,7 +3326,7 @@ export class StorygridView extends ItemView {
 		this.renderFieldHelp(synLabel, i18n('grid.panel.help.synopsis'));
 		const synWrapper = body.createDiv({ cls: 'sg-panel-textarea-wrapper' });
 		const synToolbar = synWrapper.createDiv({ cls: 'sg-md-toolbar' });
-		const synEditor = synWrapper.createEl('div', {
+		const synEditor = synWrapper.createDiv({
 			cls: 'sg-panel-richtext',
 			attr: { contenteditable: 'true', 'data-placeholder': i18n('grid.panel.synopsisPlaceholder'), spellcheck: 'true' },
 		});
@@ -3329,12 +3339,12 @@ export class StorygridView extends ItemView {
 		synEditor.addEventListener('paste', (e) => {
 			e.preventDefault();
 			const text = e.clipboardData?.getData('text/plain') ?? '';
-			document.execCommand('insertText', false, text);
+			activeDocument.execCommand('insertText', false, text);
 		});
 		buildPanelRichToolbar(synToolbar, synEditor, serializeSyn);
 
 		// Opening or adding a card puts the caret in Synopsis / Notes, at the end of any text
-		// already there — a card's title is optional, its notes are what gets written (Emma).
+		// already there — a card's title is optional, its notes are what gets written.
 		// Desktop only; on mobile this would pop the keyboard up every time a card is opened.
 		if (!Platform.isMobile) {
 			const focusNotes = () => {
@@ -3343,21 +3353,21 @@ export class StorygridView extends ItemView {
 				// focus() alone doesn't reliably place a caret in a contenteditable.
 				const sel = window.getSelection();
 				if (!sel) return;
-				const range = document.createRange();
+				const range = synEditor.doc.createRange();
 				range.selectNodeContents(synEditor);
 				range.collapse(false);
 				sel.removeAllRanges();
 				sel.addRange(range);
 			};
-			requestAnimationFrame(focusNotes);
+			window.requestAnimationFrame(focusNotes);
 			// Second pass once the 0.35s slide-in has settled, in case anything moved focus
-			// meanwhile. Skipped if she already clicked in the panel.
+			// meanwhile. Skipped if the writer already clicked in the panel.
 			let touched = false;
 			panel.addEventListener('pointerdown', () => { touched = true; }, { capture: true, once: true });
 			window.setTimeout(() => {
 				// Not if the panel closed meanwhile (draft cleared) or focus moved outside the panel (a modal, the grid).
-				const active = document.activeElement;
-				const focusIsFree = !active || active === document.body || panel.contains(active);
+				const active = activeDocument.activeElement;
+				const focusIsFree = !active || active === activeDocument.body || panel.contains(active);
 				if (!touched && this._panelDraft === draft && active !== synEditor && focusIsFree) focusNotes();
 			}, 400);
 		}
@@ -3409,12 +3419,14 @@ export class StorygridView extends ItemView {
 						placeholder: i18n('grid.panel.searchScene'),
 					});
 					const suggest = searchWrap.createDiv({ cls: 'sg-panel-suggest' });
-					suggest.setCssStyles({ display: 'none' });
+					let suggestOpen = false;
+					const setSuggestOpen = (open: boolean) => { suggestOpen = open; suggest.toggle(open); };
+					setSuggestOpen(false);
 					// The "Create new scene page" row (built below) sits right under the search box, where the
 					// floating file list opens: hide it while the list is open so a tap can't land on a file instead.
 					let actionRow: HTMLElement | null = null;
 					const syncActionRow = () => {
-						if (actionRow) actionRow.style.display = suggest.style.display === 'block' ? 'none' : '';
+						if (actionRow) actionRow.style.display = suggestOpen ? 'none' : '';
 					};
 
 					const showSuggestions = (query: string) => {
@@ -3426,8 +3438,8 @@ export class StorygridView extends ItemView {
 								&& (!query || f.path.toLowerCase().includes(lower)))
 							.sort((a, b) => b.stat.mtime - a.stat.mtime)
 							.slice(0, 10);
-						if (!files.length) { suggest.setCssStyles({ display: 'none' }); syncActionRow(); return; }
-						suggest.setCssStyles({ display: 'block' });
+						if (!files.length) { setSuggestOpen(false); syncActionRow(); return; }
+						setSuggestOpen(true);
 						syncActionRow();
 						files.forEach((f) => {
 							const item = suggest.createDiv({ cls: 'sg-panel-suggest-item', text: f.basename });
@@ -3435,9 +3447,9 @@ export class StorygridView extends ItemView {
 							item.addEventListener('mousedown', (e) => {
 								e.preventDefault();
 								draft.linkedDocPath = f.path;
-								suggest.setCssStyles({ display: 'none' });
+								setSuggestOpen(false);
 								if (!draft.synopsis.trim()) {
-									const docSynopsis = this.app.metadataCache.getFileCache(f)?.frontmatter?.['synopsis'];
+									const docSynopsis: unknown = this.app.metadataCache.getFileCache(f)?.frontmatter?.['synopsis'];
 									if (typeof docSynopsis === 'string' && docSynopsis.trim()) {
 										draft.synopsis = docSynopsis.trim();
 										setRichText(synEditor, markdownToHtml(draft.synopsis));
@@ -3451,7 +3463,7 @@ export class StorygridView extends ItemView {
 					};
 					input.addEventListener('input', () => showSuggestions(input.value));
 					input.addEventListener('focus', () => showSuggestions(input.value));
-					input.addEventListener('blur', () => { setTimeout(() => { suggest.setCssStyles({ display: 'none' }); syncActionRow(); }, 150); });
+					input.addEventListener('blur', () => { window.setTimeout(() => { setSuggestOpen(false); syncActionRow(); }, 150); });
 
 					// "Create new scene page" — the same form as right-click → Create scene document, with the
 					// card's title filled in. Nothing is created unless the writer confirms the form.
@@ -3552,12 +3564,12 @@ export class StorygridView extends ItemView {
 					const name = entityPath.split('/').pop()?.replace(/\.md$/, '') || entityPath;
 					const chip = eventChips.createDiv({ cls: 'sg-chip sg-chip--entity' });
 					chip.title = i18n('grid.panel.openDocTooltip');
-					chip.setCssStyles({ cursor: 'pointer' });
+					chip.addClass('sg-chip--clickable');
 					chip.createSpan({ text: `⚡ ${name}` });
 					chip.addEventListener('click', (e) => {
 						if ((e.target as HTMLElement).classList.contains('sg-chip-remove')) return;
 						const file = this.app.vault.getAbstractFileByPath(entityPath);
-						if (file instanceof TFile) openOrReveal(this.app, file);
+						if (file instanceof TFile) runSafely(openOrReveal(this.app, file));
 					});
 					const x = chip.createEl('button', { cls: 'sg-chip-remove', text: '×' });
 					x.addEventListener('mousedown', (e) => {
@@ -3617,12 +3629,12 @@ export class StorygridView extends ItemView {
 					const name = charFilePath.split('/').pop()?.replace(/\.md$/, '') || charFilePath;
 					const chip = charContainer.createDiv({ cls: 'sg-chip sg-chip--character' });
 					chip.title = i18n('grid.panel.openCharacterTooltip');
-					chip.setCssStyles({ cursor: 'pointer' });
+					chip.addClass('sg-chip--clickable');
 					chip.createSpan({ text: name });
 					chip.addEventListener('click', (e) => {
 						if ((e.target as HTMLElement).classList.contains('sg-chip-remove')) return;
 						const file = this.app.vault.getAbstractFileByPath(charFilePath);
-						if (file && file instanceof TFile) openOrReveal(this.app, file);
+						if (file && file instanceof TFile) runSafely(openOrReveal(this.app, file));
 					});
 					const x = chip.createEl('button', { cls: 'sg-chip-remove', text: '×' });
 					x.addEventListener('mousedown', (e) => {
@@ -3665,10 +3677,10 @@ export class StorygridView extends ItemView {
 								}
 							}, {
 								savedTemplates: this.plugin.settings.characterFieldTemplates,
-								onSaveTemplate: async (tpl) => {
+								onSaveTemplate: (tpl) => { runSafely((async () => {
 									this.plugin.settings.characterFieldTemplates.push(tpl);
 									await this.plugin.saveSettings();
-								},
+								})()); },
 							}).open();
 						}
 					).open();
@@ -3697,12 +3709,12 @@ export class StorygridView extends ItemView {
 						const name = entityPath.split('/').pop()?.replace(/\.md$/, '') || entityPath;
 						const chip = chipContainer.createDiv({ cls: 'sg-chip sg-chip--entity' });
 						chip.title = i18n('grid.panel.openDocTooltip');
-						chip.setCssStyles({ cursor: 'pointer' });
+						chip.addClass('sg-chip--clickable');
 						chip.createSpan({ text: `${emoji} ${name}` });
 						chip.addEventListener('click', (e) => {
 							if ((e.target as HTMLElement).classList.contains('sg-chip-remove')) return;
 							const file = this.app.vault.getAbstractFileByPath(entityPath);
-							if (file instanceof TFile) openOrReveal(this.app, file);
+							if (file instanceof TFile) runSafely(openOrReveal(this.app, file));
 						});
 						const x = chip.createEl('button', { cls: 'sg-chip-remove', text: '×' });
 						x.addEventListener('mousedown', (e) => {
@@ -3719,7 +3731,7 @@ export class StorygridView extends ItemView {
 						new EntityPickerModal(
 							this.app,
 							projectRoot,
-							kind as import('./entities/entity-kinds').EntityKind,
+							kind,
 							(file: TFile) => {
 								if (!draft.linkedEntityPaths) draft.linkedEntityPaths = {};
 								const current = draft.linkedEntityPaths[kind] ?? [];
@@ -3814,7 +3826,8 @@ export class StorygridView extends ItemView {
 
 			this.panelField(sec, i18n('grid.panel.frameColor'), (row) => {
 				const swatch = row.createEl('button', { cls: 'sg-panel-color-swatch', attr: { type: 'button' } });
-				swatch.style.background = draft.frameColor || '#cccccc';
+				const syncFrameSwatch = () => { swatch.style.background = draft.frameColor || '#cccccc'; };
+				syncFrameSwatch();
 				swatch.title = i18n('grid.panel.frameColorTooltip');
 				frameSwatchRef.el = swatch;
 
@@ -3836,7 +3849,7 @@ export class StorygridView extends ItemView {
 				const clr = row.createEl('button', { cls: 'sg-panel-btn-small', text: i18n('grid.panel.clearFrame'), title: i18n('grid.panel.removeFrameColorTooltip') });
 				clr.addEventListener('click', () => {
 					draft.frameColor = undefined;
-					swatch.setCssStyles({ background: '#cccccc' });
+					syncFrameSwatch();
 					framePicker?.close();
 					swatch.classList.remove('sg-panel-color-swatch--active');
 					autoSaveNow();
@@ -3848,8 +3861,8 @@ export class StorygridView extends ItemView {
 		// One-time, chained coach-mark tour of the three main sections below the
 		// core fields — fires once ever, the first time any card editor opens.
 		// Skippable at any step; ends the whole chain, not just that step.
-		// Each tip sits just under the section it explains, inside the editor (Emma 2026-11-06: 'left'
-		// floated them over the grid cards). Shown only once the 0.35s slide-in has finished — measured
+		// Each tip sits just under the section it explains, inside the editor ('left' would float
+		// them over the grid cards). Shown only once the 0.35s slide-in has finished — measured
 		// mid-slide, the first tip landed on top of the editor pointing at the Synopsis box.
 		if (this.plugin.canShowCoachMark('card-editor-sections')) {
 			window.setTimeout(() => {
@@ -3938,7 +3951,7 @@ export class StorygridView extends ItemView {
 			this._lastSynopsisSyncKey = synopsisKey;
 			this.syncSynopsisToLinkedDoc(live);
 		}
-		const cardEl = this.contentEl.querySelector(`[data-card-id="${draft.id}"]`) as HTMLElement | null;
+		const cardEl = this.contentEl.querySelector<HTMLElement>(`[data-card-id="${draft.id}"]`);
 		if (cardEl?.parentElement) {
 			const cell = cardEl.parentElement;
 			cell.empty();
@@ -3969,7 +3982,7 @@ export class StorygridView extends ItemView {
 			if (!fm || fm['tags'] === undefined) return;
 		}
 
-		this.app.fileManager.processFrontMatter(file, (fm) => {
+		this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
 			if (cleanTags.length === 0) {
 				delete fm['tags'];
 			} else {
@@ -3984,7 +3997,7 @@ export class StorygridView extends ItemView {
 		if (!card.linkedDocPath || !card.synopsis.trim()) return;
 		const file = this.app.vault.getAbstractFileByPath(card.linkedDocPath);
 		if (!(file instanceof TFile) || file.extension !== 'md') return;
-		this.app.fileManager.processFrontMatter(file, (fm) => {
+		this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
 			fm['synopsis'] = card.synopsis;
 		}).catch(() => {});
 	}
@@ -4144,18 +4157,25 @@ export class StorygridView extends ItemView {
 		return summary;
 	}
 
+	/** Remove the panel's document-level listeners from the document they were added to. */
+	private removePanelDocListeners(): void {
+		const doc = this._panelDoc ?? this.containerEl.doc;
+		if (this._panelKeydownHandler) {
+			doc.removeEventListener('keydown', this._panelKeydownHandler);
+			this._panelKeydownHandler = null;
+		}
+		if (this._panelClickOutsideHandler) {
+			doc.removeEventListener('mousedown', this._panelClickOutsideHandler);
+			this._panelClickOutsideHandler = null;
+		}
+		this._panelDoc = null;
+	}
+
 	private closeSidePanel(): void {
 		if (!this.panelEl) return;
 
 		// Always remove the global listeners immediately on close
-		if (this._panelKeydownHandler) {
-			document.removeEventListener('keydown', this._panelKeydownHandler);
-			this._panelKeydownHandler = null;
-		}
-		if (this._panelClickOutsideHandler) {
-			document.removeEventListener('mousedown', this._panelClickOutsideHandler);
-			this._panelClickOutsideHandler = null;
-		}
+		this.removePanelDocListeners();
 
 		// Commit any unsaved draft before closing (and drop the pending timer
 		// so it can't re-commit a stale draft after the panel is gone)

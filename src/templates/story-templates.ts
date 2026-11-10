@@ -2,13 +2,13 @@ import { StorygridTemplate } from '../grid-data';
 import { t } from '../i18n';
 
 // Beats down the side, story threads across the top — the same shape every
-// template (and the Saltmarch sample) uses. Reviewed against each method
-// 2026-11-07 (docs/template-review/TEMPLATE-REVIEW.md); labels are English
-// in every language for now (names and descriptions are translated).
+// template (and the Saltmarch sample) uses. Each template follows its source
+// method's own beats; labels are English in every language for now (names
+// and descriptions are translated).
 //
 // Each beat carries a `hint`: roughly where it falls in the book and what
 // belongs there. It shows faintly in the first column of a new grid until a
-// card is placed in that cell (Emma, 2026-11-07). Format: "~10% · text".
+// card is placed in that cell. Format: "~10% · text".
 const beat = (label: string, hint?: string) => ({ label, color: undefined, hint });
 
 export const STORY_TEMPLATES: StorygridTemplate[] = [
@@ -69,7 +69,7 @@ export const STORY_TEMPLATES: StorygridTemplate[] = [
 
 	{
 		// Jessica Brody's "Save the Cat! Writes a Novel": Snyder's fifteen beats
-		// in her wording, with her five-step Finale as five rows (Emma: "I want all beats").
+		// in her wording, with her five-step Finale as five rows so every beat has a row.
 		id: 'save-the-cat',
 		name: t('templates.saveTheCat.name'),
 		description: t('templates.saveTheCat.description'),

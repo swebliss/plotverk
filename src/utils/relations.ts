@@ -285,7 +285,7 @@ export interface CustomRelationshipType {
 	 *  - 'none'  → one-way / unrequited (no reverse arrow, no auto-write)
 	 *  - <id>    → id of the paired custom type shown at the other end (Professor→Student)
 	 */
-	reciprocal: 'self' | 'none' | string;
+	reciprocal: 'self' | 'none' | (string & Record<never, never>);
 	/** How the line is drawn. Defaults to 'solid' for types saved before line styles existed. */
 	lineStyle?: LineStyle;
 	/**

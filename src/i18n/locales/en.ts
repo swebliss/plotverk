@@ -4,6 +4,7 @@ export const en: LocaleDict = {
 	// ── Common ──────────────────────────────────────────────────────────────
 	'common.delete': 'Delete',
 	'common.cancel': 'Cancel',
+	'common.error.somethingFailed': 'Plotverk: Something went wrong. {msg}',
 
 	// ── Settings: nav ───────────────────────────────────────────────────────
 	'settings.nav.general': 'General',
@@ -1287,7 +1288,7 @@ export const en: LocaleDict = {
 	'grid.menu.deleteColumn': 'Delete column',
 
 	// ── Plot Grid: empty cell ───────────────────────────────────────────
-	'grid.cell.firstSceneMobile': 'Tap the + to add your first scene',
+	'grid.cell.firstSceneMobile': 'Tap an empty cell, then the +',
 	'grid.cell.firstSceneDesktop': 'Double-click to add your first scene',
 	'grid.cell.addCardTooltip': 'Add a card (or double-click the cell)',
 

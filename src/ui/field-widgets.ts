@@ -1,7 +1,6 @@
 import { App, Component, Menu, MarkdownRenderer, Notice, TFile, setTooltip } from 'obsidian';
 import { CharacterField } from '../grid-data';
 import {
-	FieldType,
 	FieldConfig,
 	formatFieldValue,
 	parseListItems,
@@ -177,7 +176,8 @@ function renderTextareaWidget(container: HTMLElement, field: CharacterField, mod
 	ta.value = field.value;
 	ta.setAttr('aria-label', field.label);
 	const grow = () => {
-		ta.setCssStyles({ height: 'auto' });
+		// Drop the inline height (back to the stylesheet's auto) so scrollHeight measures the text.
+		ta.setCssStyles({ height: '' });
 		ta.style.height = `${Math.min(ta.scrollHeight + 2, 360)}px`;
 	};
 	ta.addEventListener('input', () => { callbacks.onChange(ta.value); grow(); });
@@ -282,7 +282,7 @@ function renderImageWidget(container: HTMLElement, field: CharacterField, mode: 
 	renderPreview();
 
 	const uploadNew = () => {
-		const picker = document.createElement('input');
+		const picker = createEl('input');
 		picker.type = 'file';
 		picker.accept = 'image/*';
 		picker.onchange = async () => {
@@ -544,7 +544,7 @@ function renderColorWidget(container: HTMLElement, field: CharacterField, mode: 
 	// Never appended to the DOM — same trick renderImageWidget uses for its file
 	// input. The swatch button is the visible trigger, styled to match the
 	// sheet's other controls instead of the browser's own color chip.
-	const picker = document.createElement('input');
+	const picker = createEl('input');
 	picker.type = 'color';
 
 	const hexInput = row.createEl('input', { cls: 'sg-sheet-field-input sg-fw-color-hex', type: 'text' });
@@ -828,18 +828,18 @@ function renderMatrixWidget(container: HTMLElement, field: CharacterField, mode:
 
 	const svgNS = 'http://www.w3.org/2000/svg';
 	const buildSvg = (): { svg: SVGSVGElement; point: SVGCircleElement } => {
-		const svg = document.createElementNS(svgNS, 'svg') as SVGSVGElement;
+		const svg = container.doc.createElementNS(svgNS, 'svg');
 		svg.setAttribute('viewBox', '0 0 160 160');
 		svg.classList.add('sg-fw-matrix-svg');
-		const hLine = document.createElementNS(svgNS, 'line');
+		const hLine = container.doc.createElementNS(svgNS, 'line');
 		hLine.setAttribute('x1', '4'); hLine.setAttribute('x2', '156'); hLine.setAttribute('y1', '80'); hLine.setAttribute('y2', '80');
 		hLine.classList.add('sg-fw-matrix-axis');
-		const vLine = document.createElementNS(svgNS, 'line');
+		const vLine = container.doc.createElementNS(svgNS, 'line');
 		vLine.setAttribute('x1', '80'); vLine.setAttribute('x2', '80'); vLine.setAttribute('y1', '4'); vLine.setAttribute('y2', '156');
 		vLine.classList.add('sg-fw-matrix-axis');
 		svg.appendChild(hLine);
 		svg.appendChild(vLine);
-		const point = document.createElementNS(svgNS, 'circle') as SVGCircleElement;
+		const point = container.doc.createElementNS(svgNS, 'circle');
 		point.setAttribute('r', '6');
 		point.classList.add('sg-fw-matrix-point');
 		svg.appendChild(point);

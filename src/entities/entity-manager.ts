@@ -175,7 +175,7 @@ export function entityFolderForGrid(gridFilePath: string | null, kind: EntityKin
 const FACT_LIMIT = 3;
 
 function kindFromFrontmatter(value: unknown): EntityKind | null {
-	return typeof value === 'string' && hasKind(value) ? (value as EntityKind) : null;
+	return typeof value === 'string' && hasKind(value) ? (value) : null;
 }
 
 /**
@@ -278,7 +278,7 @@ function buildEntityInfo(
 		: null;
 
 	const entityId = typeof fm['storygrid-id'] === 'string' && fm['storygrid-id'].length > 0
-		? fm['storygrid-id'] as string
+		? fm['storygrid-id']
 		: null;
 
 	return { file, kind, name: file.basename, facts, imagePath, parent, entityId };
@@ -336,7 +336,6 @@ export async function createEntityFile(
 	aliases?: string[],
 	cleanSlate?: boolean
 ): Promise<TFile> {
-	const spec = getKindSpec(kind);
 	const folder = entityFolderPath(projectRoot, kind);
 	const safeName = name.trim().replace(/[\\/:*?"<>|#^[\]]/g, '-') || localizedDefaultName(kind);
 

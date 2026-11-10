@@ -1,6 +1,7 @@
 import { App, SuggestModal, TFile, Notice } from 'obsidian';
 import { setPhosphorIcon } from '../utils/icons';
 import { ConfirmModal } from './prompt-modal';
+import { runSafely } from '../utils/report-error';
 
 type GridPickerItem = TFile | 'new';
 
@@ -63,15 +64,17 @@ export class GridPickerModal extends SuggestModal<GridPickerItem> {
 				this.app,
 				`Are you sure you want to delete "${item.basename}"?\n\nThe file will be moved to the system trash.`,
 				'Delete',
-				async () => {
-					try {
-						await this.app.fileManager.trashFile(item);
-						new Notice(`"${item.basename}" moved to trash.`);
-						// Force the suggestion list to refresh
-						this.inputEl.dispatchEvent(new Event('input'));
-					} catch (err) {
-						new Notice(`Could not delete grid: ${err instanceof Error ? err.message : String(err)}`);
-					}
+				() => {
+					runSafely((async () => {
+						try {
+							await this.app.fileManager.trashFile(item);
+							new Notice(`"${item.basename}" moved to trash.`);
+							// Force the suggestion list to refresh
+							this.inputEl.dispatchEvent(new Event('input'));
+						} catch (err) {
+							new Notice(`Could not delete grid: ${err instanceof Error ? err.message : String(err)}`);
+						}
+					})());
 				}
 			).open();
 		});

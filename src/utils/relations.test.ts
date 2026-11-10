@@ -553,7 +553,7 @@ describe('relationChoices (editor dropdown)', () => {
 	});
 });
 
-describe('registry v2 — Emma\'s five relationship categories', () => {
+describe('registry v2 — the five relationship categories', () => {
 	const byId = (id: string) => RELATIONSHIP_TYPES.find((rt) => rt.id === id);
 
 	test('every category-1 mutual type is drawn as one labelled line with no arrows', () => {
@@ -565,7 +565,7 @@ describe('registry v2 — Emma\'s five relationship categories', () => {
 		}
 	});
 
-	test('the exact colours and line styles Emma specified', () => {
+	test('the exact colours and line styles of each type', () => {
 		const expected: Record<string, [string, string]> = {
 			'partner':         ['#E91E63', 'solid'],
 			'sibling':         ['#757575', 'solid'],

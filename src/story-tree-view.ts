@@ -8,6 +8,7 @@ import { GROUP_KINDS, RelEntity, RelationshipType, buildCustomRegistry, buildRel
 import { buildTreeData, layoutTreeBlocks, restrictTreeData, computeUnions, coupleStatus, CoupleStatus, initialsOf, isFamilyGroup, lifeFactsFromFields, wrapName, LifeFacts, TreeBlock, TreeMode, TreeData, TreeEdge, TreeNode, TreeNote, TreePosition } from './utils/story-tree';
 import { t } from './i18n';
 import { PHOSPHOR_ICONS, setPhosphorIcon } from './utils/icons';
+import { runSafely } from './utils/report-error';
 import { TreeFocusModal } from './modals/tree-focus-modal';
 import { COACH_MARK_CLASS, showCoachMark } from './ui/coach-mark';
 import { KIND_COLORS, makeSvg, truncate, pointerDist, isTap } from './utils/graph-shared';
@@ -203,7 +204,7 @@ export class StoryTreeController {
 	private panPointerId: number | null = null;
 	private pinchPointerIds: [number, number] | null = null;
 
-	private refreshTimer: ReturnType<typeof setTimeout> | null = null;
+	private refreshTimer: number | null = null;
 
 	constructor(
 		private plugin: StorygridPlugin,
@@ -220,19 +221,22 @@ export class StoryTreeController {
 
 	/** True while this tab is the one drawn into the shared host (the Connections map shares it). */
 	private mounted = false;
+	/** The document the Escape listener was attached to (a popout window has its own), so the remove matches. */
+	private escapeDoc: Document | null = null;
 
 	/** Escape closes the "Focus and display" panel wherever the keyboard focus is (as on the Connections map). */
 	private escapeHandler = (e: KeyboardEvent): void => {
 		// A pop-up on top (the Focus picker) gets Escape first; the panel stays.
-		if (e.key !== 'Escape' || !this.focusPanelOpen || document.querySelector('.modal-container')) return;
+		if (e.key !== 'Escape' || !this.focusPanelOpen || this.host.doc.querySelector('.modal-container')) return;
 		e.stopPropagation();
 		this.setFocusPanelOpen(false);
 	};
 
 	mount(): void {
 		this.mounted = true;
-		document.removeEventListener('keydown', this.escapeHandler);
-		document.addEventListener('keydown', this.escapeHandler);
+		this.escapeDoc?.removeEventListener('keydown', this.escapeHandler);
+		this.escapeDoc = this.host.doc;
+		this.escapeDoc.addEventListener('keydown', this.escapeHandler);
 		this.requestedRoot = this.getScopeRoot();
 		this.scopeRoot = this.requestedRoot;
 		void this.rebuild();
@@ -240,13 +244,14 @@ export class StoryTreeController {
 
 	unmount(): void {
 		this.mounted = false;
-		document.removeEventListener('keydown', this.escapeHandler);
+		this.escapeDoc?.removeEventListener('keydown', this.escapeHandler);
+		this.escapeDoc = null;
 		// Invalidate any rebuild() still awaiting its load — without this, a
 		// rebuild kicked off while this controller was mounted can resolve
 		// AFTER the other controller has since rendered into the same shared
 		// `host` (see SocialMapsView) and clobber it.
 		this._renderGen++;
-		if (this.refreshTimer) { clearTimeout(this.refreshTimer); this.refreshTimer = null; }
+		if (this.refreshTimer) { window.clearTimeout(this.refreshTimer); this.refreshTimer = null; }
 		this.host.empty();
 	}
 
@@ -328,7 +333,7 @@ export class StoryTreeController {
 	recomputeAndRender(): void {
 		this.customTypes = buildCustomRegistry(this.plugin.settings.customRelationshipTypes);
 		const edges = buildRelationGraph(this.entities, this.customTypes);
-		const kindByPath = new Map(this.entities.map((e) => [e.path, e.kind as string]));
+		const kindByPath = new Map(this.entities.map((e) => [e.path, e.kind]));
 		const nameByPath = new Map(this.entities.map((e) => [e.path, e.name]));
 		// Each group gets a colour in name order, so it keeps it between visits.
 		const groups = this.entities.filter((e) => GROUP_KINDS.has(e.kind)).sort((a, b) => a.name.localeCompare(b.name));
@@ -498,10 +503,10 @@ export class StoryTreeController {
 	private maybeShowAddCharacterTip(): void {
 		const id = ADD_CHARACTER_TIP;
 		if (this.plugin.hasSeenCoachMark(id)) return;
-		requestAnimationFrame(() => {
+		window.requestAnimationFrame(() => {
 			const anchor = this.addCharacterBtn;
 			if (!this.mounted || !anchor?.isConnected || anchor.getClientRects().length === 0) return;
-			if (document.querySelector(`.${COACH_MARK_CLASS}`)) return;
+			if (anchor.doc.querySelector(`.${COACH_MARK_CLASS}`)) return;
 			if (!this.plugin.canShowCoachMark(id)) return;
 			this.closeAddCharacterTip = showCoachMark(anchor, t('storyTree.coachMark.addCharacter'), {
 				placement: 'bottom',
@@ -554,10 +559,12 @@ export class StoryTreeController {
 			},
 			{
 				savedTemplates: this.plugin.settings.characterFieldTemplates,
-				onSaveTemplate: async (tpl) => {
-					this.plugin.settings.characterFieldTemplates.push(tpl);
-					await this.plugin.saveSettings();
-					new Notice(t('codex.notice.templateSaved', { name: tpl.name }));
+				onSaveTemplate: (tpl) => {
+					runSafely((async () => {
+						this.plugin.settings.characterFieldTemplates.push(tpl);
+						await this.plugin.saveSettings();
+						new Notice(t('codex.notice.templateSaved', { name: tpl.name }));
+					})());
 				},
 				projectRoot,
 				relationChoices: relationChoices(this.plugin.settings.customRelationshipTypes),
@@ -590,7 +597,7 @@ export class StoryTreeController {
 		this.maybeShowAddCharacterTip();
 		this.renderFocusPanel(root);
 		this.renderFocusBar(root);
-		// Notes strip (renderNotes) is off: Emma — the relationship on the lines is enough.
+		// Notes strip (renderNotes) is off: the relationship on the lines is enough.
 		// The notes are still computed; bring them back as a quieter link later.
 
 		if (this.treeData.nodes.length === 0) {
@@ -648,7 +655,7 @@ export class StoryTreeController {
 		this.renderLegend(root);
 		this.bindSvgEvents(svg, svgWrap);
 
-		requestAnimationFrame(() => {
+		window.requestAnimationFrame(() => {
 			if (this.needsFit && this.fitToView(svg)) {
 				this.needsFit = false;
 			} else {
@@ -937,7 +944,7 @@ export class StoryTreeController {
 	}
 
 	private makeDepthInput(value: number | undefined, onChange: (v: number | undefined) => void): HTMLInputElement {
-		const input = document.createElement('input');
+		const input = createEl('input');
 		input.type = 'number';
 		input.min = '0';
 		input.placeholder = '∞';
@@ -1539,7 +1546,7 @@ export class StoryTreeController {
 		if (node.placeholder) return t('storyTree.unknownParentNote');
 		if (this.mode === 'faction' && GROUP_KINDS.has(node.kind)) {
 			const block = this.blocks.find((b) => b.groupPath === node.path);
-			const kinds = new Map((this.treeData?.nodes ?? []).map((n) => [n.path, n.kind as string]));
+			const kinds = new Map((this.treeData?.nodes ?? []).map((n) => [n.path, n.kind]));
 			const count = block ? block.paths.filter((p) => !GROUP_KINDS.has(kinds.get(p) ?? '')).length : 0;
 			return count === 1 ? t('storyTree.block.person') : t('storyTree.block.people', { count: String(count) });
 		}
@@ -1600,7 +1607,7 @@ export class StoryTreeController {
 				maxY = Math.max(maxY, cy + below);
 			}
 			if (minX === Infinity) continue;
-			// No frame around a group (Emma: framed boxes look ugly) — the spacing between
+			// No frame around a group (boxes add visual noise) — the spacing between
 			// groups and a plain title above each family is the grouping.
 			const top = minY - BLOCK_PAD - (title ? titleH : 0);
 
@@ -1733,7 +1740,7 @@ export class StoryTreeController {
 				this.isPinching = true;
 				this.panning = false;
 				this.panPointerId = null;
-				svg.setCssStyles({ cursor: '' });
+				svg.removeClass('sg-st-svg--panning');
 				this.pinchPointerIds = [firstId, e.pointerId];
 				const a = this.activePointers.get(firstId);
 				const b = this.activePointers.get(e.pointerId);
@@ -1751,7 +1758,7 @@ export class StoryTreeController {
 			this.panClientStart = { x: e.clientX, y: e.clientY };
 			this.panTxStart = this.tx;
 			this.panTyStart = this.ty;
-			svg.setCssStyles({ cursor: 'grabbing' });
+			svg.addClass('sg-st-svg--panning');
 		});
 
 		svg.addEventListener('pointermove', (e: PointerEvent) => {
@@ -1803,7 +1810,7 @@ export class StoryTreeController {
 					this.panClientStart = { x: pt.x, y: pt.y };
 					this.panTxStart = this.tx;
 					this.panTyStart = this.ty;
-					svg.setCssStyles({ cursor: 'grabbing' });
+					svg.addClass('sg-st-svg--panning');
 				}
 			}
 
@@ -1826,7 +1833,7 @@ export class StoryTreeController {
 			if (this.panning && e.pointerId === this.panPointerId) {
 				this.panning = false;
 				this.panPointerId = null;
-				svg.setCssStyles({ cursor: '' });
+				svg.removeClass('sg-st-svg--panning');
 			}
 		};
 
@@ -1838,7 +1845,8 @@ export class StoryTreeController {
 		// in progress). Hover only fades, labels and tags — it changes no view state.
 		svg.addEventListener('pointerover', (e: PointerEvent) => {
 			if (e.pointerType === 'touch' || this.activePointers.size > 0) return;
-			const target = e.target instanceof Element ? e.target : null;
+			const evtTarget = e.target as Node | null;
+			const target = evtTarget?.instanceOf(Element) ? evtTarget : null;
 			const nodeEl = target?.closest('.sg-st-node:not(.is-placeholder)') ?? null;
 			const hitEl = nodeEl ? null : target?.closest('.sg-st-edge-hit') ?? null;
 			this.applyHover(nodeEl?.getAttribute('data-path') ?? null);
@@ -2089,7 +2097,7 @@ export class StorygridStoryTreeView extends ItemView {
 
 	async setState(state: Record<string, unknown>): Promise<void> {
 		// An old saved layout's project is stale: Social Maps follows the Dashboard's project.
-		setTimeout(() => {
+		window.setTimeout(() => {
 			void this.plugin.openSocialMaps('tree');
 			this.leaf.detach();
 		}, 0);

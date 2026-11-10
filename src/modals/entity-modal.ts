@@ -403,7 +403,7 @@ export class EntityModal extends Modal {
 				: e.key === 'ArrowUp' || e.key === 'ArrowLeft' ? -1 : 0;
 			if (!step) return;
 			e.preventDefault();
-			const at = buttons.findIndex((b) => b === document.activeElement);
+			const at = buttons.findIndex((b) => b === list.doc.activeElement);
 			buttons[((at < 0 ? 0 : at) + step + buttons.length) % buttons.length].focus();
 		});
 		const preselected = buttons[remembered === 'clean' ? 1 : 0];
@@ -516,7 +516,7 @@ export class EntityModal extends Modal {
 			const dir = e.key === 'ArrowDown' ? 1 : e.key === 'ArrowUp' ? -1 : 0;
 			if (!dir) return;
 			e.preventDefault();
-			const at = rows.findIndex((r) => r === document.activeElement);
+			const at = rows.findIndex((r) => r === list.doc.activeElement);
 			rows[((at < 0 ? 0 : at) + dir + rows.length) % rows.length].focus();
 		});
 		const focusRow = rows[Math.max(0, options.findIndex((o) => o.id === preselect))];
@@ -756,7 +756,7 @@ export class EntityModal extends Modal {
 	}
 
 	private async pickImage(field: CharacterField | null): Promise<void> {
-		const picker = document.createElement('input');
+		const picker = createEl('input');
 		picker.type = 'file';
 		picker.accept = 'image/*';
 		picker.onchange = async () => {
@@ -1046,7 +1046,7 @@ export class EntityModal extends Modal {
 				e.dataTransfer?.setData('text/plain', field.id);
 				if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
 
-				const ghost = document.createElement('div');
+				const ghost = createDiv();
 				ghost.textContent = field.label || 'Field';
 				Object.assign(ghost.style, {
 					position: 'fixed', top: '-9999px', left: '-9999px',
@@ -1058,10 +1058,10 @@ export class EntityModal extends Modal {
 					fontSize: '12px', fontWeight: '600',
 					pointerEvents: 'none', boxSizing: 'border-box',
 				});
-				document.body.appendChild(ghost);
+				row.doc.body.appendChild(ghost);
 				e.dataTransfer?.setDragImage(ghost, 20, 14);
 				window.setTimeout(() => {
-					if (document.body.contains(ghost)) document.body.removeChild(ghost);
+					if (row.doc.body.contains(ghost)) row.doc.body.removeChild(ghost);
 				}, 0);
 			});
 			handle.addEventListener('dragend', () => {
@@ -1133,7 +1133,7 @@ export class EntityModal extends Modal {
 			const sentenceEl = relAdd.createDiv({ cls: 'sg-sheet-rel-add-sentence' });
 			const previewEl = relAdd.createDiv({ cls: 'sg-sheet-rel-add-preview' });
 			const relWizardHost = row.createDiv({ cls: 'sg-rtw-host' });
-			relWizardHost.setCssStyles({ display: 'none' });
+			relWizardHost.hide();
 
 			// Relationship-type dropdown (custom types first, then common words,
 			// then — when a plugin reference is available — a way to define a new one).
@@ -1201,7 +1201,7 @@ export class EntityModal extends Modal {
 				}, { label: chosen().label, target: other });
 				const self = !!ownPath && this.app.metadataCache.getFirstLinkpathDest(other, ownPath)?.path === ownPath;
 				const kind: unknown = m.file ? this.app.metadataCache.getFileCache(m.file)?.frontmatter?.['storygrid-type'] : null;
-				return { ...m, self, targetKind: typeof kind === 'string' ? kind as EntityKind : null };
+				return { ...m, self, targetKind: typeof kind === 'string' ? kind : null };
 			};
 			// The name the link on the other sheet will carry: this sheet's file name after Save.
 			const savedName = (): string => (this.sheetPath ? this.name.trim() : this.imageTarget()?.sheetName ?? this.name);
@@ -1258,7 +1258,7 @@ export class EntityModal extends Modal {
 			const openTypeWizard = (): void => {
 				if (!this.plugin) return;
 				const plugin = this.plugin;
-				relWizardHost.setCssStyles({ display: '' });
+				relWizardHost.show();
 				mountRelTypeWizard(relWizardHost, plugin, {
 					onCreated: (created) => {
 						this.relationChoices = relationChoices(plugin.settings.customRelationshipTypes);
@@ -1267,13 +1267,13 @@ export class EntityModal extends Modal {
 						wordIndex = idx >= 0 ? idx : 0;
 						relSelect.value = String(wordIndex);
 						relWizardHost.empty();
-						relWizardHost.setCssStyles({ display: 'none' });
+						relWizardHost.hide();
 						setPending(otherName());
 						renderAdder();
 					},
 					onCancel: () => {
 						relWizardHost.empty();
-						relWizardHost.setCssStyles({ display: 'none' });
+						relWizardHost.hide();
 						relSelect.value = String(wordIndex);
 						renderAdder();
 					},
@@ -1406,7 +1406,7 @@ export class EntityModal extends Modal {
 	private addTintItems(menu: Menu, fields: CharacterField[]): void {
 		const choices: Array<{ label: string; tint: FieldTint | null }> = [
 			{ label: 'None', tint: null },
-			...FIELD_TINTS.map((t) => ({ label: t.label, tint: t.id as FieldTint | null })),
+			...FIELD_TINTS.map((t) => ({ label: t.label, tint: t.id })),
 		];
 
 		let nested = false;

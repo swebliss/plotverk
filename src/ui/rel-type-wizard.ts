@@ -55,7 +55,7 @@ export function renderLineStylePicker(
 		const dash = dashArrayFor(style, SAMPLE_WEIGHT);
 		const round = needsRoundCap(style);
 		for (const d of [geom.d, geom.d2].filter((v): v is string => !!v)) {
-			const path = document.createElementNS(SVG_NS, 'path');
+			const path = host.doc.createElementNS(SVG_NS, 'path');
 			path.setAttribute('d', d);
 			path.setAttribute('fill', 'none');
 			path.setAttribute('stroke', color);
@@ -73,7 +73,7 @@ export function renderLineStylePicker(
 			cls: 'sg-rtw-style',
 			attr: { type: 'button', title: label, 'aria-label': label },
 		});
-		const svg = document.createElementNS(SVG_NS, 'svg');
+		const svg = host.doc.createElementNS(SVG_NS, 'svg');
 		svg.setAttribute('width', '40');
 		svg.setAttribute('height', '10');
 		svg.setAttribute('viewBox', '0 0 40 10');
@@ -201,7 +201,7 @@ export function mountRelTypeWizard(host: HTMLElement, plugin: StorygridPlugin, o
 	setPhosphorIcon(moreToggle, 'plus', '+');
 
 	const more = root.createDiv({ cls: 'sg-rtw-more' });
-	more.setCssStyles({ display: 'none' });
+	more.hide();
 
 	const intensityRow = more.createDiv({ cls: 'sg-rtw-row' });
 	intensityRow.createEl('label', { text: t('relWizard.bondStrength'), attr: { for: `sg-rtw-intensity-${uid}` } });

@@ -52,7 +52,7 @@ export class WelcomeView extends ItemView {
 		setIcon(startBtn.createSpan({ cls: 'sg-welcome-btn-icon' }), 'arrow-right');
 		// Always ask "What do you create?" first; the chooser then opens novel-or-series itself.
 		// Reopened later from the Guide, its footer reads "Keep my current setup", which
-		// goes straight on to novel-or-series without touching the mode (Emma, 2026-11-06).
+		// goes straight on to novel-or-series without touching the mode.
 		startBtn.addEventListener('click', () => {
 			this.plugin.startProjectAfterIntent = true;
 			void this.plugin.openIntentChooser();
@@ -94,8 +94,8 @@ export class WelcomeView extends ItemView {
 			setPhosphorIcon(header.createDiv({ cls: 'sg-welcome-module-icon' }), mod.icon, '◆');
 			header.createEl('h3', { text: t(mod.nameKey) });
 
-			// One clean switch in the header (Emma, 2026-11-07) — replaces the orange
-			// "On" badge plus a separate Turn on/off button. Same markup Obsidian's own
+			// One switch in the header rather than an "On" badge plus a separate
+			// Turn on/off button. Same markup Obsidian's own
 			// settings toggles use, so it looks native in every theme.
 			const isOn = this.plugin.isModuleOn(mod.id);
 			const toggle = header.createDiv({ cls: 'checkbox-container sg-welcome-module-switch' });
@@ -156,7 +156,7 @@ export class WelcomeView extends ItemView {
 			setIcon(iconWrap, tip.icon);
 			const text = row.createDiv({ cls: 'sg-welcome-tip-body' });
 			text.createEl('strong', { text: tip.title });
-			text.createEl('span', { text: ' — ' + tip.body });
+			text.createSpan({ text: ' — ' + tip.body });
 		});
 
 		// ── Footer ────────────────────────────────────────────────────────────

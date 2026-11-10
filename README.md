@@ -150,4 +150,11 @@ Plotverk is made by Emma, who streams at [twitch.tv/swebliss](https://twitch.tv/
 
 ## License
 
-[MIT](LICENSE).
+Copyright © 2026 Emma. Plotverk is free to use for any writing, including books you sell.
+
+The code is licensed under the [GNU General Public License v3.0](LICENSE). You may read and
+learn from it, but any software that copies or builds on it must also be released, free and
+open, under the same licence, with credit to the original. It may not be taken into a closed,
+private product.
+
+Versions 1.0.0 to 1.0.2 were released under the MIT licence.

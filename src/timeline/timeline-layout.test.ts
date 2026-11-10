@@ -107,7 +107,7 @@ describe('axisPoint', () => {
 	});
 });
 
-describe('axisRectFromSegment — B3 line-to-rect geometry for gradient-carrying spine/track threads', () => {
+describe('axisRectFromSegment — line-to-rect geometry for gradient-carrying spine/track threads', () => {
 	it('spans the along axis and centers thickness on the across coordinate, horizontal', () => {
 		const seg = { start: { x: 50, y: 0 }, end: { x: 250, y: 0 } };
 		expect(axisRectFromSegment(seg, 10, 'horizontal')).toEqual({ x: 50, y: -5, width: 200, height: 10 });
@@ -210,7 +210,7 @@ describe('computeTimelineLayout — points vs bars', () => {
 	});
 });
 
-describe('computeTimelineLayout — B2.1 per-event size overrides', () => {
+describe('computeTimelineLayout per-event size overrides', () => {
 	it('follows the spec default when an event carries no override', () => {
 		const { markers, bars } = computeTimelineLayout([point('a', 't1', 10), bar('r', 't1', 20, 30)], ['t1'], SPEC);
 		expect(markers[0].radius).toBe(SPEC.markerRadius);

@@ -20,7 +20,7 @@ function parseInert(markup: string): HTMLElement {
 }
 
 function adoptInto(el: HTMLElement, source: HTMLElement): void {
-	el.replaceChildren(...Array.from(source.childNodes, (n) => document.importNode(n, true)));
+	el.replaceChildren(...Array.from(source.childNodes, (n) => el.doc.importNode(n, true)));
 }
 
 /**
