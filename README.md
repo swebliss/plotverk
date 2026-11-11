@@ -2,6 +2,38 @@
 
 **Plan your book, build its world and draft it, all in one place inside Obsidian. Free, private, and shaped the way you work.**
 
+## Screenshots
+
+All pictures show *Saltmarch*, the sample story.
+
+**Plot Grid:** A beautiful outline of your storyline in one clear grid screen.
+
+![Plot grid with scene cards](screenshots/plot-grid.png)
+
+**Story Codex:** Create your world. Every character, place, object and faction in one searchable connected database.
+
+![Story Codex character gallery](screenshots/codex.png)
+
+**Writing:** Write distraction-free in a focused typewriter mode.
+
+![Writers Panel and typewriter writing](screenshots/typewriter.png)
+
+**Family tree:** Automatically drawn from the relationships in your Codex character pages.
+
+![Family tree](screenshots/family-tree.png)
+
+**Connections map:** Get an easy overview of who knows whom, and what ties them together.
+
+![Connections map](screenshots/connections-map.png)
+
+**Timeline:** Your world's history in eras and events with your own colors & choice of icons.
+
+![Timeline with eras and events](screenshots/timeline.png)
+
+**Dashboard:** Keep track of your writing goals and work progress across the whole project.
+
+![Project dashboard](screenshots/dashboard.png)
+
 ## Hi from Emma
 
 Hi! I'm Emma, a budding fantasy writer. I built Plotverk for writers and creators like me who want powerful tools without a steep learning curve.
@@ -56,38 +88,6 @@ Dashboard:
 - We added an optional sample demo called *Saltmarch*, included in the app to show you what an active project could look like. Open it from the Welcome page to look around before you start your own project.
 - We've tried to use bright colors and clear descriptions in simple info boxes, and every tool explains itself the first time you meet it. You can always hover over a field to get an explanation of what it does.
 - It works on your computer and on your phone.
-
-## Screenshots
-
-All pictures show *Saltmarch*, the sample story.
-
-**Plot Grid:** A beautiful outline of your storyline in one clear grid screen.
-
-![Plot grid with scene cards](screenshots/plot-grid.png)
-
-**Story Codex:** Create your world. Every character, place, object and faction in one searchable connected database.
-
-![Story Codex character gallery](screenshots/codex.png)
-
-**Writing:** Write distraction-free in a focused typewriter mode.
-
-![Writers Panel and typewriter writing](screenshots/typewriter.png)
-
-**Family tree:** Automatically drawn from the relationships in your Codex character pages.
-
-![Family tree](screenshots/family-tree.png)
-
-**Connections map:** Get an easy overview of who knows whom, and what ties them together.
-
-![Connections map](screenshots/connections-map.png)
-
-**Timeline:** Your world's history in eras and events with your own colors & choice of icons.
-
-![Timeline with eras and events](screenshots/timeline.png)
-
-**Dashboard:** Keep track of your writing goals and work progress across the whole project.
-
-![Project dashboard](screenshots/dashboard.png)
 
 ## Get started
 
