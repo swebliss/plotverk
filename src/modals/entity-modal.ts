@@ -16,6 +16,7 @@ import {
 import { setPhosphorIcon } from '../utils/icons';
 import { adoptImagesIntoSheetFolder, resolveImageField, saveImageForSheet, SheetImageTarget, targetForSheet } from '../entities/sheet-images';
 import { entityFolderPath, localizedDefaultName } from '../entities/entity-manager';
+import { hasUnsavedSheetWork, sheetFormState } from '../entities/sheet-close-guard';
 import { TextPromptModal, ConfirmModal } from './prompt-modal';
 import { EntityPickerModal } from './entity-picker-modal';
 import {
@@ -148,6 +149,14 @@ export class EntityModal extends Modal {
 	/** Pictures imported while this editor was open: tidied into the new sheet's folder on save, trashed on cancel. */
 	private uploaded: TFile[] = [];
 	private saved = false;
+	/** The writer typed or changed something in the form since it opened. */
+	private touched = false;
+	/** The form as it was first shown (`sheetFormState`); null until then. Closing asks first when it differs. */
+	private formStateAtOpen: string | null = null;
+	/** The writer chose "Discard" in the close guard, so the next close goes through. */
+	private discardConfirmed = false;
+	/** The "Discard this sheet?" bar, while it shows. */
+	private discardBar: HTMLElement | null = null;
 	/** A brand-new, empty sheet: the pop-up first asks "template or clean slate". */
 	private readonly offerStart: boolean;
 	/** Which start the form is built from. */
@@ -233,6 +242,82 @@ export class EntityModal extends Modal {
 		this.namesAtOpen = [entityName, options?.fileBasename ?? '']
 			.map((n) => n.trim().toLowerCase())
 			.filter(Boolean);
+		// On the modal element, not the content: redraws empty the content, so
+		// this one listener covers every field the form ever shows.
+		const markTouched = () => { if (this.step === 'form') this.touched = true; };
+		this.modalEl.addEventListener('input', markTouched);
+		this.modalEl.addEventListener('change', markTouched);
+	}
+
+	/** Everything the writer can change in the form, as one comparable string. */
+	private formState(): string {
+		return sheetFormState({
+			name: this.name,
+			aliases: this.aliases,
+			fields: this.fields,
+			pendingRelations: [...this.pendingRelations.values()],
+		});
+	}
+
+	private hasUnsavedWork(): boolean {
+		return hasUnsavedSheetWork({
+			touched: this.touched,
+			uploadedCount: this.uploaded.length,
+			stateNow: this.formState(),
+			stateAtOpen: this.formStateAtOpen,
+		});
+	}
+
+	/**
+	 * Every way out of the pop-up comes through here — Cancel, ×, Escape, a
+	 * click on the dimmed background. With unsaved work it asks first, inside
+	 * the pop-up, instead of closing.
+	 */
+	close(): void {
+		if (!this.saved && !this.discardConfirmed && this.hasUnsavedWork()) {
+			this.showDiscardGuard();
+			return;
+		}
+		super.close();
+	}
+
+	/** "Discard this character? Your changes will be lost." — a bar above the buttons, never a second pop-up. */
+	private showDiscardGuard(): void {
+		if (this.discardBar?.isConnected) {
+			this.discardBar.querySelector<HTMLButtonElement>('.sg-sheet-btn--primary')?.focus();
+			return;
+		}
+		const singular = this.look().singular.toLowerCase();
+		const bar = this.contentEl.createDiv({ cls: 'sg-sheet-discard', attr: { role: 'alert' } });
+		bar.createDiv({
+			cls: 'sg-sheet-discard-text',
+			text: this.isNewSheet()
+				? `Discard this ${singular}? Your changes will be lost.`
+				: `Discard your changes? The ${singular} stays as it was last saved.`,
+		});
+		const keep = bar.createEl('button', {
+			cls: 'sg-sheet-btn sg-sheet-btn--primary',
+			text: 'Keep editing',
+			attr: { type: 'button' },
+		});
+		keep.addEventListener('click', () => {
+			bar.remove();
+			this.discardBar = null;
+		});
+		const discard = bar.createEl('button', {
+			cls: 'sg-sheet-btn sg-sheet-discard-btn',
+			text: 'Discard',
+			attr: { type: 'button' },
+		});
+		discard.addEventListener('click', () => {
+			this.discardConfirmed = true;
+			this.close();
+		});
+		// Just above the buttons, where the writer's eye already is.
+		const footer = this.contentEl.querySelector('.sg-sheet-footer');
+		if (footer) this.contentEl.insertBefore(bar, footer);
+		this.discardBar = bar;
+		keep.focus();
 	}
 
 	onOpen(): void {
@@ -279,6 +364,9 @@ export class EntityModal extends Modal {
 
 		this.renderRail(rail, band);
 		this.renderSections(main);
+		// What closing compares against: the form as the writer first sees it
+		// (taken after drawing, so anything a widget fills in counts as "opened").
+		if (this.formStateAtOpen === null) this.formStateAtOpen = this.formState();
 
 		// ── Footer ─────────────────────────────────────────────────────────────
 		const footer = contentEl.createDiv({ cls: 'sg-sheet-footer' });
@@ -348,6 +436,7 @@ export class EntityModal extends Modal {
 
 	private rerender(): void {
 		this.contentEl.empty();
+		this.discardBar = null;
 		this.contentEl.removeClass('sg-sheet', `sg-sheet--${this.kind}`);
 		this.onOpen();
 	}
@@ -577,6 +666,9 @@ export class EntityModal extends Modal {
 	 * untouched fields are dropped.
 	 */
 	private applyStart(mode: StartMode, templateId: string): void {
+		// Only switching start, nothing typed yet: the new start's form is the
+		// new "as opened", so closing it right away doesn't ask.
+		if (!this.touched) this.formStateAtOpen = null;
 		// A pre-filled value the writer cleared stays cleared through every switch.
 		for (const f of this.fields) {
 			if (f.label in this.startValues && this.startFieldIds.has(f.id) && !f.value.trim()) delete this.startValues[f.label];

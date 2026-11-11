@@ -9336,6 +9336,22 @@ body {
 }
 .sg-sheet-footer-spacer { flex: 1; }
 
+/* "Discard this character?" — asked inside the pop-up, above its buttons. */
+.sg-sheet-discard {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 10px 24px;
+	border-top: 1px solid var(--background-modifier-border);
+	background: color-mix(in srgb, var(--color-orange) 12%, var(--background-primary));
+	color: var(--text-normal);
+	font-size: 13px;
+	flex-shrink: 0;
+}
+.sg-sheet-discard-text { flex: 1; }
+.sg-sheet-btn.sg-sheet-discard-btn { color: var(--text-error); }
+.sg-sheet-btn.sg-sheet-discard-btn:hover { border-color: var(--text-error); }
+
 .sg-sheet-btn {
 	height: 32px;
 	padding: 0 14px;
@@ -9396,6 +9412,9 @@ body {
 	.sg-sheet-main { overflow: visible; padding: 14px 16px 20px; }
 	.sg-sheet-band { padding: 14px 16px 12px; }
 	.sg-sheet-footer { padding: 10px 16px; }
+	.sg-sheet-discard { flex-wrap: wrap; padding: 10px 16px; }
+	.sg-sheet-discard-text { flex-basis: 100%; }
+	.sg-sheet-discard .sg-sheet-btn { flex: 1; height: 44px; }
 }
 
 /* ── Dark theme ── */
