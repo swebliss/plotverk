@@ -1,160 +1,115 @@
 # Plotverk
 
-**Plan a novel in Obsidian — plot grid, story bible, outline, and manuscript export, all in your own vault.**
+**Plan your book, build its world and draft it, all in one place inside Obsidian. Free, private, and shaped the way you work.**
 
-Plotverk turns Obsidian into a writing studio. Lay your story out on a visual plot grid,
-build a searchable story bible for your characters and worlds, write in a distraction-free
-panel, and export a finished manuscript. Every character sheet and scene is an ordinary
-Markdown note in your vault — nothing is locked in a database, and nothing leaves your device.
+## Hi from Emma
 
-> *Plotverk* (PLOT-verk) — from the Swedish **verk**: a work, a body of work. As in *samlade
-> verk*, collected works. It's a place to build yours.
+Hi! I'm Emma, a budding fantasy writer. I built Plotverk for writers and creators like me who want powerful tools without a steep learning curve.
+
+Most writing setups mean installing one plugin for outlining, another for characters, another for word counts, and learning each one separately. I wanted my favorite tools in one place, made to automatically work together, and simple enough that I could just start writing.
+
+Are you a new writer? Plotverk guides you from first idea to finished manuscript with a prose coach and easy-to-use templates, both for your worldbuilding and for planning your story in the Plot Grid.
+
+Experienced author? Focus on what matters! Use a focused typewriter mode and keep your world bible open beside your draft without having to break your workflow.
+
+## Only what you need
+
+Plotverk is built from modules, and you only have to pick the ones you need. Nothing clutters your screen that you didn't ask for.
+
+- **Switch on what you'll use.** Love the Plot Grid but never need a timeline? Leave the timeline off.
+- **Change your mind any time.** Turn on a module in the settings when you need it, and off again when you don't.
+- **Nothing gets lost.** Switching a module off only hides it. Your notes stay exactly where they are.
+- **A head start if you want one.** The first time you open Plotverk, it asks what you write and switches on the tools that fit. Or skip the questions, and everything stays on.
+
+## Plotverk Features - Room to be creative
+
+- **The Plot Grid.** Think of index cards on a wall, just tidier. It helps you plan and track all the parts of your story and you decide what the rows and columns stand for. A column or row can be acts and chapters, or character arcs and plotlines. Your whole book and series overview on one screen.
+- **Scene cards.** You can link each scene to its own card. Jot down what happens, who's in it and how far along it is, then drag it to wherever it belongs. Link the card to the scene you're writing, and its first lines show up right on the card, so your plan never drifts away from your draft.
+- **The Codex.** A home for your world & everything you invent. Every character, place, faction and magic system gets its own page and everything is automatically connected to the other modules you use. Use Plotverk's helpful pre-made templates with good questions to answer, or create a custom blank sheet or template to save for later use.
+- **Dashboard & Progress Helper.** Keep track of your writing goals and task list, get a clear overview of your drafts, run writing sprints and see whether your characters are getting a balanced and fair share of the story and more.
+- **Relationship Connections Map.** Watch your world cast come together on a relationship map of who loves, hates, serves or betrays whom. Add your own types of relationships once and it appears on both characters' pages. The map is drawn automatically from the relationships you add in your Codex character pages.
+- **Family tree view.** View your characters or factions in clear family trees connected to your Codex. What you change in your Codex shows up in the tree for an easy overview of your world.
+- **Timeline.** Create a timeline of your story and world's history using your own color choices and icons and watch it grow with your Codex.
+- **Writing.** Your chapters sit in a clear panel beside your draft, in order and easy to rearrange. Typewriter mode clears the screen and helps you focus while keeping the line you're typing in the middle, and a gentle prose coach can point out things worth a second look when you revise. Tip: typewriter mode can be customized to your liking.
+- **Finishing.** When the draft is done, Plotverk gathers your chapters into one manuscript: a Word document, an e-book (EPUB), Markdown, or a screenplay.
+
+## Shape the app your way
+Plotverk focuses on creativity and customization and lets you decide how much guidance you need, or if you want to start with a blank slate.
+
+Here are some of the ways Plotverk lets you customize it:
+
+The Grid:
+- Name your own rows and columns, color your cards and grid in beautiful shades and gradients, and resize anything to your liking.
+- Start to plan your project with a guided "beat sheet" for writers like Save the Cat or the Hero's Journey, or from a blank grid, and save your own layouts as templates.
+
+The Codex:
+- Create and reuse your own templates in the Codex (World bible) with many different field types to choose from or use the helpful built in templates based on the works of famous authors and industry standards.
+
+Social Maps:
+- Make your own relationship types for your social maps in the settings, with your own colors and looks.
+
+Dashboard:
+- Never feel overwhelmed. Rearrange or hide the panels on your Dashboard, so it shows only what you truly care about.
+
+## Easy Demo to help you understand how the app works from day one
+
+- We added an optional sample demo called *Saltmarch*, included in the app to show you what an active project could look like. Open it from the Welcome page to look around before you start your own project.
+- We've tried to use bright colors and clear descriptions in simple info boxes, and every tool explains itself the first time you meet it. You can always hover over a field to get an explanation of what it does.
+- It works on your computer and on your phone.
 
 ## Screenshots
 
-All pictures show *Saltmarch*, the sample story that comes with Plotverk — open it from the
-Welcome page with **Look at a sample demo first**.
+All pictures show *Saltmarch*, the sample story.
 
-**Plot grid** — scenes laid out against beats, characters and plotlines.
+**Plot Grid:** A beautiful outline of your storyline in one clear grid screen.
 
 ![Plot grid with scene cards](screenshots/plot-grid.png)
 
-**Story Codex** — every character, place and faction in one searchable gallery.
+**Story Codex:** Create your world. Every character, place, object and faction in one searchable connected database.
 
 ![Story Codex character gallery](screenshots/codex.png)
 
-**Writing** — your chapters in order beside a calm, distraction-free page.
+**Writing:** Write distraction-free in a focused typewriter mode.
 
 ![Writers Panel and typewriter writing](screenshots/typewriter.png)
 
-**Family tree** — drawn from the relationships on your character sheets.
+**Family tree:** Automatically drawn from the relationships in your Codex character pages.
 
 ![Family tree](screenshots/family-tree.png)
 
-**Connections map** — who knows whom, who hates whom, and what ties them together.
+**Connections map:** Get an easy overview of who knows whom, and what ties them together.
 
 ![Connections map](screenshots/connections-map.png)
 
-**Timeline** — your world's history in eras and events.
+**Timeline:** Your world's history in eras and events with your own colors & choice of icons.
 
 ![Timeline with eras and events](screenshots/timeline.png)
 
-**Dashboard** — word goals, progress and a look across the whole book.
+**Dashboard:** Keep track of your writing goals and work progress across the whole project.
 
 ![Project dashboard](screenshots/dashboard.png)
 
-## Plan your plot on a grid
+## Get started
 
-A plot grid is a spreadsheet for your story. Rows and columns are yours to name — acts against
-subplots, chapters against characters, whatever fits the book — and every cell can hold a scene card.
+1. In Obsidian, go to **Settings → Community plugins → Browse**, search for **Plotverk**, then click **Install** and **Enable**.
+2. Answer the two welcome questions, or skip them.
+3. Optional: click **Look at a sample demo first** to explore *Saltmarch*,
+4. or click **Start your first project** to begin your own.
 
-- Start from a built-in beat sheet: Hero's Journey, Save the Cat, Three-Act, Five-Act,
-  Seven-Point, Romance Beats, Character Arc, or a Horror beat sheet. Or start with a blank grid.
-- Cards carry a title, synopsis, status (idea → outline → draft → written → revised → final),
-  colour, tags, POV character, location, and the characters in the scene.
-- Link a card to a scene note and the first lines of that note preview right on the card face,
-  so the grid always shows what you actually wrote.
-- Drag cards between cells, resize rows and columns, zoom out to see the whole book, and save
-  any layout you like as your own reusable template.
+Requires Obsidian 1.7.2 or later.
 
-## Build a story bible that stays organised
-
-The **Story Codex** is one searchable home for everything you invent: characters, locations,
-factions, systems, items, and scenes.
-
-- Guided sheets ask real craft questions instead of leaving you a blank page.
-- Ready-made starting points for magic systems, governments, religions, and economies.
-- Build your own fields — text, lists, dates, numbers, images — and save them as templates you
-  reuse for every character.
-- Search and filter a card gallery of everything you've written, with portraits and key facts
-  pulled straight from each sheet.
-- Character sheets show which scenes that character appears in, kept up to date automatically.
-
-## Write, then compile the manuscript
-
-The **Writers Panel** sits beside your draft: a nestable outline of your chapters and scenes
-that you can drag to reorder or nest, plus quick access to your notes, goals, and to-dos.
-
-- Write mode collapses the sidebars and turns on typewriter scrolling so the line you're typing
-  stays centred.
-- Scene snapshots save versions of a scene as you revise, so a rewrite is never a one-way door.
-- Compile builds the whole book from your outline: Word document (.docx), Markdown, EPUB for
-  e-readers, or Fountain screenplay format for a feature or a TV teleplay.
-- Manuscript presets handle the fiddly parts — title page, standard formatting, chapter
-  headings, scene dividers, and a THE END mark — and you can adjust every step.
-
-## See how your story connects
-
-- **Social Maps** draw your cast as a picture: who loves, betrays, serves, or is related to
-  whom. Define your own relationship types with their own colours, and the link is written into
-  both characters' sheets for you.
-- **Story Tree** lays out family lines and faction hierarchies — generations, marriages,
-  siblings, and who's no longer living.
-- **Timeline** places events, births and deaths from your sheets on a timeline you can pan
-  and zoom, with plotlines as separate lanes.
-
-## Keep momentum
-
-- Per-project to-do lists with subtasks, due dates, priorities, and drag-to-reorder. Attach a
-  task to the scene or character it's about and it follows that note if you rename it.
-- A project dashboard with word goals, a sprint timer, an activity chart, a scene-status
-  overview, and a character-balance view showing who's dominating the page count.
-- Rearrange or hide any dashboard panel so it shows only what you care about.
-- An activity log of your writing sessions and finished sprints.
-
-## Getting started
-
-1. In Obsidian, open **Settings → Community plugins → Browse**, search for **Plotverk**,
-   then click **Install** and **Enable**.
-2. A welcome screen asks what you write, so Plotverk can switch on the tools that fit. You can
-   skip it; everything then stays on.
-3. Choose a series or a single novel, give it a name, and pick a starting template. You'll get
-   a project folder with sub-folders for your plot grid, your scenes, and your characters and
-   places, with your first plot grid open and ready.
-4. Double-click any empty cell to add your first scene card.
-
-Requires Obsidian 1.7.2 or later. Works on desktop and on the Obsidian mobile apps. The
-interface is in English, with Spanish and French translations in progress.
-
-<details>
-<summary>Installing manually instead</summary>
-
-Download `main.js`, `manifest.json`, and `styles.css` from the latest release, put all three
-into the `.obsidian/plugins/plotverk/` folder inside your vault, then reload Obsidian and enable
-Plotverk under **Settings → Community plugins**.
-
-</details>
-
-## Free
-
-Plotverk is free. Everything described above works without paying: no trial, no account,
-nothing that expires. Plotverk Pro is coming soon.
+To install by hand instead, download `main.js`, `manifest.json` and `styles.css` from the latest release, put them in the `.obsidian/plugins/plotverk/` folder inside your vault, then reload Obsidian and enable Plotverk.
 
 ## Your writing stays yours
 
-**Plotverk makes no network calls at all.** Nothing is uploaded, no account is required, no
-sign-in exists, and the plugin works entirely offline. Your writing stays in your vault, on your
-own machine.
-
-Every sheet Plotverk creates is a plain Markdown note with ordinary frontmatter, and every grid
-is a small JSON file in your vault. You can read them, edit them by hand, sync them however you
-already sync, back them up, or walk away and take all of it with you.
+Plotverk is free, needs no account and makes no network calls, so it works completely offline within your own privacy. Every page it creates is an ordinary Markdown note in your own vault. You can read it, edit it, sync it and back it up as you like.
 
 ## Feedback and bugs
 
-Found something broken, or want a feature? Open an issue on the
-[Issues](../../issues) tab of this repository — please say which Obsidian version you're on and
-whether you're on desktop or mobile.
-
-Plotverk is made by Emma, who streams at [twitch.tv/swebliss](https://twitch.tv/swebliss).
+Plotverk is a passion project by Emma Bliss and a work in progress! Found something broken, or missing a feature? Open an issue on GitHub and tell me which Obsidian version you're on and whether you're on a computer or phone. Plotverk is growing, and your feedback is welcome and helps shape what comes next.
 
 ## License
 
-Copyright © 2026 Emma. Plotverk is free to use for any writing, including books you sell.
+Copyright © 2026 Swebliss, Emma Bliss. Plotverk is free to use for any writing, including books you sell.
 
-The code is licensed under the [GNU General Public License v3.0](LICENSE). You may read and
-learn from it, but any software that copies or builds on it must also be released, free and
-open, under the same licence, with credit to the original. It may not be taken into a closed,
-private product.
-
-Versions 1.0.0 to 1.0.2 were released under the MIT licence.
+The code is licensed under the GNU General Public License v3.0. You can read it and learn from it, but anything that copies or builds on it must also be free and open under the same license, with credit to the original.
