@@ -189,6 +189,12 @@ export class FakeVault {
 			if (c === undefined) throw new Error('File not found.');
 			return c;
 		},
+		/** Permanent file delete, like Vault.delete: the index forgets the file at once. */
+		remove: async (path: string): Promise<void> => {
+			if (!this.files.delete(path)) throw new Error('File not found.');
+			this.nodes.delete(path);
+			this.deleted.push(path);
+		},
 		/** Non-recursive only, like a plain OS rmdir: refuses a folder holding anything, hidden files included. */
 		rmdir: async (path: string, recursive: boolean): Promise<void> => {
 			if (recursive) throw new Error('FakeVault: recursive rmdir not supported.');

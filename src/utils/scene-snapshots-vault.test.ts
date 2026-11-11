@@ -94,6 +94,9 @@ describe('scene snapshots in the visible safety folder', () => {
 		expect(list.filter((s) => !s.legacy)).toHaveLength(20);
 		expect(list.filter((s) => s.legacy)).toHaveLength(1);
 		expect(v.files.get(`${OLD_DIR}/2026-08-01T10-00-00-000Z.daily.md`)).toBe('old hidden');
+		// The three oldest went for good, not to the trash.
+		expect(v.deleted.filter((p) => p.startsWith(NEW_DIR))).toHaveLength(3);
+		expect(v.trashed).toHaveLength(0);
 	});
 
 	it('lists and restores an old hidden snapshot', async () => {

@@ -1,4 +1,4 @@
-import { App, Notice, PluginSettingTab, Setting } from 'obsidian';
+import { App, Notice, PluginSettingTab, Setting, type SettingDefinitionItem } from 'obsidian';
 import { runSafely } from '../utils/report-error';
 import type StorygridPlugin from '../main';
 import { getAllTemplates } from '../templates/story-templates';
@@ -50,6 +50,16 @@ export class StorygridSettingsTab extends PluginSettingTab {
 	constructor(app: App, plugin: StorygridPlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
+	}
+
+	/**
+	 * Plotverk draws its own settings page (section nav, folding sections, palette and
+	 * template editors) in display(). An empty list is Obsidian's documented signal to
+	 * keep using display() on 1.13+, so the page looks the same on every version.
+	 * Declarative definitions would also bring Obsidian's settings search to these settings.
+	 */
+	getSettingDefinitions(): SettingDefinitionItem[] {
+		return [];
 	}
 
 	display(): void {

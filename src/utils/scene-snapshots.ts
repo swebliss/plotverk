@@ -88,7 +88,8 @@ async function pruneOldSnapshots(app: App, scenePath: string): Promise<void> {
 	for (const s of current.slice(MAX_SNAPSHOTS_PER_SCENE)) {
 		try {
 			// Permanent on purpose: rolling snapshots Plotverk made itself, newer ones exist.
-			if (s.file) await app.vault.delete(s.file);
+			// Removed through the adapter, which the vault index follows like any other delete.
+			await app.vault.adapter.remove(s.path);
 		} catch {
 			// Best-effort cleanup; a stray old snapshot is harmless.
 		}

@@ -73,7 +73,8 @@ async function pruneOldBackups(app: App, filePath: string): Promise<void> {
 		try {
 			// Permanent on purpose: these are rolling copies Plotverk made itself and newer
 			// ones always exist; sending each to the trash would fill it during normal editing.
-			if (backup.file) await app.vault.delete(backup.file);
+			// Removed through the adapter, which the vault index follows like any other delete.
+			await app.vault.adapter.remove(backup.path);
 		} catch {
 			// Best-effort cleanup; a stray old backup is harmless.
 		}

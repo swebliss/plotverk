@@ -37,6 +37,9 @@ describe('grid backups in the visible safety folder', () => {
 		const left = [...v.files.keys()].filter((p) => p.startsWith(NEW_DIR));
 		expect(left).toHaveLength(3);
 		expect(left.map((p) => v.files.get(p)).sort()).toEqual(['{"v":3}', '{"v":4}', '{"v":5}']);
+		// The two oldest went for good, not to the trash.
+		expect(v.deleted.filter((p) => p.startsWith(NEW_DIR))).toHaveLength(2);
+		expect(v.trashed).toHaveLength(0);
 	});
 
 	it('never prunes, rewrites or deletes the old hidden backups', async () => {

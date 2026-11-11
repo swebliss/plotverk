@@ -1041,19 +1041,26 @@ tr .sg-row-header {
 	margin: 0 0 2px 0;
 }
 
-/* Links — softer accent, subtle underline instead of hard orange */
+/* Links — softer accent, subtle underline instead of hard orange.
+   The underline takes its colour from `color` while the glyphs are painted
+   with the fill colour: the text-decoration-color longhand is rejected by the
+   directory's browser-support check, this pair is not. */
 .sg-card-synopsis a,
 .sg-card-notes a {
-	color: var(--interactive-accent);
+	color: color-mix(in srgb, var(--interactive-accent) 60%, transparent);
+	-webkit-text-fill-color: var(--interactive-accent);
 	text-decoration: underline;
-	text-decoration-color: color-mix(in srgb, var(--interactive-accent) 60%, transparent);
 	text-underline-offset: 2px;
 	cursor: pointer;
 }
 .sg-card-synopsis a:hover,
 .sg-card-notes a:hover {
-	text-decoration-color: var(--interactive-accent);
+	color: var(--interactive-accent);
 	filter: brightness(0.85);
+}
+/* Web links keep Obsidian's own hover colour for the text. */
+.sg-card-synopsis a.external-link:hover {
+	-webkit-text-fill-color: var(--link-external-color-hover);
 }
 
 .sg-card--expanded .sg-card-synopsis {
@@ -1110,7 +1117,7 @@ tr .sg-row-header {
 }
 .sg-card-notes mark { background: rgba(255, 220, 0, 0.35); color: inherit; border-radius: 2px; padding: 0 2px; }
 .theme-dark .sg-card-notes mark { background: rgba(255, 220, 0, 0.2); }
-.sg-card-notes a { color: var(--link-color); text-decoration: none; }
+.sg-card-notes a { color: var(--link-color); -webkit-text-fill-color: var(--link-color); text-decoration: none; }
 .sg-card-notes a:hover { text-decoration: underline; }
 
 .sg-card-notes--loading {
@@ -7157,15 +7164,15 @@ body {
 }
 /* Sentence-rhythm run (Pro): a whole stretch of sentences, so the same amber
    as an underline instead of a tint — a paragraph never glows. A word mark
-   inside it keeps its own tint. The colour token switches with the theme. */
+   inside it keeps its own tint. The colour token switches with the theme.
+   The dots are a repeating gradient along the bottom edge (2px dot, 2px gap)
+   rather than a dotted text-decoration, whose longhands the directory's
+   browser-support check rejects. Inline padding pushes the line 2px below
+   the descenders without touching the line height. */
 .sg-prose-mark.sg-prose-mark--run {
-	background-color: transparent;
+	background: linear-gradient(to right, var(--sg-prose-accent) 50%, transparent 50%) 0 100% / 4px 2px repeat-x;
 	border-radius: 0;
-	text-decoration-line: underline;
-	text-decoration-style: dotted;
-	text-decoration-color: var(--sg-prose-accent);
-	text-decoration-thickness: 2px;
-	text-underline-offset: 4px;
+	padding-bottom: 2px;
 }
 
 .sg-prose-card {
@@ -7230,21 +7237,23 @@ body {
 	flex-wrap: wrap;
 	gap: 14px;
 }
+/* Faint underline: `color` drives the line, the fill colour paints the text
+   (see the card-link rule for why). */
 .sg-prose-card button.sg-prose-act {
 	padding: 0;
 	height: auto;
 	background: transparent;
 	box-shadow: none;
 	border: none;
-	color: var(--text-muted);
+	color: var(--background-modifier-border);
+	-webkit-text-fill-color: var(--text-muted);
 	font-size: var(--font-ui-smaller);
 	text-decoration: underline;
-	text-decoration-color: var(--background-modifier-border);
 	text-underline-offset: 3px;
 	cursor: pointer;
 }
 .sg-prose-card button.sg-prose-act:hover {
-	color: var(--text-normal);
+	-webkit-text-fill-color: var(--text-normal);
 }
 /* Touch: every tap target at least 44px tall (iOS HIG). */
 .sg-prose-card--tap button.sg-prose-chip,
@@ -9980,15 +9989,17 @@ body {
 	flex-wrap: wrap;
 	gap: 14px;
 }
+/* Faint underline: `color` drives the line, the fill colour paints the text
+   (see the card-link rule for why). */
 .sg-outline-coach button.sg-outline-coach-act {
 	font-size: var(--font-ui-smaller);
-	color: var(--text-muted);
+	color: var(--background-modifier-border);
+	-webkit-text-fill-color: var(--text-muted);
 	text-decoration: underline;
-	text-decoration-color: var(--background-modifier-border);
 	text-underline-offset: 3px;
 }
 .sg-outline-coach button.sg-outline-coach-act:hover {
-	color: var(--text-normal);
+	-webkit-text-fill-color: var(--text-normal);
 }
 .sg-outline-coach button.sg-outline-coach-fold {
 	display: flex;
@@ -10496,12 +10507,30 @@ body {
 }
 /* Fields that carry a craft prompt expose it on hover. A dotted underline that
    only appears on hover keeps the affordance discoverable without adding an
-   icon to every single row. */
-.sg-detail-fact-key[title] { cursor: help; }
+   icon to every single row. The dots are a 1px repeating gradient on a pseudo
+   element, since the dotted text-decoration longhands are rejected by the
+   directory's browser-support check. The label is a one-column grid so that
+   the pseudo element, placed in the text's grid cell, spans the text's own
+   width instead of the label's 62px minimum. */
+.sg-detail-fact-key[title] {
+	cursor: help;
+	position: relative;
+	display: grid;
+	justify-content: start;
+	align-content: start;
+}
 .sg-detail-fact-key[title]:hover {
 	color: var(--sg-sheet-accent);
-	text-decoration: underline dotted from-font;
-	text-underline-offset: 2px;
+}
+.sg-detail-fact-key[title]:hover::after {
+	content: '';
+	position: absolute;
+	grid-area: 1 / 1 / 2 / 2;
+	left: 0;
+	right: 0;
+	bottom: 2px;
+	height: 1px;
+	background: linear-gradient(to right, currentColor 50%, transparent 50%) 0 0 / 2px 1px repeat-x;
 }
 .sg-detail-fact-val {
 	flex: 1;
@@ -11861,6 +11890,8 @@ button.sg-todo-add-btn.sg-todo-add-btn {
 	font-size: var(--font-ui-smaller);
 	color: var(--text-muted);
 }
+/* Faint underline: `color` drives the line, the fill colour paints the text
+   (see the card-link rule for why). */
 .sg-dash-section button.sg-dash-quiet-again {
 	min-height: 44px;
 	height: auto;
@@ -11868,15 +11899,15 @@ button.sg-todo-add-btn.sg-todo-add-btn {
 	border: none;
 	background: transparent;
 	box-shadow: none;
-	color: var(--text-muted);
+	color: var(--background-modifier-border);
+	-webkit-text-fill-color: var(--text-muted);
 	font-size: var(--font-ui-smaller);
 	text-decoration: underline;
-	text-decoration-color: var(--background-modifier-border);
 	text-underline-offset: 3px;
 	cursor: pointer;
 }
 .sg-dash-section button.sg-dash-quiet-again:hover {
-	color: var(--text-normal);
+	-webkit-text-fill-color: var(--text-normal);
 }
 
 /* Dashboard — Crutch words across the book (Pro). One row per habit: word,
