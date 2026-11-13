@@ -75,8 +75,8 @@ export interface EntityKindSpec {
 	suggestedFields?: EntityFieldSpec[];
 	/**
 	 * The fields a clean slate of this kind starts with, when the kind needs
-	 * more than a picture (an Event needs its dates to sit on the Timeline).
-	 * Unset: the picture field only — see cleanSlateFieldSpecs().
+	 * more than one big text box (an Event needs its dates to sit on the Timeline).
+	 * Unset: one Notes text box only — see cleanSlateFieldSpecs().
 	 */
 	cleanSlateFields?: EntityFieldSpec[];
 	/**
@@ -796,6 +796,9 @@ export function fieldCatalogForKind(kind: EntityKind, usedLabels: string[] = [])
 }
 
 /** Look up the guided prompt for a field label within a kind (including presets and suggestions). */
+/** A clean slate's one text box, for kinds whose template has no Notes of its own (see cleanSlateFieldSpecs). */
+export const CLEAN_SLATE_NOTES: EntityFieldSpec = { label: 'Notes', type: 'textarea', prompt: 'Write anything here…' };
+
 export function getFieldPrompt(kind: EntityKind, label: string): string {
 	const spec = getKindSpec(kind);
 	const all = [
@@ -804,6 +807,7 @@ export function getFieldPrompt(kind: EntityKind, label: string): string {
 		...(spec.suggestedFields ?? []),
 		...(spec.cleanSlateFields ?? []),
 		...(spec.extraFieldSets ?? []).flat(),
+		CLEAN_SLATE_NOTES,
 	];
 	return all.find((fs) => fs.label === label)?.prompt ?? '';
 }

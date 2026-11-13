@@ -16,7 +16,8 @@ import { ConfirmModal } from './modals/prompt-modal';
 import { SnapshotBrowserModal } from './modals/snapshot-browser-modal';
 import { writeGridBackup, restoreNewestValidBackup } from './utils/grid-backup';
 import { getDocPreview } from './utils/doc-preview';
-import { runSafely } from './utils/report-error';
+import { reportError, runSafely } from './utils/report-error';
+import { applyCardTagChanges, cardTagChanges, normalizeCardTag } from './utils/card-tag-sync';
 import { getContrastColor } from './utils/color-contrast';
 import { axisLineColor } from './utils/axis-line';
 import { markdownToHtml, htmlToMarkdown } from './utils/rich-text';
@@ -122,8 +123,6 @@ export class StorygridView extends ItemView {
 	private _draftBaselines = new WeakMap<SceneCard, SceneCard>();
 
 	// Last tag-sync signature — skips linked-doc writes when tags are unchanged
-	private _lastTagSyncKey: string = '';
-	private _lastSynopsisSyncKey: string = '';
 
 	// Word counts of linked docs, keyed by path; invalidated by mtime
 	private _wordCountCache: Map<string, { mtime: number; words: number }> = new Map();
@@ -208,6 +207,16 @@ export class StorygridView extends ItemView {
 			runSafely(this.loadGrid(this.filePath));
 		}));
 
+		// Quitting Obsidian, or the phone sending it to the background, never waits
+		// for the autosave timers: write whatever is still waiting right away.
+		// Obsidian waits for the quit save only when it is handed over as a task.
+		this.registerEvent(this.app.workspace.on('quit', (tasks) => {
+			tasks.addPromise(this.flushWaitingNow().catch(reportError));
+		}));
+		this.registerDomEvent(this.containerEl.doc, 'visibilitychange', () => {
+			if (this.containerEl.doc.visibilityState === 'hidden') runSafely(this.flushWaitingNow());
+		});
+
 		// Re-render default-colored cards when the Obsidian theme switches (light ↔ dark only)
 		const themeBody = this.containerEl.doc.body;
 		let _lastTheme = themeBody.classList.contains('theme-dark') ? 'dark' : 'light';
@@ -274,12 +283,7 @@ export class StorygridView extends ItemView {
 	// Safety: restore the body cursor in case a resize drag was interrupted
 		this.containerEl.doc.body.removeClass('sg-body-grabbing', 'sg-body-col-resize', 'sg-body-row-resize');
 		// Flush any pending panel edits before the final save
-		this.cancelDraftTimer();
-		if (this._panelDraft) {
-			this.commitDraft(this._panelDraft);
-			this._panelDraft = null;
-		}
-		await this.flushSave();
+		await this.flushPendingEdits();
 	}
 
 	// ─── State persistence (workspace restart survival) ───────────────────────
@@ -318,25 +322,65 @@ export class StorygridView extends ItemView {
 	}
 
 	async loadGrid(filePath: string): Promise<void> {
+		// This tab is switching to another grid: save the open one first, under its
+		// own name, and drop it — a save still waiting would otherwise write this
+		// grid into the other grid's file once the path below has changed.
+		if (this.filePath && this.filePath !== filePath && this.gridData) {
+			await this.flushPendingEdits();
+			this.gridData = null;
+		}
 		this.filePath = filePath;
 		const file = this.app.vault.getAbstractFileByPath(filePath);
 		if (!(file instanceof TFile)) {
 			new Notice(i18n('grid.notice.fileNotFound', { path: filePath }));
+			// Never leave the previous grid on screen, looking editable, under this path.
+			if (!this.gridData) this.renderAll();
 			return;
 		}
+		let data: GridData;
 		try {
 			const raw = await this.app.vault.read(file);
-			this.gridData = JSON.parse(raw) as GridData;
-			// Restore the grid's saved zoom level
-			this.zoomLevel = Math.min(2, Math.max(0.5, this.gridData.zoom ?? 1.0));
-			this.renderAll();
-			// Whichever grid is actually open is the project Codex/Writers Panel/
-			// History/Dashboard should resolve to — otherwise they can get stuck
-			// pointing at whatever project the Dashboard switcher last touched.
-			void this.plugin.setActiveProjectRoot(projectRootFromGridPath(filePath));
+			data = JSON.parse(raw) as GridData;
 		} catch {
+			if (this.filePath !== filePath) return;
+			if (!this.gridData) this.renderAll();
+			// Only a file that cannot be read is "corrupted" — never a hiccup while drawing it.
 			await this.offerBackupRestore(file);
+			return;
 		}
+		// Another grid was opened in this tab while this one was being read: that one wins.
+		if (this.filePath !== filePath) return;
+		this.gridData = data;
+		// Restore the grid's saved zoom level
+		this.zoomLevel = Math.min(2, Math.max(0.5, data.zoom ?? 1.0));
+		try {
+			this.renderAll();
+		} catch (err) {
+			reportError(err);
+		}
+		// Whichever grid is actually open is the project Codex/Writers Panel/
+		// History/Dashboard should resolve to — otherwise they can get stuck
+		// pointing at whatever project the Dashboard switcher last touched.
+		void this.plugin.setActiveProjectRoot(projectRootFromGridPath(filePath));
+	}
+
+	/** Only what is still waiting on a timer, and the card editor stays open. */
+	private flushWaitingNow(): Promise<void> {
+		if (this._draftTimer !== null && this._panelDraft) {
+			this.cancelDraftTimer();
+			this.commitDraft(this._panelDraft);
+		}
+		return this.saveTimer !== null ? this.flushSave(true) : Promise.resolve();
+	}
+
+	/** Write the card editor's waiting typing and the grid's waiting save to disk now. */
+	private async flushPendingEdits(): Promise<void> {
+		this.cancelDraftTimer();
+		if (this._panelDraft) {
+			this.commitDraft(this._panelDraft);
+			this._panelDraft = null;
+		}
+		await this.flushSave();
 	}
 
 	/** Grid file failed to parse — look for a valid backup and let the user restore it. */
@@ -372,7 +416,8 @@ export class StorygridView extends ItemView {
 		this.saveTimer = window.setTimeout(() => { runSafely(this.flushSave()); }, 800);
 	}
 
-	private async flushSave(): Promise<void> {
+	/** `urgent`: Obsidian is quitting or going to the background — save first, skip the backup. */
+	private async flushSave(urgent = false): Promise<void> {
 		if (this.saveTimer !== null) {
 			window.clearTimeout(this.saveTimer);
 			this.saveTimer = null;
@@ -383,7 +428,7 @@ export class StorygridView extends ItemView {
 
 		// Snapshot the on-disk version before overwriting it, throttled so
 		// continuous editing doesn't spam the backup folder.
-		if (Date.now() - this._lastBackupAt > StorygridView.BACKUP_INTERVAL_MS) {
+		if (!urgent && Date.now() - this._lastBackupAt > StorygridView.BACKUP_INTERVAL_MS) {
 			try {
 				const onDisk = await this.app.vault.read(file);
 				if (onDisk.trim().length > 0) {
@@ -2996,13 +3041,26 @@ export class StorygridView extends ItemView {
 	private linkCardToDocument(card: SceneCard): void {
 		new LinkDocModal(this.app, (file: TFile) => {
 			if (!this.gridData) return;
+			const priorLink = this.gridData.cards.find((c) => c.id === card.id)?.linkedDocPath;
 			this.gridData = updateCard(this.gridData, card.id, {
 				linkedDocPath: file.path,
 				linkDisplayMode: 'synopsis',
 			});
 			this.renderAll();
 			this.scheduleSave();
+			this.pushCardToNewlyLinkedDoc(card.id, priorLink);
 		}).open();
+	}
+
+	/**
+	 * A card just linked to a note outside the editor: the note gains the card's
+	 * tags, and its summary if it has none. Nothing happens when the link is unchanged.
+	 */
+	private pushCardToNewlyLinkedDoc(cardId: string, priorLink: string | undefined): void {
+		const live = this.gridData?.cards.find((c) => c.id === cardId);
+		if (!live?.linkedDocPath || live.linkedDocPath === priorLink) return;
+		this.syncTagChangesToLinkedDoc(live.linkedDocPath, [...(live.tags ?? [])], []);
+		this.syncSynopsisToLinkedDoc(live, false);
 	}
 
 	private async openLinkedDoc(filePath: string): Promise<void> {
@@ -3036,28 +3094,37 @@ export class StorygridView extends ItemView {
 				const safeName = name.trim().replace(/[\\/:*?"<>|]/g, '-') || localizedDefaultName('scene');
 				const filePath = `${scenesFolder}/${safeName}.md`;
 
+				let file: TFile;
 				try {
 					if (!this.app.vault.getAbstractFileByPath(scenesFolder)) {
 						await this.app.vault.createFolder(scenesFolder);
 					}
-
-					const file = await createEntitySheet(this.app, filePath, 'scene', name, fields, { aliases, cleanSlate: start?.cleanSlate });
+					file = await createEntitySheet(this.app, filePath, 'scene', name, fields, { aliases, cleanSlate: start?.cleanSlate });
+				} catch (err) {
+					// Nothing back: the sheet editor stays open with the writer's work.
+					new Notice(i18n('grid.notice.createSheetFailed', { msg: err instanceof Error ? err.message : '' }));
+					return;
+				}
+				// The sheet exists. From here a hiccup is reported, never a reason to save again.
+				try {
 					if (card && this.gridData) {
 						// Re-checked against the live card: it may have been linked while the modal was open.
+						const priorLink = this.gridData.cards.find((c) => c.id === card.id)?.linkedDocPath;
 						const linked = linkNewDocIfUnlinked(this.gridData, card.id, file.path);
 						if (linked !== this.gridData) {
 							this.gridData = linked;
 							this.renderAll();
 							this.scheduleSave();
+							this.pushCardToNewlyLinkedDoc(card.id, priorLink);
 						}
 					}
 
 					await openOrReveal(this.app, file);
 					new Notice(i18n('grid.notice.sceneCreated', { name: safeName }));
-					return file;
 				} catch (err) {
-					new Notice(i18n('grid.notice.createSheetFailed', { msg: err instanceof Error ? err.message : '' }));
+					reportError(err);
 				}
+				return file;
 			},
 			{
 				savedTemplates: this.plugin.settings.sceneFieldTemplates,
@@ -3082,30 +3149,39 @@ export class StorygridView extends ItemView {
 				const safeName = name.trim().replace(/[\\/:*?"<>|]/g, '-') || localizedDefaultName('character');
 				const filePath = `${charactersPath}/${safeName}.md`;
 
+				let file: TFile;
 				try {
 					if (!this.app.vault.getAbstractFileByPath(charactersPath)) {
 						await this.app.vault.createFolder(charactersPath);
 					}
-
-					const file = await createEntitySheet(this.app, filePath, 'character', name, fields, { aliases, cleanSlate: start?.cleanSlate });
+					file = await createEntitySheet(this.app, filePath, 'character', name, fields, { aliases, cleanSlate: start?.cleanSlate });
+				} catch (err) {
+					// Nothing back: the sheet editor stays open with the writer's work.
+					new Notice(i18n('grid.notice.createSheetFailed', { msg: err instanceof Error ? err.message : '' }));
+					return;
+				}
+				// The sheet exists. From here a hiccup is reported, never a reason to save again.
+				try {
 					if (card && this.gridData) {
 						// A character sheet made from a card must not replace the card's scene page:
 						// it only becomes the card's link when the card had none. It is always added
 						// to the card's characters, so the card shows who it was made for.
+						const priorLink = this.gridData.cards.find((c) => c.id === card.id)?.linkedDocPath;
 						const linked = addCharacterToCard(linkNewDocIfUnlinked(this.gridData, card.id, file.path), card.id, file.path);
 						if (linked !== this.gridData) {
 							this.gridData = linked;
 							this.renderAll();
 							this.scheduleSave();
+							this.pushCardToNewlyLinkedDoc(card.id, priorLink);
 						}
 					}
 
 					await openOrReveal(this.app, file);
 					new Notice(i18n('grid.notice.characterCreated', { name: safeName }));
-					return file;
 				} catch (err) {
-					new Notice(i18n('grid.notice.createSheetFailed', { msg: err instanceof Error ? err.message : '' }));
+					reportError(err);
 				}
+				return file;
 			},
 			{
 				savedTemplates: this.plugin.settings.characterFieldTemplates,
@@ -3131,18 +3207,25 @@ export class StorygridView extends ItemView {
 				const safeName = name.trim().replace(/[\\/:*?"<>|]/g, '-') || localizedDefaultName('location');
 				const filePath = `${locationsPath}/${safeName}.md`;
 
+				let file: TFile;
 				try {
 					if (!this.app.vault.getAbstractFileByPath(locationsPath)) {
 						await this.app.vault.createFolder(locationsPath);
 					}
-
-					const file = await createEntitySheet(this.app, filePath, 'location', name, fields, { aliases, cleanSlate: start?.cleanSlate });
+					file = await createEntitySheet(this.app, filePath, 'location', name, fields, { aliases, cleanSlate: start?.cleanSlate });
+				} catch (err) {
+					// Nothing back: the sheet editor stays open with the writer's work.
+					new Notice(i18n('grid.notice.createSheetFailed', { msg: err instanceof Error ? err.message : '' }));
+					return;
+				}
+				// The sheet exists. From here a hiccup is reported, never a reason to save again.
+				try {
 					await openOrReveal(this.app, file);
 					new Notice(i18n('grid.notice.locationCreated', { name: safeName }));
-					return file;
 				} catch (err) {
-					new Notice(i18n('grid.notice.createSheetFailed', { msg: err instanceof Error ? err.message : '' }));
+					reportError(err);
 				}
+				return file;
 			},
 			{
 				savedTemplates: this.plugin.settings.locationFieldTemplates,
@@ -3488,11 +3571,7 @@ export class StorygridView extends ItemView {
 			tagsLabel.createSpan({ text: i18n('grid.panel.tags') });
 			this.renderFieldHelp(tagsLabel, i18n('grid.panel.help.tags'));
 			const tagContainer = sec.createDiv({ cls: 'sg-chip-container' });
-			const normalizeTag = (tag: string): string => {
-				let clean = tag.trim().toLowerCase().replace(/[^a-z0-9#\-_]/g, '');
-				if (!clean.startsWith('#')) clean = '#' + clean;
-				return clean;
-			};
+			const normalizeTag = normalizeCardTag;
 			// Autocomplete pool: every tag already used on this grid's cards,
 			// plus every tag in the vault (scene docs included).
 			const knownTags = new Set<string>();
@@ -3596,8 +3675,16 @@ export class StorygridView extends ItemView {
 						},
 						(k) => {
 							new EntityModal(this.app, k, '', [], async (name, fields, aliases, start) => {
+								let file: TFile;
 								try {
-									const file = await createEntityFile(this.app, projectRoot, k, name, fields, aliases, start?.cleanSlate);
+									file = await createEntityFile(this.app, projectRoot, k, name, fields, aliases, start?.cleanSlate);
+								} catch (err) {
+									// Nothing back: the sheet editor stays open with the writer's work.
+									new Notice(i18n('grid.notice.createSheetFailed', { msg: err instanceof Error ? err.message : '' }));
+									return;
+								}
+								// The sheet exists. From here a hiccup is reported, never a reason to save again (a second copy).
+								try {
 									if (this._panelDraft !== draft) {
 										this.addLinkToLiveCard(draft.id, 'event', file.path);
 									} else if (!(draft.linkedEntityPaths?.['event'] ?? []).includes(file.path)) {
@@ -3608,10 +3695,10 @@ export class StorygridView extends ItemView {
 									}
 									renderEvents();
 									new Notice(i18n('grid.notice.eventCreated', { name }));
-									return file;
 								} catch (err) {
-									new Notice(i18n('grid.notice.createSheetFailed', { msg: err instanceof Error ? err.message : '' }));
+									reportError(err);
 								}
+								return file;
 							}, { projectRoot }).open();
 						}
 					).open();
@@ -3658,8 +3745,16 @@ export class StorygridView extends ItemView {
 						},
 						(kind) => {
 							new EntityModal(this.app, kind, '', [], async (name, fields, aliases, start) => {
+								let file: TFile;
 								try {
-									const file = await createEntityFile(this.app, projectRoot, kind, name, fields, aliases, start?.cleanSlate);
+									file = await createEntityFile(this.app, projectRoot, kind, name, fields, aliases, start?.cleanSlate);
+								} catch (err) {
+									// Nothing back: the sheet editor stays open with the writer's work.
+									new Notice(i18n('grid.notice.createSheetFailed', { msg: err instanceof Error ? err.message : '' }));
+									return;
+								}
+								// The sheet exists. From here a hiccup is reported, never a reason to save again (a second copy).
+								try {
 									// The editor may have been rebuilt while the sheet was being created (saving a field template
 									// redraws the grid), so `draft` can be an old copy nobody sees any more. Then the sheet goes
 									// onto the card itself, not onto that dead draft.
@@ -3671,10 +3766,10 @@ export class StorygridView extends ItemView {
 									}
 									renderChars();
 									new Notice(i18n('grid.notice.characterCreated', { name }));
-									return file;
 								} catch (err) {
-									new Notice(i18n('grid.notice.createSheetFailed', { msg: err instanceof Error ? err.message : '' }));
+									reportError(err);
 								}
+								return file;
 							}, {
 								savedTemplates: this.plugin.settings.characterFieldTemplates,
 								onSaveTemplate: (tpl) => { runSafely((async () => {
@@ -3748,8 +3843,16 @@ export class StorygridView extends ItemView {
 									'',
 									[],
 									async (name, fields, aliases, start) => {
+										let file: TFile;
 										try {
-											const file = await createEntityFile(this.app, projectRoot, k, name, fields, aliases, start?.cleanSlate);
+											file = await createEntityFile(this.app, projectRoot, k, name, fields, aliases, start?.cleanSlate);
+										} catch (err) {
+											// Nothing back: the sheet editor stays open with the writer's work.
+											new Notice(i18n('grid.notice.createSheetFailed', { msg: err instanceof Error ? err.message : '' }));
+											return;
+										}
+										// The sheet exists. From here a hiccup is reported, never a reason to save again (a second copy).
+										try {
 											if (this._panelDraft !== draft) {
 												this.addLinkToLiveCard(draft.id, kind, file.path);
 											} else if (!(draft.linkedEntityPaths?.[kind] ?? []).includes(file.path)) {
@@ -3759,10 +3862,10 @@ export class StorygridView extends ItemView {
 												autoSaveNow();
 											}
 											renderKindChips();
-											return file;
 										} catch (err) {
-											new Notice(i18n('grid.notice.createSheetFailed', { msg: err instanceof Error ? err.message : '' }));
+											reportError(err);
 										}
+										return file;
 									},
 									{ projectRoot }
 								).open();
@@ -3933,23 +4036,34 @@ export class StorygridView extends ItemView {
 		// Write only what the writer edited in the panel, and never the draft's position: the draft is a
 		// snapshot, so a link renamed/created or a card moved while the editor was open would otherwise be undone.
 		const baseline = this._draftBaselines.get(draft);
+		// The card as it was before this commit: the linked note only follows real changes.
+		const prior = this.gridData.cards.find((c) => c.id === draft.id);
+		const priorLink = prior?.linkedDocPath;
+		const priorTags = [...(prior?.tags ?? [])];
+		const priorSynopsis = prior?.synopsis ?? '';
 		this.gridData = commitCardDraft(this.gridData, draft, baseline);
 		if (baseline) this._draftBaselines.set(draft, JSON.parse(JSON.stringify(draft)) as SceneCard);
 		this.scheduleSave();
 		// Everything below judges the card as it now sits in the grid, not the draft's possibly stale copy.
 		const live = this.gridData.cards.find((c) => c.id === draft.id) ?? draft;
 		this.maybeCelebrateFullScene(live);
-		// Only touch the linked doc when the tags (or the link) actually changed
-		const tagKey = `${live.linkedDocPath ?? ''}|${(live.tags ?? []).join(',')}`;
-		if (tagKey !== this._lastTagSyncKey) {
-			this._lastTagSyncKey = tagKey;
-			this.syncTagsToLinkedDoc(live);
-		}
-		// Sync synopsis to linked scene doc's frontmatter when it changes
-		const synopsisKey = `${live.linkedDocPath ?? ''}|${live.synopsis}`;
-		if (synopsisKey !== this._lastSynopsisSyncKey) {
-			this._lastSynopsisSyncKey = synopsisKey;
-			this.syncSynopsisToLinkedDoc(live);
+		if (live.linkedDocPath) {
+			const linkChanged = live.linkedDocPath !== priorLink;
+			// Newly linked: the note gains the card's tags. Same note: only the tags
+			// added or removed on the card change. The note's own tags always stay.
+			const { added, removed } = linkChanged
+				? { added: [...(live.tags ?? [])], removed: [] }
+				: cardTagChanges(priorTags, live.tags ?? []);
+			// A tag another card on the same note still carries stays on the note.
+			const path = live.linkedDocPath;
+			const others = this.gridData.cards.filter((c) => c.id !== live.id && c.linkedDocPath === path);
+			const stillUsed = others.flatMap((c) => c.tags ?? []);
+			const reallyRemoved = removed.filter((t) => cardTagChanges([t], stillUsed).removed.length > 0);
+			this.syncTagChangesToLinkedDoc(path, added, reallyRemoved);
+			// The summary follows only when the writer changed it — and a newly linked
+			// note's own summary is never replaced.
+			if (linkChanged) this.syncSynopsisToLinkedDoc(live, false);
+			else if (live.synopsis !== priorSynopsis) this.syncSynopsisToLinkedDoc(live, true);
 		}
 		const cardEl = this.contentEl.querySelector<HTMLElement>(`[data-card-id="${draft.id}"]`);
 		if (cardEl?.parentElement) {
@@ -3967,39 +4081,48 @@ export class StorygridView extends ItemView {
 		}
 	}
 
-	// Sync card tags to the linked document's YAML frontmatter so Obsidian indexes them
-	private syncTagsToLinkedDoc(card: SceneCard): void {
-		if (!card.linkedDocPath) return;
-		const file = this.app.vault.getAbstractFileByPath(card.linkedDocPath);
+	/**
+	 * Carry the tags the writer added to or removed from a card onto its linked
+	 * note (so Obsidian indexes them). Never replaces the note's tag list.
+	 */
+	private syncTagChangesToLinkedDoc(path: string, added: string[], removed: string[]): void {
+		if (added.length === 0 && removed.length === 0) return;
+		const file = this.app.vault.getAbstractFileByPath(path);
 		if (!(file instanceof TFile) || file.extension !== 'md') return;
-
-		// Strip # prefix for YAML (Obsidian stores tags without # in YAML)
-		const cleanTags = (card.tags ?? []).map((t) => (t.startsWith('#') ? t.slice(1) : t));
-
-		// Don't create frontmatter on a doc just to record "no tags"
-		if (cleanTags.length === 0) {
-			const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
-			if (!fm || fm['tags'] === undefined) return;
+		// Only adding, and the note already has them all: leave the file alone. A
+		// removal always reads the file itself — the cache may not yet show a tag added a moment ago.
+		if (removed.length === 0) {
+			const cached: unknown = this.app.metadataCache.getFileCache(file)?.frontmatter?.['tags'];
+			if (applyCardTagChanges(cached, added, removed) === null) return;
 		}
-
 		this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
-			if (cleanTags.length === 0) {
-				delete fm['tags'];
-			} else {
-				fm['tags'] = cleanTags;
-			}
-		}).catch(() => {
-			// Silently fail — don't interrupt the card save
-		});
+			const next = applyCardTagChanges(fm['tags'], added, removed);
+			if (next === null) return;
+			if (next.length > 0) fm['tags'] = next;
+			else delete fm['tags'];
+		}).catch((err) => this.reportNoteSyncError(file.path, err));
 	}
 
-	private syncSynopsisToLinkedDoc(card: SceneCard): void {
+	/** Notes whose tag/summary update already failed and was reported — once per note, not on every keystroke. */
+	private readonly _noteSyncErrorsShown = new Set<string>();
+	private reportNoteSyncError(path: string, err: unknown): void {
+		if (this._noteSyncErrorsShown.has(path)) return;
+		this._noteSyncErrorsShown.add(path);
+		reportError(err);
+	}
+
+	/** `overwrite` false: only fill a note that has no summary of its own yet. */
+	private syncSynopsisToLinkedDoc(card: SceneCard, overwrite: boolean): void {
 		if (!card.linkedDocPath || !card.synopsis.trim()) return;
 		const file = this.app.vault.getAbstractFileByPath(card.linkedDocPath);
 		if (!(file instanceof TFile) || file.extension !== 'md') return;
+		const hasOwn = (own: unknown): boolean =>
+			typeof own === 'string' ? own.trim() !== '' : own !== undefined && own !== null;
+		if (!overwrite && hasOwn(this.app.metadataCache.getFileCache(file)?.frontmatter?.['synopsis'])) return;
 		this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
+			if (!overwrite && hasOwn(fm['synopsis'])) return;
 			fm['synopsis'] = card.synopsis;
-		}).catch(() => {});
+		}).catch((err) => this.reportNoteSyncError(file.path, err));
 	}
 
 	// ─── Keyboard card selection ──────────────────────────────────────────────

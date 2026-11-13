@@ -33,6 +33,12 @@ export interface SchemaEntry {
 	config?: FieldConfig;
 	category?: string;
 	prompt?: string;
+	/**
+	 * The field was empty when saved. Empty fields write no value and no body
+	 * section, so without this entry a field the writer added but has not filled
+	 * in yet would vanish on reopen. The parser brings these back as empty fields.
+	 */
+	empty?: true;
 }
 
 /**
@@ -76,7 +82,12 @@ function isSpecDefaultWithSettings(kind: EntityKind, f: CharacterField): boolean
 	return !!def?.config && def.type === f.type && JSON.stringify(def.config) === JSON.stringify(f.config ?? null);
 }
 
-function schemaJson(kind: EntityKind, fields: CharacterField[], keys: string[]): string | null {
+/**
+ * `keepEmpty`: labels of empty fields that nothing else would bring back on
+ * reopen (see `emptyFieldsToKeep` in entity-parse). They get an `empty` entry so
+ * a field stays on the sheet until the writer removes it.
+ */
+function schemaJson(kind: EntityKind, fields: CharacterField[], keys: string[], keepEmpty?: ReadonlySet<string>): string | null {
 	const baseCounts = new Map<string, number>();
 	for (const f of fields) {
 		if (f.type === 'image') continue;
@@ -87,12 +98,14 @@ function schemaJson(kind: EntityKind, fields: CharacterField[], keys: string[]):
 	const entries: SchemaEntry[] = [];
 	fields.forEach((f, i) => {
 		const ambiguous = f.type !== 'image' && (baseCounts.get(slugForLabel(f.label)) ?? 0) > 1;
-		if (!needsSchemaEntry(f, keys[i], ambiguous) || isSpecDefaultWithSettings(kind, f)) return;
+		const keptEmpty = !f.value.trim() && !!keepEmpty?.has(f.label);
+		if (!keptEmpty && (!needsSchemaEntry(f, keys[i], ambiguous) || isSpecDefaultWithSettings(kind, f))) return;
 		const entry: SchemaEntry = { label: f.label, type: f.type };
 		if (f.type !== 'image' && (ambiguous || keys[i] !== slugForLabel(f.label))) entry.key = keys[i];
 		if (f.config) entry.config = f.config;
 		if (f.category) entry.category = f.category;
 		if (f.prompt) entry.prompt = f.prompt;
+		if (keptEmpty) entry.empty = true;
 		entries.push(entry);
 	});
 	return entries.length === 0 ? null : JSON.stringify(entries);
@@ -137,7 +150,8 @@ export function buildEntityFrontmatter(
 	kind: EntityKind,
 	fields: CharacterField[],
 	entityId?: string,
-	aliases?: string[]
+	aliases?: string[],
+	keepEmpty?: ReadonlySet<string>
 ): Record<string, unknown> {
 	const fm: Record<string, unknown> = { 'storygrid-type': kind };
 	if (entityId) fm['storygrid-id'] = entityId;
@@ -153,13 +167,13 @@ export function buildEntityFrontmatter(
 		fm[key] = value;
 	}
 
-	const schema = schemaJson(kind, fields, keys);
+	const schema = schemaJson(kind, fields, keys, keepEmpty);
 	if (schema) fm['storygrid-schema'] = schema;
 	return fm;
 }
 
 /** The frontmatter block's inner lines, serialized by hand. Kept byte-identical to what shipped. */
-function frontmatterSourceLines(kind: EntityKind, fields: CharacterField[], entityId?: string, aliases?: string[]): string[] {
+function frontmatterSourceLines(kind: EntityKind, fields: CharacterField[], entityId?: string, aliases?: string[], keepEmpty?: ReadonlySet<string>): string[] {
 	const lines: string[] = [`storygrid-type: ${kind}`];
 	if (entityId) lines.push(`storygrid-id: ${entityId}`);
 	if (aliases && aliases.length > 0) {
@@ -188,7 +202,7 @@ function frontmatterSourceLines(kind: EntityKind, fields: CharacterField[], enti
 		lines.push(`${key}: ${encoded}`);
 	}
 
-	const schema = schemaJson(kind, fields, keys);
+	const schema = schemaJson(kind, fields, keys, keepEmpty);
 	// Single-quoted YAML scalar: the only escape needed is doubling a literal quote.
 	if (schema) lines.push(`storygrid-schema: '${schema.replace(/'/g, "''")}'`);
 	return lines;
@@ -250,10 +264,10 @@ export function buildEntityBody(kind: EntityKind, name: string, fields: Characte
 	return bodyLines(kind, name, fields).join('\n');
 }
 
-export function buildEntityDocument(kind: EntityKind, name: string, fields: CharacterField[], entityId?: string, aliases?: string[]): string {
+export function buildEntityDocument(kind: EntityKind, name: string, fields: CharacterField[], entityId?: string, aliases?: string[], keepEmpty?: ReadonlySet<string>): string {
 	return [
 		'---',
-		...frontmatterSourceLines(kind, fields, entityId, aliases),
+		...frontmatterSourceLines(kind, fields, entityId, aliases, keepEmpty),
 		'---',
 		'',
 		...bodyLines(kind, name, fields),

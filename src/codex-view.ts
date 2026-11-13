@@ -3,7 +3,7 @@ import { ItemView, WorkspaceLeaf, TFile, Notice, Menu, FuzzySuggestModal, App, M
 import type StorygridPlugin from './main';
 import type { SocialMapsTab } from './social-maps-view';
 import { setPhosphorIcon, GRID_VIEW_ICON } from './utils/icons';
-import { runSafely } from './utils/report-error';
+import { reportError, runSafely } from './utils/report-error';
 import { CharacterField, CharacterFieldTemplate, GridData } from './grid-data';
 import { ERA_SHEET, EntityKind, UNTYPED_KIND, getKindSpec, getCodexKindOrder, getCodexGroups, groupFieldsIntoSections } from './entities/entity-kinds';
 import { isEraHowLong } from './timeline/timeline-eras';
@@ -711,26 +711,24 @@ export class StorygridCodexView extends ItemView {
 		const main = grid.createDiv({ cls: 'sg-detail-main' });
 
 		// Drives chip grid — the craft heart of this kind (Want/Need/Flaw etc.)
+		// Reading page shows only what the writer filled in: an empty drive gets no
+		// chip, and with none filled the whole section stays off the page. Edit
+		// still lists every field.
 		const heroFieldSpecs = spec.heroFields ?? [];
-		if (heroFieldSpecs.length > 0) {
+		const filledHeroes = heroFieldSpecs
+			.map((heroSpec) => ({ heroSpec, matched: fields.find((f) => f.label === heroSpec.label) }))
+			.filter(({ matched }) => !!matched?.value.trim());
+		if (filledHeroes.length > 0) {
 			const drivesSection = main.createDiv({ cls: 'sg-detail-section sg-detail-section--drives' });
 			drivesSection.createDiv({ cls: 'sg-detail-section-title', text: spec.heroTitle ?? t('codex.detail.coreDrivesFallback') });
 			const drivesGrid = drivesSection.createDiv({ cls: 'sg-detail-drives' });
-			for (const heroSpec of heroFieldSpecs) {
-				const matched = fields.find((f) => f.label === heroSpec.label);
-				const chip = drivesGrid.createDiv({
-					cls: 'sg-detail-drive-chip' + (matched?.value.trim() ? '' : ' sg-detail-drive-chip--empty'),
-				});
+			for (const { heroSpec, matched } of filledHeroes) {
+				const chip = drivesGrid.createDiv({ cls: 'sg-detail-drive-chip' });
 				const chipIcon = chip.createSpan({ cls: 'sg-detail-drive-icon' });
 				setPhosphorIcon(chipIcon, heroSpec.icon, '•');
 				const chipLabel = chip.createSpan({ cls: 'sg-detail-drive-label', text: heroSpec.label });
 				if (matched?.prompt) chipLabel.setAttr('title', matched.prompt);
-				const val = chip.createDiv({ cls: 'sg-detail-drive-val' });
-				if (matched?.value.trim()) {
-					val.setText(matched.value.trim());
-				} else {
-					val.createSpan({ cls: 'sg-detail-drive-placeholder', text: t('codex.detail.notYetDefined') });
-				}
+				chip.createDiv({ cls: 'sg-detail-drive-val', text: matched!.value.trim() });
 			}
 		}
 
@@ -1912,7 +1910,13 @@ export class StorygridCodexView extends ItemView {
 						aliases,
 						staleKeys: parsed.ownedKeys,
 					});
-
+				} catch (err) {
+					// Nothing back: the sheet editor stays open with the writer's work.
+					new Notice(t('codex.notice.saveFailed', { kind, msg: err instanceof Error ? err.message : '' }));
+					return;
+				}
+				// The sheet is saved. From here a hiccup is reported, never a reason to save again.
+				try {
 					// Keep the file name in sync with the sheet name
 					const safe = name.trim().replace(/[\\/:*?"<>|#^[\]]/g, '-');
 					if (safe && safe !== entity.file.basename) {
@@ -1925,11 +1929,11 @@ export class StorygridCodexView extends ItemView {
 					}
 					new Notice(t('codex.notice.entityUpdated', { singular: getKindSpec(kind).singular, name }));
 					void this.renderAll();
-					// Renamed in place above, so this is the sheet as it is on disk now.
-					return entity.file;
 				} catch (err) {
-					new Notice(t('codex.notice.saveFailed', { kind, msg: err instanceof Error ? err.message : '' }));
+					reportError(err);
 				}
+				// Renamed in place above, so this is the sheet as it is on disk now.
+				return entity.file;
 			},
 			{
 				savedTemplates: this.templatesForKind(kind),
@@ -1989,8 +1993,16 @@ export class StorygridCodexView extends ItemView {
 			'',
 			[],
 			async (name, fields, aliases, start) => {
+				let file: TFile;
 				try {
-					const file = await createEntityFile(this.app, project.rootPath, kind, name, fields, aliases, start?.cleanSlate);
+					file = await createEntityFile(this.app, project.rootPath, kind, name, fields, aliases, start?.cleanSlate);
+				} catch (err) {
+					// Nothing back: the sheet editor stays open with the writer's work.
+					new Notice(t('codex.notice.createFailed', { kind, msg: err instanceof Error ? err.message : '' }));
+					return;
+				}
+				// The sheet exists. From here a hiccup is reported, never a reason to save again (a second copy).
+				try {
 					if (parentName) {
 						// Stored as a wikilink so Obsidian keeps it valid on renames
 						await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
@@ -2006,10 +2018,10 @@ export class StorygridCodexView extends ItemView {
 					// Show the new entity in the codex detail view instead of a plain markdown tab
 					this.detailPath = file.path;
 					void this.renderAll();
-					return file;
 				} catch (err) {
-					new Notice(t('codex.notice.createFailed', { kind, msg: err instanceof Error ? err.message : '' }));
+					reportError(err);
 				}
+				return file;
 			},
 			{
 				savedTemplates: this.templatesForKind(kind),

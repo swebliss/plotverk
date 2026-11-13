@@ -1,4 +1,4 @@
-import { EntityKind, EntityFieldSpec, getKindSpec, instantiateFields } from './entity-kinds';
+import { CLEAN_SLATE_NOTES, EntityKind, EntityFieldSpec, getKindSpec, instantiateFields } from './entity-kinds';
 import type { CharacterField, CharacterFieldTemplate, StorygridSettings } from '../grid-data';
 
 /**
@@ -64,16 +64,15 @@ export function asksStartMode(setting: boolean | undefined): boolean {
 export function cleanSlateFieldSpecs(kind: EntityKind): EntityFieldSpec[] {
 	const spec = getKindSpec(kind);
 	if (spec.cleanSlateFields) return spec.cleanSlateFields;
-	const defaults = spec.defaultFields;
-	const out: EntityFieldSpec[] = [];
-	const image = defaults.find((f) => f.type === 'image');
-	if (image) out.push(image);
-	if (kind === 'character') {
-		const rel = defaults.find((f) => f.label === 'Relationships');
-		if (rel) out.push(rel);
-	}
-	return out;
+	// One big text box, nothing else (Emma, 2026-11-12: "a clean slate should
+	// only have a large text field to start with"). The kind's own Notes field
+	// when it has one, so the template and the clean slate agree on it.
+	// Relationships needs no place here: editRelationshipsField adds it the
+	// moment another sheet links to this one.
+	const notes = spec.defaultFields.find((f) => f.label === CLEAN_SLATE_NOTES.label && f.type === 'textarea');
+	return [notes ?? CLEAN_SLATE_NOTES];
 }
+
 
 /**
  * Values the caller already knows (the Timeline's clicked date, as

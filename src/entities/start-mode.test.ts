@@ -155,19 +155,19 @@ describe('clean slate sheets stay connected', () => {
 		expect(doc).toContain('# Mara');
 	});
 
-	it('a clean slate holds only the picture field (and Relationships for characters)', () => {
-		expect(cleanSlateFieldSpecs('character').map((f) => f.label)).toEqual(['Portrait', 'Relationships']);
+	it('a clean slate holds one big text box and nothing else', () => {
 		for (const kind of BUILTIN_KINDS) {
 			if (kind === 'event') continue; // its own clean slate: see 'a clean event'
-			const specs = cleanSlateFieldSpecs(kind);
-			expect(specs.length).toBeLessThan(getKindSpec(kind).defaultFields.length);
-			for (const s of specs) expect(s.type === 'image' || s.label === 'Relationships').toBe(true);
+			expect(cleanSlateFieldSpecs(kind).map((f) => [f.label, f.type])).toEqual([['Notes', 'textarea']]);
 		}
 	});
 
 	it('round-trips through parse → edit → save without growing the template back or losing anything', () => {
 		const fields = instantiateFields(cleanSlateFieldSpecs('character'), 'Mara');
-		fields.find((f) => f.label === 'Relationships')!.value = 'Mother: [[Tull]]';
+		fields.find((f) => f.label === 'Notes')!.value = 'Grew up by the sea.';
+		// Relationships arrives later, from the "+ Add field" list or a link on another sheet.
+		const rel = getKindSpec('character').defaultFields.find((f) => f.label === 'Relationships')!;
+		fields.push({ id: 'c0', label: 'Relationships', type: rel.type, value: 'Mother: [[Tull]]' });
 		fields.push({ id: 'c1', label: 'Favourite Song', type: 'text', value: 'Salt and Rope' });
 		// Gender comes from the "+ Add field" catalog: a dropdown that stores no schema of its own.
 		const gender = getKindSpec('character').defaultFields.find((f) => f.label === 'Gender')!;
@@ -187,7 +187,8 @@ describe('clean slate sheets stay connected', () => {
 		const labels = merged.map((f) => f.label);
 		expect(labels).not.toContain('Want');
 		expect(labels).not.toContain('Full Name');
-		expect(labels).toEqual(expect.arrayContaining(['Relationships', 'Favourite Song', 'Gender', 'Portrait']));
+		expect(labels).toEqual(expect.arrayContaining(['Relationships', 'Favourite Song', 'Gender', 'Notes']));
+		expect(labels).not.toContain('Portrait');
 		expect(merged.find((f) => f.label === 'Relationships')!.value).toBe('Mother: [[Tull]]');
 		expect(merged.find((f) => f.label === 'Favourite Song')!.value).toBe('Salt and Rope');
 		const g = merged.find((f) => f.label === 'Gender')!;

@@ -64,7 +64,7 @@ import { ERA_LABEL_LINE, ERA_LABEL_PAD, EraBand, defaultEraColor, eraBandRect, e
 import { EVENT_ICONS, EventIconEntry, fallbackEventIcon, phosphorIconValue, resolveEventIcon } from '../utils/event-icons';
 import { EntityModal } from '../modals/entity-modal';
 import { t } from '../i18n';
-import { runSafely } from '../utils/report-error';
+import { reportError, runSafely } from '../utils/report-error';
 
 /** An event target as a Node, or null (focus/pointer targets may also be a Window). */
 function asNode(target: EventTarget | null): Node | null {
@@ -3595,29 +3595,39 @@ export class TimelineController {
 			'',
 			[],
 			async (name, fields, aliases, start) => {
+				let file: TFile;
 				try {
-					const file = await createEntityFile(this.app, projectRoot, 'event', name, fields, aliases, start?.cleanSlate);
+					file = await createEntityFile(this.app, projectRoot, 'event', name, fields, aliases, start?.cleanSlate);
+				} catch (err) {
+					// Nothing back: the sheet editor stays open with the writer's work.
+					new Notice(t('codex.notice.createFailed', { kind: 'event', msg: err instanceof Error ? err.message : '' }));
+					return;
+				}
+				// The sheet exists. From here a hiccup is reported, never a reason to save again (a second copy).
+				try {
 					// Unsorted needs no entry; a chosen plotline is this timeline's to keep.
 					if (plotlineId) {
+						const path = file.path;
 						this.ctrlHost.mutate((d) => ({
 							...d,
-							eventDisplay: { ...d.eventDisplay, [file.path]: { ...d.eventDisplay[file.path], plotlineId } },
+							eventDisplay: { ...d.eventDisplay, [path]: { ...d.eventDisplay[path], plotlineId } },
 						}));
 					}
 					new Notice(t('codex.notice.entityCreated', { singular: era ? ERA_SHEET.singular : getKindSpec('event').singular, basename: file.basename }));
 					this.plugin.celebrateMilestone('first-sheet', t('codex.milestone.firstEntry'));
-					if (!this.svgEl) return file;
-					this.refresh();
-					// A dateless event has no day to pan to — it lands on the Undated
-					// shelf. The metadataCache-driven refresh() that follows (400ms
-					// debounce in timeline-view.ts, once Obsidian indexes the new
-					// file) never moves the camera, so nothing undoes this pan.
-					const date = parseStoryDate(fields.find((f) => f.label === 'Date' && f.type === 'storydate')?.value ?? '');
-					if (date) this.panToDay(storyDateToAbsoluteDay(this.data().calendar, date));
-					return file;
+					if (this.svgEl) {
+						this.refresh();
+						// A dateless event has no day to pan to — it lands on the Undated
+						// shelf. The metadataCache-driven refresh() that follows (400ms
+						// debounce in timeline-view.ts, once Obsidian indexes the new
+						// file) never moves the camera, so nothing undoes this pan.
+						const date = parseStoryDate(fields.find((f) => f.label === 'Date' && f.type === 'storydate')?.value ?? '');
+						if (date) this.panToDay(storyDateToAbsoluteDay(this.data().calendar, date));
+					}
 				} catch (err) {
-					new Notice(t('codex.notice.createFailed', { kind: 'event', msg: err instanceof Error ? err.message : '' }));
+					reportError(err);
 				}
+				return file;
 			},
 			{
 				savedTemplates: era ? [] : eventTemplates,

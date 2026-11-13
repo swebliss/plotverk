@@ -14,6 +14,7 @@ import {
 	fieldCatalogForKind,
 } from '../entities/entity-kinds';
 import { setPhosphorIcon } from '../utils/icons';
+import { runSafely } from '../utils/report-error';
 import { adoptImagesIntoSheetFolder, resolveImageField, saveImageForSheet, SheetImageTarget, targetForSheet } from '../entities/sheet-images';
 import { entityFolderPath, localizedDefaultName } from '../entities/entity-manager';
 import { hasUnsavedSheetWork, sheetFormState } from '../entities/sheet-close-guard';
@@ -149,6 +150,8 @@ export class EntityModal extends Modal {
 	/** Pictures imported while this editor was open: tidied into the new sheet's folder on save, trashed on cancel. */
 	private uploaded: TFile[] = [];
 	private saved = false;
+	/** Save was clicked and the sheet is still being written; the pop-up waits for it. */
+	private saving = false;
 	/** The writer typed or changed something in the form since it opened. */
 	private touched = false;
 	/** The form as it was first shown (`sheetFormState`); null until then. Closing asks first when it differs. */
@@ -274,6 +277,9 @@ export class EntityModal extends Modal {
 	 * the pop-up, instead of closing.
 	 */
 	close(): void {
+		// Mid-save, closing waits: the save closes the pop-up itself once the sheet
+		// is on disk, or keeps it open if the save failed.
+		if (this.saving) return;
 		if (!this.saved && !this.discardConfirmed && this.hasUnsavedWork()) {
 			this.showDiscardGuard();
 			return;
@@ -402,36 +408,52 @@ export class EntityModal extends Modal {
 			cls: 'sg-sheet-btn sg-sheet-btn--primary',
 			text: `Save ${look.singular.toLowerCase()}`,
 		});
-		saveBtn.addEventListener('click', () => {
-			this.addPendingRelations();
-			if (!this.name.trim()) {
-				const nameField = this.fields.find((f) => ['Full Name', 'Name', 'Title', 'Topic'].includes(f.label));
-				this.name = nameField?.value.trim() || spec.defaultName;
-			}
-			const after = relationLinesOf(this.fields);
-			const gender = genderFromFields(this.fields);
-			this.saved = true;
-			this.rememberStart();
-			// The caller writes the clean-slate marker in the same write as the sheet,
-			// so the first edit never refills the template the writer turned down.
-			const saved = this.onSave(this.name, this.fields, this.aliases, {
-				cleanSlate: this.offerStart && this.startMode === 'clean',
-			});
-			this.close();
-			const uploaded = this.isNewSheet() ? [...this.uploaded] : [];
-			// Other sheets follow only once this one is safely on disk.
-			void Promise.resolve(saved).then(
-				async (file) => {
-					if (!(file instanceof TFile)) return;
-					if (uploaded.length > 0) {
-						try { await adoptImagesIntoSheetFolder(this.app, file, uploaded); }
-						catch (err) { new Notice(`Plotverk: Could not move the new images into the sheet’s folder. ${err instanceof Error ? err.message : ''}`); }
-					}
-					return this.mirrorRelationChanges(file, after, gender);
-				},
-				() => { /* the save reported its own failure */ },
-			);
+		saveBtn.addEventListener('click', () => runSafely(this.saveSheet(saveBtn, spec.defaultName)));
+	}
+
+	/** Save clicked: write the sheet, and close only once it is safely on disk. */
+	private async saveSheet(saveBtn: HTMLButtonElement, defaultName: string): Promise<void> {
+		// One save at a time: a second click while the first is still writing would make a second sheet.
+		if (this.saving) return;
+		this.addPendingRelations();
+		if (!this.name.trim()) {
+			const nameField = this.fields.find((f) => ['Full Name', 'Name', 'Title', 'Topic'].includes(f.label));
+			this.name = nameField?.value.trim() || defaultName;
+		}
+		const after = relationLinesOf(this.fields);
+		const gender = genderFromFields(this.fields);
+		// The caller writes the clean-slate marker in the same write as the sheet,
+		// so the first edit never refills the template the writer turned down.
+		const result = this.onSave(this.name, this.fields, this.aliases, {
+			cleanSlate: this.offerStart && this.startMode === 'clean',
 		});
+		let file: TFile | void = undefined;
+		if (result instanceof Promise) {
+			// The pop-up stays open until the sheet is on disk, so a failed save
+			// (a name clash, a locked file) never takes the writer's work with it.
+			this.saving = true;
+			saveBtn.disabled = true;
+			try { file = await result; } catch { /* the save reported its own failure */ }
+			this.saving = false;
+			saveBtn.disabled = false;
+			// Every caller hands back the saved file; nothing back means it failed
+			// and already said why in a notice. Keep the form so they can fix and retry.
+			if (!(file instanceof TFile)) return;
+		}
+		this.saved = true;
+		this.rememberStart();
+		this.close();
+		const uploaded = this.isNewSheet() ? [...this.uploaded] : [];
+		if (!(file instanceof TFile)) return;
+		const saved = file;
+		// Other sheets follow only once this one is safely on disk.
+		runSafely((async () => {
+			if (uploaded.length > 0) {
+				try { await adoptImagesIntoSheetFolder(this.app, saved, uploaded); }
+				catch (err) { new Notice(`Plotverk: Could not move the new images into the sheet’s folder. ${err instanceof Error ? err.message : ''}`); }
+			}
+			await this.mirrorRelationChanges(saved, after, gender);
+		})());
 	}
 
 	private rerender(): void {
@@ -694,15 +716,9 @@ export class EntityModal extends Modal {
 		this.startFieldIds = new Set([...nextIds, ...carriedStartIds]);
 		this.startMode = mode;
 		this.templateId = mode === 'template' ? templateId : GUIDED_TEMPLATE;
-		// A clean slate opens quiet: a character's Relationships stays on the
-		// sheet (other sheets' relationship lines land there) but folded away.
+		// Everything opens unfolded: a clean slate is one big text box, and it
+		// must be right there to type in, not behind a folded header.
 		this.collapsed.clear();
-		// A kind with a clean slate of its own (an Event's dates) opens it unfolded.
-		if (mode === 'clean' && !getKindSpec(this.kind).cleanSlateFields) {
-			for (const s of groupFieldsIntoSections(this.kind, this.fields)) {
-				if (s.fields.every((f) => !f.value.trim())) this.collapsed.add(s.title);
-			}
-		}
 	}
 
 	// ─── Left rail: portrait, name, templates, progress ────────────────────────

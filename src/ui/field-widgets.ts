@@ -596,16 +596,19 @@ function renderListWidget(container: HTMLElement, field: CharacterField, mode: '
 
 	const el = container.createDiv({ cls: 'sg-fw-list' });
 
-	const commit = (next: string[]) => {
-		field.value = next.join('\n');
+	// The rows on screen, empty ones included. Edits work on these — re-reading the
+	// saved value would skip an emptied row and write the typing into the next one.
+	const rows: string[] = items();
+
+	const commit = () => {
+		field.value = rows.map((r) => r.trim()).filter(Boolean).join('\n');
 		callbacks.onChange(field.value);
 	};
 
 	const render = () => {
 		el.empty();
-		const current = items();
 
-		current.forEach((item, i) => {
+		rows.forEach((item, i) => {
 			const row = el.createDiv({ cls: 'sg-fw-list-row' });
 			row.createSpan({ cls: 'sg-fw-list-bullet', text: '•' });
 
@@ -613,25 +616,21 @@ function renderListWidget(container: HTMLElement, field: CharacterField, mode: '
 			input.value = item;
 			input.setAttr('aria-label', field.label);
 			input.addEventListener('input', () => {
-				const next = items();
-				next[i] = input.value;
+				rows[i] = input.value;
 				// Write straight through without re-rendering, or the caret jumps.
-				field.value = next.join('\n');
-				callbacks.onChange(field.value);
+				commit();
 			});
 			input.addEventListener('keydown', (e) => {
 				if (e.key === 'Enter') {
 					e.preventDefault();
-					const next = items();
-					next.splice(i + 1, 0, '');
-					commit(next);
+					rows.splice(i + 1, 0, '');
+					commit();
 					render();
 					focusRow(i + 1);
-				} else if (e.key === 'Backspace' && input.value === '' && current.length > 1) {
+				} else if (e.key === 'Backspace' && input.value === '' && rows.length > 1) {
 					e.preventDefault();
-					const next = items();
-					next.splice(i, 1);
-					commit(next);
+					rows.splice(i, 1);
+					commit();
 					render();
 					focusRow(Math.max(0, i - 1));
 				}
@@ -641,9 +640,8 @@ function renderListWidget(container: HTMLElement, field: CharacterField, mode: '
 			del.setAttr('aria-label', 'Remove this item');
 			del.addEventListener('click', (e) => {
 				e.preventDefault();
-				const next = items();
-				next.splice(i, 1);
-				commit(next);
+				rows.splice(i, 1);
+				commit();
 				render();
 			});
 		});
@@ -651,10 +649,10 @@ function renderListWidget(container: HTMLElement, field: CharacterField, mode: '
 		const add = el.createEl('button', { cls: 'sg-fw-list-add', text: '+ Add item' });
 		add.addEventListener('click', (e) => {
 			e.preventDefault();
-			const next = [...items(), ''];
-			commit(next);
+			rows.push('');
+			commit();
 			render();
-			focusRow(next.length - 1);
+			focusRow(rows.length - 1);
 		});
 	};
 

@@ -9,7 +9,7 @@ import { ensureDashboard } from './dashboard-view';
 import { writeProjectMirror } from './utils/project-data-store';
 import { isSafetyNetPath } from './utils/safety-paths';
 import { debounce } from './utils/debounce';
-import { runSafely } from './utils/report-error';
+import { reportError, runSafely } from './utils/report-error';
 import { dayKey, startOfWeek, startOfMonth, sumSince } from './utils/stats';
 import {
 	ManuscriptOptions,
@@ -2093,14 +2093,22 @@ const list = body.createDiv({ cls: 'sg-outline-list' });
 
 	private createEntity(projectRoot: string, kind: EntityKind): void {
 		new EntityModal(this.app, kind, '', [], async (name, fields, aliases, start) => {
+			let file: TFile;
 			try {
-				const file = await createEntityFile(this.app, projectRoot, kind, name, fields, aliases, start?.cleanSlate);
+				file = await createEntityFile(this.app, projectRoot, kind, name, fields, aliases, start?.cleanSlate);
+			} catch (err) {
+				// Nothing back: the sheet editor stays open with the writer's work.
+				new Notice(i18n('outline.notice.entityCreateError', { kind, error: err instanceof Error ? err.message : '' }));
+				return;
+			}
+			// The sheet exists. From here a hiccup is reported, never a reason to save again (a second copy).
+			try {
 				new Notice(i18n('outline.notice.entityCreated', { kind: getKindSpec(kind).singular, name: file.basename }));
 				await this.plugin.openCodex(projectRoot, file.path);
-				return file;
 			} catch (err) {
-				new Notice(i18n('outline.notice.entityCreateError', { kind, error: err instanceof Error ? err.message : '' }));
+				reportError(err);
 			}
+			return file;
 		}, { projectRoot }).open();
 	}
 

@@ -8,7 +8,7 @@ import { GROUP_KINDS, RelEntity, RelationshipType, buildCustomRegistry, buildRel
 import { buildTreeData, layoutTreeBlocks, restrictTreeData, computeUnions, coupleStatus, CoupleStatus, initialsOf, isFamilyGroup, lifeFactsFromFields, wrapName, LifeFacts, TreeBlock, TreeMode, TreeData, TreeEdge, TreeNode, TreeNote, TreePosition } from './utils/story-tree';
 import { t } from './i18n';
 import { PHOSPHOR_ICONS, setPhosphorIcon } from './utils/icons';
-import { runSafely } from './utils/report-error';
+import { reportError, runSafely } from './utils/report-error';
 import { TreeFocusModal } from './modals/tree-focus-modal';
 import { COACH_MARK_CLASS, showCoachMark } from './ui/coach-mark';
 import { KIND_COLORS, makeSvg, truncate, pointerDist, isTap } from './utils/graph-shared';
@@ -540,8 +540,16 @@ export class StoryTreeController {
 			'',
 			[],
 			async (name, fields, aliases, start) => {
+				let file: TFile;
 				try {
-					const file = await createEntityFile(this.app, projectRoot, 'character', name, fields, aliases, start?.cleanSlate);
+					file = await createEntityFile(this.app, projectRoot, 'character', name, fields, aliases, start?.cleanSlate);
+				} catch (err) {
+					// Nothing back: the sheet editor stays open with the writer's work.
+					new Notice(t('codex.notice.createFailed', { kind: 'character', msg: err instanceof Error ? err.message : '' }));
+					return;
+				}
+				// The sheet exists. From here a hiccup is reported, never a reason to save again (a second copy).
+				try {
 					// No relationship yet means nothing new on the tree — say why instead of looking broken.
 					// Sections include every (even empty) text box, so count real `Label: [[Name]]` lines.
 					const hasRelation = Object.values(fieldsToRelationSections(fields)).flatMap(parseRelationLines).length > 0;
@@ -552,10 +560,10 @@ export class StoryTreeController {
 					// Redraw now; Social Maps' own vault listener redraws again once
 					// the other sheets' mirrored relationship lines are written.
 					if (this.mounted) void this.rebuild();
-					return file;
 				} catch (err) {
-					new Notice(t('codex.notice.createFailed', { kind: 'character', msg: err instanceof Error ? err.message : '' }));
+					reportError(err);
 				}
+				return file;
 			},
 			{
 				savedTemplates: this.plugin.settings.characterFieldTemplates,

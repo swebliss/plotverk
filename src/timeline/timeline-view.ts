@@ -6,6 +6,7 @@ import { GREGORIAN_CALENDAR } from './calendar';
 import { TimelineController } from './timeline-render';
 import { setPhosphorIcon } from '../utils/icons';
 import { t } from '../i18n';
+import { reportError, runSafely } from '../utils/report-error';
 
 export const VIEW_TYPE_TIMELINE = 'storygrid-timeline-view';
 
@@ -85,7 +86,7 @@ export class TimelineView extends ItemView {
 	async onClose(): Promise<void> {
 		this.controller?.unmount();
 		this.controller = null;
-		await this.flushSave();
+		try { await this.flushSave(); } catch (err) { reportError(err); }
 		this.contentEl.removeClass('sg-tl-view-root');
 		this.contentEl.empty();
 	}
@@ -217,7 +218,7 @@ export class TimelineView extends ItemView {
 
 	private scheduleSave(): void {
 		if (this.saveTimer !== null) window.clearTimeout(this.saveTimer);
-		this.saveTimer = window.setTimeout(() => void this.flushSave(), 800);
+		this.saveTimer = window.setTimeout(() => runSafely(this.flushSave()), 800);
 	}
 
 	private async flushSave(): Promise<void> {
@@ -226,7 +227,12 @@ export class TimelineView extends ItemView {
 		const file = this.app.vault.getAbstractFileByPath(this.filePath);
 		if (!(file instanceof TFile)) return;
 		this._selfWrite = true;
-		await this.app.vault.modify(file, JSON.stringify(this.timelineData, null, 2));
-		this._selfWrite = false;
+		// A failed write reaches the writer (runSafely / onClose), and never leaves the
+		// view deaf to changes made elsewhere.
+		try {
+			await this.app.vault.modify(file, JSON.stringify(this.timelineData, null, 2));
+		} finally {
+			this._selfWrite = false;
+		}
 	}
 }

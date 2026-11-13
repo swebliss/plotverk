@@ -1,10 +1,10 @@
 import type { App, TFile } from 'obsidian';
 import { CharacterField, generateEntityId } from '../grid-data';
 import { EntityKind } from './entity-kinds';
-import { START_MODE_KEY, CLEAN_SLATE_VALUE } from './start-mode';
+import { START_MODE_KEY, CLEAN_SLATE_VALUE, isCleanSlateValue } from './start-mode';
 import { buildEntityBody, buildEntityFrontmatter, isBlockField } from './entity-doc';
 import { applyFields, parseBody, renderBody, setTitle } from './entity-body';
-import { parseEntityDocument, splitFrontmatter } from './entity-parse';
+import { emptyFieldsToKeep, parseEntityDocument, splitFrontmatter } from './entity-parse';
 import { slugsForLabels, toYamlValue } from './field-types';
 import { RelationLine, fieldsToRelationSections, parseRelationLines } from '../utils/relations';
 
@@ -241,8 +241,12 @@ export interface UpdateEntitySheetOptions {
 export async function updateEntitySheet(app: App, file: TFile, opts: UpdateEntitySheetOptions): Promise<void> {
 	const writes = planFieldWrites(opts.before, opts.fields);
 	await app.vault.process(file, (content) => applyEntityEdits(content, opts.kind, opts.name, writes));
-	const owned = buildEntityFrontmatter(opts.kind, opts.fields, opts.entityId ?? generateEntityId(), opts.aliases);
+	const entityId = opts.entityId ?? generateEntityId();
 	await app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
+		// Built in here, where the sheet's own clean-slate mark can be read: it
+		// decides which empty fields would come back by themselves on reopen.
+		const keepEmpty = emptyFieldsToKeep(opts.kind, opts.fields, isCleanSlateValue(fm[START_MODE_KEY]));
+		const owned = buildEntityFrontmatter(opts.kind, opts.fields, entityId, opts.aliases, keepEmpty);
 		applyOwnedFrontmatter(fm, owned, opts.staleKeys ?? []);
 	});
 }
@@ -361,7 +365,8 @@ export async function createEntitySheet(
 	// ID-less until the next Obsidian restart stamped them, and anything that
 	// links by ID — "link selection to a Codex entity" — could not see them.
 	const entityId = opts.entityId ?? generateEntityId();
-	const owned = buildEntityFrontmatter(kind, fields, entityId, opts.aliases);
+	const keepEmpty = emptyFieldsToKeep(kind, fields, !!opts.cleanSlate);
+	const owned = buildEntityFrontmatter(kind, fields, entityId, opts.aliases, keepEmpty);
 	if (opts.cleanSlate) owned[START_MODE_KEY] = CLEAN_SLATE_VALUE;
 	await app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
 		applyOwnedFrontmatter(fm, owned);

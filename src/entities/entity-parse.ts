@@ -1,6 +1,6 @@
 import { CharacterField, generateId } from '../grid-data';
 import { ERA_SHEET, EVENT_HOW_LONG, EntityFieldSpec, EntityKind, getKindSpec, hasKind } from './entity-kinds';
-import { decodeValue, defaultValueForType, slugForLabel, splitFlowItems, unquoteYaml, yamlQuote } from './field-types';
+import { FIELD_TYPES, decodeValue, defaultValueForType, slugForLabel, splitFlowItems, unquoteYaml, yamlQuote } from './field-types';
 import { SchemaEntry } from './entity-doc';
 import { parseBody } from './entity-body';
 import { START_MODE_KEY, cleanSlateFieldSpecs, isCleanSlateValue } from './start-mode';
@@ -443,6 +443,37 @@ export function parseEntityDocument(content: string, fileBasename: string): Pars
 		fields.push(field);
 	}
 
+	// ── Empty fields the schema remembers ─────────────────────────────────
+	// An empty field writes no value and no section, so only its schema entry
+	// says it exists. Bring it back empty, so a field the writer added stays on
+	// the sheet until they remove it. Non-picture entries come back even without
+	// the `empty` mark: sheets saved before the mark existed dropped such fields
+	// on reopen while their entry (help text, section) was still on disk.
+	// Pictures need the mark: an embed is labelled by position, so an unmarked
+	// picture entry may already be on the sheet under another label.
+	const present = new Set(fields.map((f) => f.label));
+	// A value on disk under the entry's key means the field is already here,
+	// maybe under a label recovered another way: never add a second, empty copy.
+	const fmKeys = new Set(fmEntries.map((e) => e.key));
+	// An unmarked entry for one of the kind's own fields is left to
+	// mergeWithSpecDefaults, which refills those in the kind's own order.
+	const kindLabels = kind && hasKind(kind) ? kindFieldLabels(kind) : new Set<string>();
+	for (const entry of schemaByLabel.values()) {
+		// A type this version does not know (a hand edit, a newer Plotverk) is
+		// skipped, never thrown on: one odd entry must not stop the sheet opening.
+		if (present.has(entry.label) || !FIELD_TYPES.includes(entry.type)) continue;
+		if (!entry.empty && (entry.type === 'image' || kindLabels.has(entry.label))) continue;
+		if (entry.type !== 'image' && fmKeys.has(entry.key ?? slugForLabel(entry.label))) continue;
+		const field: CharacterField = {
+			id: generateId(), label: entry.label, value: defaultValueForType(entry.type, entry.config), type: entry.type,
+		};
+		if (entry.config) field.config = entry.config;
+		if (entry.category) field.category = entry.category;
+		if (entry.prompt) field.prompt = entry.prompt;
+		fields.push(field);
+		present.add(entry.label);
+	}
+
 	// ── Name: H1 title, falling back to the file name ─────────────────────
 	const h1 = bodyDoc.blocks.find((b) => b.kind === 'h1');
 	const name = h1 && h1.kind === 'h1' && h1.title ? h1.title : fileBasename;
@@ -464,6 +495,47 @@ export function parseEntityDocument(content: string, fileBasename: string): Pars
  * only repairs away from that 'text' fallback, never overrides a type the
  * parser was actually sure of.
  */
+/** Every label the kind itself defines: template, presets, extra sets and clean slate. */
+function kindFieldLabels(kind: EntityKind): Set<string> {
+	const spec = getKindSpec(kind);
+	return new Set(
+		[
+			...spec.defaultFields,
+			...(spec.presets ?? []).flatMap((p) => p.fields),
+			...(spec.extraFieldSets ?? []).flat(),
+			...(spec.cleanSlateFields ?? []),
+			...(kind === 'event' ? ERA_SHEET.cleanSlateFields : []),
+		].map((d) => d.label)
+	);
+}
+
+/**
+ * Labels of the empty fields a save must remember explicitly. An empty field
+ * writes no value, so it comes back on reopen only if the kind's own field set
+ * refills it (`mergeWithSpecDefaults`). Every empty field that refill would not
+ * produce — a custom field, a catalog field, a template field on a clean slate —
+ * is returned here, so the writer can record it and nothing the writer added
+ * disappears. Untouched template fields are left out, keeping ordinary sheets'
+ * frontmatter exactly as compact as before.
+ */
+export function emptyFieldsToKeep(kind: EntityKind, fields: CharacterField[], cleanSlate = false): Set<string> {
+	const empties = fields.filter((f) => !f.value.trim());
+	if (empties.length === 0) return new Set();
+	const filled = fields.filter((f) => f.value.trim());
+	// Reopen sees the filled fields PLUS the ones kept here, and those can tip
+	// the merge to a different field set (an era, a Magic System preset) that no
+	// longer refills the rest. So grow the kept set until reopening it refills
+	// every other empty field. It only grows, so this always ends.
+	const keep = new Set<string>();
+	for (;;) {
+		const reopened = [...filled, ...empties.filter((f) => keep.has(f.label))];
+		const refilled = new Set(mergeWithSpecDefaults(kind, reopened, cleanSlate).map((f) => f.label));
+		const before = keep.size;
+		for (const f of empties) if (!refilled.has(f.label)) keep.add(f.label);
+		if (keep.size === before) return keep;
+	}
+}
+
 export function mergeWithSpecDefaults(kind: EntityKind | null, fields: CharacterField[], cleanSlate = false): CharacterField[] {
 	// An unregistered kind has no field set to merge against; the generic spec's
 	// lone "Name" field would be bolted on to a sheet that never asked for it.
