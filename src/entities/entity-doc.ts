@@ -151,7 +151,9 @@ export function buildEntityFrontmatter(
 	fields: CharacterField[],
 	entityId?: string,
 	aliases?: string[],
-	keepEmpty?: ReadonlySet<string>
+	keepEmpty?: ReadonlySet<string>,
+	/** Keys already on the sheet that belong to the writer, never to be written over. */
+	takenKeys: Iterable<string> = []
 ): Record<string, unknown> {
 	const fm: Record<string, unknown> = { 'storygrid-type': kind };
 	if (entityId) fm['storygrid-id'] = entityId;
@@ -160,7 +162,7 @@ export function buildEntityFrontmatter(
 
 	// Keys are resolved for the whole field set at once so two labels that slug
 	// the same do not overwrite each other.
-	const keys = slugsForLabels(fields.map((f) => f.label));
+	const keys = slugsForLabels(fields.map((f) => f.label), takenKeys);
 	for (const { key, field } of frontmatterFields(fields, keys)) {
 		const value = toYamlValue(field.type, field.value, field.config);
 		if (value === undefined) continue;

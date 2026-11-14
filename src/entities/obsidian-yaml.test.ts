@@ -179,7 +179,8 @@ describe('reading frontmatter the way Obsidian writes it', () => {
 
 	test('an empty key holds nothing rather than swallowing the next one', () => {
 		const doc = sheet(['storygrid-type: character', 'nickname:', 'full-name: Mara Venn']);
-		expect(valueOf(doc, 'Nickname')).toBe('');
+		// An empty property the writer added is theirs: left alone, never a field.
+		expect(valueOf(doc, 'Nickname')).toBeUndefined();
 		expect(valueOf(doc, 'Full Name')).toBe('Mara Venn');
 	});
 });

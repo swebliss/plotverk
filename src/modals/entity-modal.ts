@@ -14,7 +14,8 @@ import {
 	fieldCatalogForKind,
 } from '../entities/entity-kinds';
 import { setPhosphorIcon } from '../utils/icons';
-import { runSafely } from '../utils/report-error';
+import { runSafely } from '../utils/report-error';
+import { freeFieldLabel, makeFieldLabelsUnique } from '../entities/field-labels';
 import { adoptImagesIntoSheetFolder, resolveImageField, saveImageForSheet, SheetImageTarget, targetForSheet } from '../entities/sheet-images';
 import { entityFolderPath, localizedDefaultName } from '../entities/entity-manager';
 import { hasUnsavedSheetWork, sheetFormState } from '../entities/sheet-close-guard';
@@ -416,6 +417,10 @@ export class EntityModal extends Modal {
 		// One save at a time: a second click while the first is still writing would make a second sheet.
 		if (this.saving) return;
 		this.addPendingRelations();
+		// Last check: no two fields share a name (they would overwrite each other).
+		// On a copy, so a save that fails leaves the editor exactly as it shows.
+		const fields = this.fields.map((f) => ({ ...f }));
+		makeFieldLabelsUnique(fields);
 		if (!this.name.trim()) {
 			const nameField = this.fields.find((f) => ['Full Name', 'Name', 'Title', 'Topic'].includes(f.label));
 			this.name = nameField?.value.trim() || defaultName;
@@ -424,7 +429,7 @@ export class EntityModal extends Modal {
 		const gender = genderFromFields(this.fields);
 		// The caller writes the clean-slate marker in the same write as the sheet,
 		// so the first edit never refills the template the writer turned down.
-		const result = this.onSave(this.name, this.fields, this.aliases, {
+		const result = this.onSave(this.name, fields, this.aliases, {
 			cleanSlate: this.offerStart && this.startMode === 'clean',
 		});
 		let file: TFile | void = undefined;
@@ -1001,7 +1006,7 @@ export class EntityModal extends Modal {
 					const id = generateId();
 					this.fields.push({
 						id,
-						label: result.label,
+						label: result.type === 'image' ? result.label : freeFieldLabel(result.label, this.fields),
 						value: defaultValueForType(result.type, result.config),
 						type: result.type,
 						prompt: result.prompt,
@@ -1194,7 +1199,12 @@ export class EntityModal extends Modal {
 			};
 			fitLabel();
 			labelInput.addEventListener('input', fitLabel);
-			labelInput.addEventListener('change', () => { field.label = labelInput.value; });
+			labelInput.addEventListener('change', () => {
+				// Two fields with one name would write into the same section.
+				field.label = freeFieldLabel(labelInput.value, this.fields, field);
+				labelInput.value = field.label;
+				fitLabel();
+			});
 		} else {
 			labelRow.createSpan({ cls: 'sg-sheet-field-label', text: field.label });
 		}
@@ -1548,7 +1558,7 @@ export class EntityModal extends Modal {
 			new TextPromptModal(this.app, 'Field name', field.label, (name) => {
 				const trimmed = name.trim();
 				if (!trimmed) return;
-				field.label = trimmed;
+				field.label = freeFieldLabel(trimmed, this.fields, field);
 				this.rerender();
 			}).open();
 		}));
@@ -1580,7 +1590,7 @@ export class EntityModal extends Modal {
 			this.fields.splice(idx + 1, 0, {
 				...field,
 				id: generateId(),
-				label: `${field.label} copy`,
+				label: freeFieldLabel(`${field.label} copy`, this.fields),
 				config: field.config ? { ...field.config } : undefined,
 			});
 			this.rerender();
@@ -1597,6 +1607,7 @@ export class EntityModal extends Modal {
 				const idx = this.fields.indexOf(field);
 				this.fields.splice(idx + 1, 0, {
 					...pasted,
+					label: pasted.type === 'image' ? pasted.label : freeFieldLabel(pasted.label, this.fields),
 					id: generateId(),
 					category: field.category,
 					config: pasted.config ? { ...pasted.config } : undefined,
@@ -1688,6 +1699,7 @@ export class EntityModal extends Modal {
 					for (const f of pasted) {
 						this.fields.push({
 							...f,
+							label: f.type === 'image' ? f.label : freeFieldLabel(f.label, this.fields),
 							id: generateId(),
 							category: isCustomGroup ? section.title : f.category,
 							config: f.config ? { ...f.config } : undefined,

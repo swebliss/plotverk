@@ -1,4 +1,5 @@
 import { CompileStepConfig, CompileWorkflowSettings, generateId } from '../grid-data';
+import { stripSheetPlanning } from '../entities/entity-parse';
 
 /**
  * Longform-style compile: turn the Writers Panel outline tree into a single
@@ -62,6 +63,14 @@ export interface CompileStepSpec {
 
 /** Every step a writer can add to a compile workflow. */
 export const COMPILE_STEP_SPECS: CompileStepSpec[] = [
+	{
+		id: 'remove-planning',
+		name: 'Remove planning',
+		description:
+			'Leaves out a sheet’s title, its at-a-glance box and its own sections (like Summary and Notes). Your own writing on the page stays.',
+		stages: ['scene'],
+		options: [],
+	},
 	{
 		id: 'strip-frontmatter',
 		name: 'Remove document properties',
@@ -215,6 +224,12 @@ export function applyCompileSteps(
 	ctx: StepContext = { stage: 'scene' }
 ): string {
 	let out = text;
+	// Planning goes first, wherever the step sits in the list: telling a sheet's
+	// stored answers from story text needs the page as it is on disk, before any
+	// other step has touched its links, comments or properties.
+	if (ctx.stage === 'scene' && steps.some((st) => st.id === 'remove-planning' && (st.stage ?? 'scene') === 'scene')) {
+		out = stripSheetPlanning(out, ctx.title);
+	}
 	for (const step of steps) {
 		if ((step.stage ?? 'scene') !== ctx.stage) continue;
 		switch (step.id) {
@@ -475,7 +490,7 @@ export interface ManuscriptOptions {
 export const DEFAULT_MANUSCRIPT_OPTIONS: ManuscriptOptions = {
 	includeHeadings: true,
 	sceneSeparator: '***',
-	steps: [defaultStepConfig('strip-frontmatter')],
+	steps: [defaultStepConfig('remove-planning'), defaultStepConfig('strip-frontmatter')],
 	titlePage: 'none',
 	endMark: '',
 };
@@ -574,6 +589,7 @@ export interface WorkflowPreset {
 }
 
 const CLEANUP_STEPS = (): CompileStepConfig[] => [
+	defaultStepConfig('remove-planning'),
 	defaultStepConfig('strip-frontmatter'),
 	defaultStepConfig('remove-comments'),
 	defaultStepConfig('remove-links'),
@@ -724,7 +740,7 @@ export function migrateLegacyWorkflow(legacy: unknown): CompileWorkflowSettings 
 	const old = (legacy ?? {}) as Record<string, unknown>;
 	const steps: CompileStepConfig[] = Array.isArray(old['steps'])
 		? (old['steps'] as CompileStepConfig[]).map((s) => ({ ...s, stage: s.stage ?? 'scene' }))
-		: [defaultStepConfig('strip-frontmatter')];
+		: [defaultStepConfig('remove-planning'), defaultStepConfig('strip-frontmatter')];
 	if (old['includeSceneTitles'] === true && !steps.some((s) => s.id === 'prepend-title')) {
 		const prepend = defaultStepConfig('prepend-title');
 		prepend.options['format'] = '### $1'; // old "Scene titles" toggle rendered ### headings
@@ -745,4 +761,20 @@ export function migrateLegacyWorkflow(legacy: unknown): CompileWorkflowSettings 
 		contact: typeof old['contact'] === 'string' ? (old['contact']) : '',
 		endMark: typeof old['endMark'] === 'string' ? (old['endMark']) : '',
 	};
+}
+
+/**
+ * Give every saved workflow the "Remove planning" step once. Workflows made
+ * before the step existed would otherwise keep exporting sheets' planning.
+ * Returns whether anything changed; the caller records that it ran, so a
+ * writer who later removes the step keeps it removed.
+ */
+export function addPlanningStep(workflows: CompileWorkflowSettings[]): boolean {
+	let changed = false;
+	for (const wf of workflows) {
+		if (!Array.isArray(wf.steps) || wf.steps.some((st) => st.id === 'remove-planning')) continue;
+		wf.steps.unshift(defaultStepConfig('remove-planning'));
+		changed = true;
+	}
+	return changed;
 }

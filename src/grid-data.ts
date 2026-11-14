@@ -350,6 +350,8 @@ export interface StorygridSettings {
 	compileWorkflow?: unknown;
 	/** Named compile workflows (Longform-style). Created lazily. */
 	compileWorkflows?: CompileWorkflowSettings[];
+	/** The "Remove planning" export step was added to the saved workflows once (1.0.8). */
+	compilePlanningStepAdded?: boolean;
 	/** Created lazily, like compileWorkflows, so DEFAULT_SETTINGS is never mutated. */
 	dashboard?: DashboardSettings;
 	/** Set to true after the user has seen the welcome/tutorial view at least once. */

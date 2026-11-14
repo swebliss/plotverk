@@ -87,7 +87,7 @@ export class ScanMentionsModal extends Modal {
         const toolbar = contentEl.createDiv({ cls: 'sg-scan-toolbar' });
         const selectAllBtn = toolbar.createEl('button', { cls: 'sg-scan-toolbar-btn', text: 'Select all' });
         selectAllBtn.addEventListener('click', () => {
-            for (const [key, _] of this.chosen) {
+            for (const key of this.chosen.keys()) {
                 const g = this.groups.find((g) => `${g.start}:${g.end}` === key);
                 if (g) this.chosen.set(key, g.candidates[0]);
             }

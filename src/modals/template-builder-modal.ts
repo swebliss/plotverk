@@ -1,4 +1,4 @@
-import { App, Modal } from 'obsidian';
+import { App, Modal, Notice } from 'obsidian';
 import { CharacterFieldTemplate, generateId } from '../grid-data';
 import { renderFieldCreatorCard } from '../ui/field-creator';
 import { setPhosphorIcon } from '../utils/icons';
@@ -20,6 +20,11 @@ export class TemplateBuilderModal extends Modal {
 	private categories: TemplateCategory[];
 	private readonly existingId: string | null;
 	private creatorOpen = false;
+	/** What the builder held when it opened; closing with anything else asks first. */
+	private stateAtOpen = '';
+	private saved = false;
+	private discardConfirmed = false;
+	private discardBar: HTMLElement | null = null;
 
 	constructor(
 		app: App,
@@ -36,6 +41,7 @@ export class TemplateBuilderModal extends Modal {
 
 	onOpen(): void {
 		this.modalEl.addClass('storygrid-modal', 'sg-tplb-host');
+		this.stateAtOpen = this.state();
 		this.render();
 	}
 
@@ -70,12 +76,15 @@ export class TemplateBuilderModal extends Modal {
 			const row = sec.createDiv({ cls: 'sg-tplb-row' });
 			const input = row.createEl('input', { cls: 'sg-sheet-field-input', type: 'text' });
 			input.value = cat.title;
-			input.addEventListener('change', () => {
+			// Kept on every keystroke, so closing mid-rename still counts as a change.
+			input.addEventListener('input', () => {
 				const oldTitle = cat.title;
-				const newTitle = input.value.trim() || oldTitle;
+				const newTitle = input.value.trim();
+				if (!newTitle || newTitle === oldTitle) return;
 				cat.title = newTitle;
 				for (const f of this.fields) if (f.category === oldTitle) f.category = newTitle;
 			});
+			input.addEventListener('change', () => { if (!input.value.trim()) input.value = cat.title; });
 			this.renderReorderButtons(row, this.categories, i, () => this.render());
 			this.renderDeleteButton(row, () => {
 				this.categories = this.categories.filter((c) => c !== cat);
@@ -172,15 +181,60 @@ export class TemplateBuilderModal extends Modal {
 
 		const saveBtn = footer.createEl('button', { cls: 'sg-sheet-btn sg-sheet-btn--primary', text: t('settings.codex.templateBuilder.save') });
 		saveBtn.addEventListener('click', () => {
-			if (!this.name.trim() || this.fields.length === 0) return;
+			// Say what is missing instead of a Save button that does nothing.
+			if (this.creatorOpen) { new Notice(t('settings.codex.templateBuilder.finishField')); return; }
+			if (!this.name.trim()) { new Notice(t('settings.codex.templateBuilder.needName')); return; }
+			if (this.fields.length === 0) { new Notice(t('settings.codex.templateBuilder.needField')); return; }
+			this.saved = true;
 			this.onSave({
 				id: this.existingId ?? generateId(),
 				name: this.name.trim(),
-				fields: this.fields,
+				fields: this.fields.map((f) => ({ ...f })),
 				categories: this.categories.length > 0 ? this.categories : undefined,
 			});
 			this.close();
 		});
+	}
+
+	private state(): string {
+		return JSON.stringify({ name: this.name, fields: this.fields, categories: this.categories });
+	}
+
+	/**
+	 * Every way out (Cancel, ×, Escape, a click outside) comes through here.
+	 * With unsaved changes, or a field half-added, it asks first — the same
+	 * bar the sheet editor shows, never a second pop-up.
+	 */
+	close(): void {
+		if (!this.saved && !this.discardConfirmed && (this.creatorOpen || this.state() !== this.stateAtOpen)) {
+			this.showDiscardGuard();
+			return;
+		}
+		super.close();
+	}
+
+	private showDiscardGuard(): void {
+		if (this.discardBar?.isConnected) {
+			this.discardBar.querySelector<HTMLButtonElement>('.sg-sheet-btn--primary')?.focus();
+			return;
+		}
+		const bar = this.contentEl.createDiv({ cls: 'sg-sheet-discard', attr: { role: 'alert' } });
+		bar.createDiv({
+			cls: 'sg-sheet-discard-text',
+			text: this.existingId ? t('settings.codex.templateBuilder.discardEdit') : t('settings.codex.templateBuilder.discardNew'),
+		});
+		const keep = bar.createEl('button', {
+			cls: 'sg-sheet-btn sg-sheet-btn--primary', text: t('settings.codex.templateBuilder.keepEditing'), attr: { type: 'button' },
+		});
+		keep.addEventListener('click', () => { bar.remove(); this.discardBar = null; });
+		const discard = bar.createEl('button', {
+			cls: 'sg-sheet-btn sg-sheet-discard-btn', text: t('settings.codex.templateBuilder.discard'), attr: { type: 'button' },
+		});
+		discard.addEventListener('click', () => { this.discardConfirmed = true; this.close(); });
+		const footer = this.contentEl.querySelector('.sg-tplb-footer');
+		if (footer) this.contentEl.insertBefore(bar, footer);
+		this.discardBar = bar;
+		keep.focus();
 	}
 
 	onClose(): void {

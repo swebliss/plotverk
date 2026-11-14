@@ -807,3 +807,50 @@ describe('layoutTreeBlocks', () => {
 		expect(layout.blocks.filter((b) => b.paths.includes(p('Spy')))).toHaveLength(1);
 	});
 });
+
+describe('couples stay together (the sample story’s Ferrow family)', () => {
+	const entities = [
+		entity('Grandmother Tull', { Relationships: 'Granddaughter: [[Mara Ferrow]]\nGrandson: [[Tobin Ferrow]]\nWard: [[Bex Ferrow-Tull]]\nSon: [[Corran Ferrow]]' }),
+		entity('Corran Ferrow', { Relationships: 'Wife: [[Ilse Ferrow]]\nDaughter: [[Mara Ferrow]]\nSon: [[Tobin Ferrow]]\nMother: [[Grandmother Tull]]' }),
+		entity('Ilse Ferrow', { Relationships: 'Daughter: [[Mara Ferrow]]\nSon: [[Tobin Ferrow]]\nEx-Partner: [[Halvard Crane]]\nHusband: [[Corran Ferrow]]' }),
+		entity('Halvard Crane', { Relationships: 'Ex-Partner: [[Ilse Ferrow]]\nRival: [[Mara Ferrow]]' }),
+		entity('Bex Ferrow-Tull', { Relationships: 'Cousin: [[Mara Ferrow]]\nCousin: [[Tobin Ferrow]]\nGuardian: [[Grandmother Tull]]' }),
+		entity('Mara Ferrow', { Relationships: 'Father: [[Corran Ferrow]]\nMother: [[Ilse Ferrow]]\nBrother: [[Tobin Ferrow]]' }),
+		entity('Tobin Ferrow', { Relationships: 'Father: [[Corran Ferrow]]\nMother: [[Ilse Ferrow]]\nSister: [[Mara Ferrow]]' }),
+	];
+	// Focused on Grandmother Tull: this is the view that put Bex between the
+	// couple and hung Mara and Tobin under Bex (GitHub report, 2026-11-13).
+	const data = buildTreeData(entities, buildRelationGraph(entities), 'family', { focusPath: p('Grandmother Tull'), includePartners: true });
+	const positions = layoutTreePositions(data, 'family');
+	const xOf = (name: string) => positions.find((pos) => pos.path === p(name))?.x as number;
+	const rowOf = (name: string) => positions.find((pos) => pos.path === p(name))?.generation;
+	const sameRowOrder = (name: string) => positions
+		.filter((pos) => pos.generation === rowOf(name))
+		.sort((a, b) => a.x - b.x)
+		.map((pos) => pos.path);
+
+	test('Ilse sits between her ex-partner and her husband, with no one in between', () => {
+		const row = sameRowOrder('Ilse Ferrow');
+		const i = row.indexOf(p('Ilse Ferrow'));
+		expect([row[i - 1], row[i + 1]].sort()).toEqual([p('Corran Ferrow'), p('Halvard Crane')].sort());
+	});
+
+	test('the children hang under the married couple, not under Bex', () => {
+		const coupleMid = (xOf('Ilse Ferrow') + xOf('Corran Ferrow')) / 2;
+		const kidsMid = (xOf('Mara Ferrow') + xOf('Tobin Ferrow')) / 2;
+		expect(Math.abs(coupleMid - kidsMid)).toBeLessThan(1);
+		const row = sameRowOrder('Ilse Ferrow');
+		const bex = row.indexOf(p('Bex Ferrow-Tull'));
+		if (bex >= 0) {
+			const between = (a: number, b: number) => (bex > Math.min(a, b) && bex < Math.max(a, b));
+			expect(between(row.indexOf(p('Ilse Ferrow')), row.indexOf(p('Corran Ferrow')))).toBe(false);
+		}
+	});
+
+	test('no two cards in a row overlap', () => {
+		for (const g of new Set(positions.map((pos) => pos.generation))) {
+			const xs = positions.filter((pos) => pos.generation === g).map((pos) => pos.x).sort((a, b) => a - b);
+			for (let i = 1; i < xs.length; i++) expect(xs[i] - xs[i - 1]).toBeGreaterThanOrEqual(360);
+		}
+	});
+});

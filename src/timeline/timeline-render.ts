@@ -50,7 +50,7 @@ import { createEntityFile } from '../entities/entity-manager';
 import { ERA_SHEET, EVENT_HOW_LONG, getKindSpec } from '../entities/entity-kinds';
 import { parseBody, renderBody, applyFields } from '../entities/entity-body';
 import { splitFrontmatter, parseEntityDocument } from '../entities/entity-parse';
-import { retitleEntitySheet } from '../entities/entity-write';
+import { renameEntitySheet } from '../entities/sheet-rename';
 import { slugForLabel, toYamlValue } from '../entities/field-types';
 import { EntityPickerModal } from '../modals/entity-picker-modal';
 import { markdownToHtml, htmlToMarkdown } from '../utils/rich-text';
@@ -2956,13 +2956,14 @@ export class TimelineController {
 		const commitTitle = () => {
 			const name = titleInput.value.trim();
 			if (!name || name === titleCommitted) { titleInput.value = titleCommitted; return; }
-			const safe = name.replace(/[\\/:*?"<>|#^[\]]/g, '-');
 			const oldPath = file.path;
-			const newPath = `${file.parent?.path ?? ''}/${safe}.md`.replace(/^\//, '');
 			void (async () => {
 				try {
-					await retitleEntitySheet(this.app, file, name);
-					await this.app.fileManager.renameFile(file, newPath);
+					if (await renameEntitySheet(this.app, file, name) === 'taken') {
+						titleInput.value = titleCommitted;
+						new Notice(t('codex.notice.nameTaken', { name }));
+						return;
+					}
 					// Keep the .timeline's per-note data (color, plotline, scene
 					// links) attached to the renamed note.
 					this.ctrlHost.mutate((d) => remapTimelinePath(d, oldPath, file.path));

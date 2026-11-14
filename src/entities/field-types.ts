@@ -242,8 +242,10 @@ export function isEchoOfEarlierField(field: { label: string; value: string }, ea
  * for a given field set; the resolved key is recorded in the schema sidecar so
  * the parser never has to re-derive it.
  */
-export function slugsForLabels(labels: string[]): string[] {
-	const used = new Set<string>();
+export function slugsForLabels(labels: string[], taken: Iterable<string> = []): string[] {
+	// `taken`: keys already on the sheet that are not ours to write (the
+	// writer's own properties). A field never lands on one; it gets `-2`.
+	const used = new Set<string>(taken);
 	return labels.map((label) => {
 		const base = slugForLabel(label);
 		let key = base;

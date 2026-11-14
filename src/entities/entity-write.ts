@@ -4,7 +4,7 @@ import { EntityKind } from './entity-kinds';
 import { START_MODE_KEY, CLEAN_SLATE_VALUE, isCleanSlateValue } from './start-mode';
 import { buildEntityBody, buildEntityFrontmatter, isBlockField } from './entity-doc';
 import { applyFields, parseBody, renderBody, setTitle } from './entity-body';
-import { emptyFieldsToKeep, parseEntityDocument, splitFrontmatter } from './entity-parse';
+import { emptyFieldsToKeep, parseEntityDocument, splitFrontmatter, titleBelongsToFile } from './entity-parse';
 import { slugsForLabels, toYamlValue } from './field-types';
 import { RelationLine, fieldsToRelationSections, parseRelationLines } from '../utils/relations';
 
@@ -95,6 +95,24 @@ export function writeSheetImages(content: string, kind: EntityKind, images: read
 	const { frontmatter, body } = splitFrontmatter(content);
 	const fields: CharacterField[] = images.map((value, i) => ({ id: `image-${i}`, label: 'Image', value, type: 'image' }));
 	return frontmatter + renderBody(applyFields(parseBody(body), fields, kind));
+}
+
+/**
+ * A sheet's file was renamed outside Plotverk (Obsidian's file list): the
+ * page title follows, so the gallery, the page and the editor all show the
+ * same name. Only a title that belonged to the OLD file name follows; a title
+ * the writer set by hand, or one Plotverk already changed before renaming the
+ * file, is left as it is. Returns null when nothing should change.
+ */
+export function retitleAfterFileRename(content: string, oldBasename: string, newBasename: string): string | null {
+	if (oldBasename === newBasename) return null;
+	const { frontmatter, body } = splitFrontmatter(content);
+	if (!frontmatter) return null;
+	const doc = parseBody(body);
+	const h1 = doc.blocks.find((b) => b.kind === 'h1');
+	if (!h1 || h1.kind !== 'h1' || !h1.title) return null;
+	if (!titleBelongsToFile(h1.title, oldBasename) || titleBelongsToFile(h1.title, newBasename)) return null;
+	return frontmatter + renderBody(setTitle(doc, newBasename));
 }
 
 /** Rename a sheet's title in place, atomically. The caller renames the file itself. */
@@ -246,7 +264,11 @@ export async function updateEntitySheet(app: App, file: TFile, opts: UpdateEntit
 		// Built in here, where the sheet's own clean-slate mark can be read: it
 		// decides which empty fields would come back by themselves on reopen.
 		const keepEmpty = emptyFieldsToKeep(opts.kind, opts.fields, isCleanSlateValue(fm[START_MODE_KEY]));
-		const owned = buildEntityFrontmatter(opts.kind, opts.fields, entityId, opts.aliases, keepEmpty);
+		// Every key on the sheet that this save does not own is the writer's own
+		// property: a field added with the same name gets its own key instead.
+		const stale = new Set(opts.staleKeys ?? []);
+		const taken = Object.keys(fm).filter((k) => !stale.has(k));
+		const owned = buildEntityFrontmatter(opts.kind, opts.fields, entityId, opts.aliases, keepEmpty, taken);
 		applyOwnedFrontmatter(fm, owned, opts.staleKeys ?? []);
 	});
 }

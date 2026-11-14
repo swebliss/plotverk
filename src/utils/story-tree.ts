@@ -24,7 +24,6 @@ import {
 	treeParents,
 	treeChildren,
 	midX,
-	arrangePartnersAdjacent,
 	GROUP_KINDS,
 	groupRoleOf,
 } from './relations';
@@ -923,6 +922,74 @@ export function isFamilyGroup(kind: string, fields: ReadonlyArray<{ label: strin
 
 // ─── Positioning ──────────────────────────────────────────────────────────
 
+/**
+ * One generation row as units. People joined by partner lines form one unit,
+ * ordered along their lines: Halvard – Ilse – Corran, never Ilse – Bex –
+ * Corran. Units keep the row's own order (by where their first member stood),
+ * and a unit with a sibling or cousin of the one before it follows it.
+ */
+export function orderRowUnits(row: string[], partnerEdges: readonly TreeEdge[], kinEdges: readonly TreeEdge[]): string[][] {
+	const inRow = new Set(row);
+	const rank = new Map(row.map((path, i) => [path, i]));
+	const partners = new Map<string, string[]>();
+	for (const e of partnerEdges) {
+		if (!inRow.has(e.fromPath) || !inRow.has(e.toPath) || e.fromPath === e.toPath) continue;
+		for (const [a, b] of [[e.fromPath, e.toPath], [e.toPath, e.fromPath]]) {
+			const list = partners.get(a) ?? [];
+			if (!list.includes(b)) list.push(b);
+			partners.set(a, list);
+		}
+	}
+	const byRank = (a: string, b: string) => (rank.get(a) ?? 0) - (rank.get(b) ?? 0);
+	const units: string[][] = [];
+	const seen = new Set<string>();
+	for (const start of row) {
+		if (seen.has(start)) continue;
+		// Everyone joined to `start` by partner lines.
+		const group: string[] = [];
+		const stack = [start];
+		const inGroup = new Set([start]);
+		while (stack.length) {
+			const cur = stack.pop() as string;
+			group.push(cur);
+			for (const nb of partners.get(cur) ?? []) if (!inGroup.has(nb)) { inGroup.add(nb); stack.push(nb); }
+		}
+		// Walk the lines from an end (someone with one partner), earliest first,
+		// so a person with two partners sits between them.
+		const ends = group.filter((path) => (partners.get(path)?.length ?? 0) <= 1).sort(byRank);
+		const first = ends[0] ?? [...group].sort(byRank)[0];
+		const unit: string[] = [];
+		const walk = (path: string) => {
+			unit.push(path);
+			seen.add(path);
+			for (const nb of [...(partners.get(path) ?? [])].sort(byRank)) if (!seen.has(nb)) walk(nb);
+		};
+		walk(first);
+		units.push(unit);
+	}
+	// Siblings and cousins with no partner tie still sit together where they can.
+	const kin = new Map<string, Set<string>>();
+	for (const e of kinEdges) {
+		if (!inRow.has(e.fromPath) || !inRow.has(e.toPath)) continue;
+		if (!kin.has(e.fromPath)) kin.set(e.fromPath, new Set());
+		if (!kin.has(e.toPath)) kin.set(e.toPath, new Set());
+		(kin.get(e.fromPath) as Set<string>).add(e.toPath);
+		(kin.get(e.toPath) as Set<string>).add(e.fromPath);
+	}
+	const related = (a: string[], b: string[]) => a.some((x) => b.some((y) => kin.get(x)?.has(y)));
+	const out: string[][] = [];
+	const placed = new Set<string[]>();
+	for (const u of units) {
+		if (placed.has(u)) continue;
+		out.push(u);
+		placed.add(u);
+		for (const other of units) {
+			if (!placed.has(other) && related(u, other)) { out.push(other); placed.add(other); }
+		}
+	}
+	return out;
+}
+
 const NODE_W = 260;
 const GAP_X = 100;
 
@@ -949,7 +1016,12 @@ export function layoutTreePositions(data: TreeData, mode: TreeMode, layoutOpts: 
 	const hierEdges = data.edges
 		.filter((e) => e.kind === 'line')
 		.flatMap((e) => (e.viaPaths?.length ? e.viaPaths.map((v) => ({ fromPath: v, toPath: e.toPath, label: e.label })) : [e]));
-	const adjacencyEdges = data.edges.filter((e) => e.kind === 'partner' || e.kind === 'sibling' || e.kind === 'cousin');
+	const partnerEdges = data.edges.filter((e) => e.kind === 'partner');
+	const kinEdges = data.edges.filter((e) => e.kind === 'sibling' || e.kind === 'cousin');
+	// Each row is laid out as units: everyone joined by partner lines, in the
+	// order their lines run (an ex on one side, a spouse on the other). A unit
+	// is never split, so no one lands between a couple.
+	const unitsOfGen = new Map<number, string[][]>();
 
 	const byGen = new Map<number, string[]>();
 	for (const n of data.nodes) {
@@ -974,14 +1046,17 @@ export function layoutTreePositions(data: TreeData, mode: TreeMode, layoutOpts: 
 			return bcA - bcB;
 		});
 
-		arrangePartnersAdjacent(row, adjacencyEdges);
-
-		row.forEach((path, i) => xOf.set(path, i * (nodeW + gapX)));
-		byGen.set(g, row);
+		const units = orderRowUnits(row, partnerEdges, kinEdges);
+		unitsOfGen.set(g, units);
+		const ordered = units.flat();
+		ordered.forEach((path, i) => xOf.set(path, i * (nodeW + gapX)));
+		byGen.set(g, ordered);
 	}
 
 	const genOfPath = new Map(data.nodes.map((n) => [n.path, n.generation]));
 	const unions = computeUnions(data, mode);
+	const unitOf = new Map<string, string[]>();
+	for (const units of unitsOfGen.values()) for (const u of units) for (const path of u) unitOf.set(path, u);
 
 	// Bottom-up centering: couples with shared children shift as one unit
 	// (keeps partners glued together instead of both collapsing onto the same
@@ -999,10 +1074,13 @@ export function layoutTreePositions(data: TreeData, mode: TreeMode, layoutOpts: 
 				const x1 = xOf.get(p1) ?? 0;
 				const x2 = xOf.get(p2) ?? 0;
 				const delta = center - (x1 + x2) / 2;
-				xOf.set(p1, x1 + delta);
-				xOf.set(p2, x2 + delta);
-				handled.add(p1);
-				handled.add(p2);
+				// The whole partner unit moves, so an ex or a second spouse stays beside them.
+				const moving = unitOf.get(p1)?.includes(p2) ? (unitOf.get(p1) as string[]) : [p1, p2];
+				for (const m of moving) {
+					if (handled.has(m)) continue;
+					xOf.set(m, (xOf.get(m) ?? 0) + delta);
+					handled.add(m);
+				}
 			}
 			for (const path of byGen.get(g) as string[]) {
 				if (handled.has(path)) continue;
@@ -1018,19 +1096,51 @@ export function layoutTreePositions(data: TreeData, mode: TreeMode, layoutOpts: 
 	// Top-down compaction: restore minimum spacing after centering moves
 	const compactPass = () => {
 		for (const g of sortedGens) {
-			const row = [...(byGen.get(g) as string[])].sort((a, b) => (xOf.get(a) ?? 0) - (xOf.get(b) ?? 0));
+			// Units keep their inner order; they are sorted by where they now sit.
+			const centreOf = (u: string[]) => u.reduce((sum, path) => sum + (xOf.get(path) ?? 0), 0) / u.length;
+			const units = [...(unitsOfGen.get(g) ?? [])].sort((a, b) => centreOf(a) - centreOf(b));
+			const row: string[] = [];
 			let prevRight = -Infinity;
-			for (const path of row) {
-				const x = Math.max(xOf.get(path) ?? 0, prevRight + gapX);
-				xOf.set(path, x);
-				prevRight = x + nodeW;
+			for (const u of units) {
+				for (const path of u) {
+					const x = Math.max(xOf.get(path) ?? 0, prevRight + gapX);
+					xOf.set(path, x);
+					prevRight = x + nodeW;
+					row.push(path);
+				}
 			}
+			unitsOfGen.set(g, units);
 			byGen.set(g, row);
+		}
+	};
+
+	// Top-down: a couple's children slide under the couple when the couple
+	// could not come to them (someone else holds the space beside the couple).
+	// Rows are settled top to bottom, so grandchildren follow their parents.
+	const childrenUnderParentsPass = () => {
+		for (const g of sortedGens) {
+			for (const u of unions) {
+				const [p1, p2] = u.parentPaths;
+				if (genOfPath.get(p1) !== g || genOfPath.get(p2) !== g) continue;
+				const kids = u.childPaths.filter((c) => genOfPath.get(c) === g + 1 && xOf.has(c));
+				const kidsMid = midX(kids.map((c) => xOf.get(c) as number));
+				if (kidsMid === null) continue;
+				const delta = ((xOf.get(p1) ?? 0) + (xOf.get(p2) ?? 0)) / 2 - kidsMid;
+				// Only rightward: compaction keeps every row's left side packed, so a
+				// leftward move would only be pushed back.
+				if (delta <= 0.5) continue;
+				for (const c of kids) xOf.set(c, (xOf.get(c) as number) + delta);
+			}
+			compactPass();
 		}
 	};
 
 	centerPass();
 	compactPass();
+	centerPass();
+	compactPass();
+	childrenUnderParentsPass();
+	// Parents settle over children that moved.
 	centerPass();
 	compactPass();
 

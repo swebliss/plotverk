@@ -1,6 +1,6 @@
 import { CharacterField, generateId } from '../grid-data';
 import { ERA_SHEET, EVENT_HOW_LONG, EntityFieldSpec, EntityKind, getKindSpec, hasKind } from './entity-kinds';
-import { FIELD_TYPES, decodeValue, defaultValueForType, slugForLabel, splitFlowItems, unquoteYaml, yamlQuote } from './field-types';
+import { FIELD_TYPES, FieldType, decodeValue, defaultValueForType, formatFieldValue, slugForLabel, splitFlowItems, unquoteYaml, yamlQuote } from './field-types';
 import { SchemaEntry } from './entity-doc';
 import { parseBody } from './entity-body';
 import { START_MODE_KEY, cleanSlateFieldSpecs, isCleanSlateValue } from './start-mode';
@@ -256,6 +256,43 @@ function parseFrontmatterBlock(block: string): Array<{ key: string; value: strin
 	return entries;
 }
 
+/**
+ * Whether a property Plotverk did not write may still be taken in as a text
+ * field: its key must come back unchanged through label → key (no `_`, no
+ * capitals, no other letters the key maker drops), and its value must be
+ * non-empty plain text. A number, yes/no, date, list or empty value would come
+ * back as text or be deleted on save, so those stay the writer's own.
+ */
+export function isTakeableTextProperty(key: string, raw: string): boolean {
+	if (slugForLabel(prettifyKey(key)) !== key) return false;
+	const v = raw.trim();
+	if (!v) return false;
+	if (v.startsWith('"') || v.startsWith("'")) return unquoteYaml(v).trim() !== '';
+	if (/^[[{|>&*!%@`]/.test(v)) return false;
+	if (/^(true|false|yes|no|on|off|y|n|null|~)$/i.test(v)) return false;
+	if (/^[-+]?(\.\d+|\d[\d_]*(\.\d*)?)([eE][-+]?\d+)?$/.test(v)) return false;
+	if (/^(0x[0-9a-f]+|0o[0-7]+|[-+]?\.(inf|nan))$/i.test(v)) return false;
+	if (/^\d{4}-\d{2}-\d{2}/.test(v)) return false;
+	return true;
+}
+
+/**
+ * Whether a sheet's file name is the one its title would get: the title
+ * itself, the title with the characters a file name cannot hold replaced (by
+ * the Codex's rule or the Plot Grid's narrower one), or either with the " 2"
+ * a clashing new sheet got.
+ */
+export function titleBelongsToFile(title: string, fileBasename: string): boolean {
+	const t = title.trim();
+	if (!t) return false;
+	const candidates = new Set([t, t.replace(/[\\/:*?"<>|#^[\]]/g, '-'), t.replace(/[\\/:*?"<>|]/g, '-')]);
+	for (const c of candidates) {
+		if (fileBasename === c) return true;
+		if (fileBasename.startsWith(`${c} `) && /^\d+$/.test(fileBasename.slice(c.length + 1))) return true;
+	}
+	return false;
+}
+
 function prettifyKey(key: string): string {
 	return key.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
@@ -378,6 +415,21 @@ export function parseEntityDocument(content: string, fileBasename: string): Pars
 	// ── Assemble fields in the kind's default order where possible ────────
 	const fields: CharacterField[] = [];
 	const ownedKeys: string[] = [];
+	// Every key Plotverk itself writes on this sheet: recorded in the schema,
+	// shown as an infobox row or a section, or one of the kind's own fields.
+	// A label the schema files under another key (a field moved to `rating-2`
+	// because the writer's own `rating` was already there) does not claim the
+	// plain key: that one stays the writer's.
+	const movedAway = (label: string) => {
+		const key = schemaByLabel.get(label)?.key;
+		return !!key && key !== slugForLabel(label);
+	};
+	const plotverkKeys = new Set<string>([
+		...schemaByKey.keys(),
+		...[...calloutLabels].filter(([, label]) => !movedAway(label)).map(([key]) => key),
+		...[...sectionLabels].filter(([, label]) => !movedAway(label)).map(([key]) => key),
+		...(kind && hasKind(kind) ? [...kindFieldLabels(kind)].filter((l) => !movedAway(l)).map(slugForLabel) : []),
+	]);
 
 	// Scalar fields come from frontmatter (skipping the type key and any key
 	// that is actually a prose section stored as a block scalar)
@@ -390,11 +442,16 @@ export function parseEntityDocument(content: string, fileBasename: string): Pars
 			entry.key === 'cssclasses' || entry.key === 'tags' || entry.key === 'position' ||
 			entry.key === 'storygrid-parent' || entry.key === START_MODE_KEY
 		) continue;
-		ownedKeys.push(entry.key);
-		if (
+		const reserved =
 			entry.key === 'storygrid-type' || entry.key === 'storygrid-id' ||
-			entry.key === 'storygrid-schema' || entry.key === 'aliases'
-		) continue;
+			entry.key === 'storygrid-schema' || entry.key === 'aliases';
+		// A property the writer added in Obsidian themselves (`date_created`,
+		// `Status`, `rating: 5`, a list, an empty one) is theirs: it never becomes
+		// a field and is never owned, so a save leaves it exactly as written. Only
+		// plain text under a key that writes back unchanged is taken in as a field.
+		if (!reserved && !plotverkKeys.has(entry.key) && !isTakeableTextProperty(entry.key, entry.value)) continue;
+		ownedKeys.push(entry.key);
+		if (reserved) continue;
 		// The schema's recorded key is the highest-trust route back to a label,
 		// because it is the only one that survives a label the slug function
 		// cannot reproduce.
@@ -541,6 +598,10 @@ export function mergeWithSpecDefaults(kind: EntityKind | null, fields: Character
 	// lone "Name" field would be bolted on to a sheet that never asked for it.
 	if (!kind || !hasKind(kind)) return fields;
 	const spec = getKindSpec(kind);
+	// Labels match the way the sheet matches its headings: capitals and outer
+	// spaces aside. A hand-typed "## appearance" IS the kind's Appearance; an
+	// exact-only match added a second, empty Appearance next to it.
+	const norm = (label: string) => label.trim().toLowerCase();
 
 	// A clean slate keeps the writer's own order and fields. Fields that share a
 	// label with the kind's own still get their type and settings repaired (a
@@ -548,27 +609,28 @@ export function mergeWithSpecDefaults(kind: EntityKind | null, fields: Character
 	// the writer turned down is never refilled — only the clean slate's own few.
 	if (cleanSlate) {
 		const known = new Map(
-			[...(spec.presets ?? []).flatMap((p) => p.fields), ...(spec.extraFieldSets ?? []).flat(), ...spec.defaultFields].map((d) => [d.label, d] as const)
+			[...(spec.presets ?? []).flatMap((p) => p.fields), ...(spec.extraFieldSets ?? []).flat(), ...spec.defaultFields].map((d) => [norm(d.label), d] as const)
 		);
 		const out = fields.map((f) => {
-			const def = known.get(f.label);
-			return def ? repairFromSpec(f, def) : f;
+			const def = known.get(norm(f.label));
+			// A capitals-only match is left as the writer made it (see below).
+			return def && def.label === f.label ? repairFromSpec(f, def) : f;
 		});
 		// A clean-slate era keeps the era's own few (its Color too, even while empty).
 		const isEra = kind === 'event' && fields.some((f) => f.label === 'How Long' && f.value.trim().toLowerCase() === EVENT_HOW_LONG.era.toLowerCase());
 		for (const def of isEra ? ERA_SHEET.cleanSlateFields : cleanSlateFieldSpecs(kind)) {
-			if (!out.some((f) => f.label === def.label)) out.push(blankFromSpec(def));
+			if (!out.some((f) => norm(f.label) === norm(def.label))) out.push(blankFromSpec(def));
 		}
 		return out;
 	}
 
 	// Merge against whichever field set fits best — the defaults or a preset —
 	// so a "Magic System" sheet doesn't sprout the generic system fields.
-	const labels = new Set(fields.map((f) => f.label));
+	const labels = new Set(fields.map((f) => norm(f.label)));
 	let bestSet = spec.defaultFields;
-	let bestScore = spec.defaultFields.filter((d) => labels.has(d.label)).length;
+	let bestScore = spec.defaultFields.filter((d) => labels.has(norm(d.label))).length;
 	for (const set of [...(spec.presets ?? []).map((p) => p.fields), ...(spec.extraFieldSets ?? [])]) {
-		const score = set.filter((d) => labels.has(d.label)).length;
+		const score = set.filter((d) => labels.has(norm(d.label))).length;
 		if (score > bestScore) { bestScore = score; bestSet = set; }
 	}
 
@@ -576,9 +638,18 @@ export function mergeWithSpecDefaults(kind: EntityKind | null, fields: Character
 	const out: CharacterField[] = [];
 
 	for (const def of bestSet) {
-		const idx = remaining.findIndex((f) => f.label === def.label);
-		if (idx >= 0) {
-			out.push(repairFromSpec(remaining.splice(idx, 1)[0], def));
+		// The exact label first, so a sheet holding both "Appearance" and
+		// "appearance" keeps each where it was.
+		// A capitals-only match takes the kind's slot as it is: only a field of
+		// the same sort (one line, or long text) and with its own type kept, so a
+		// hand-made one-line row never turns into a second, long-text copy.
+		const exact = remaining.findIndex((f) => f.label === def.label);
+		const loose = exact >= 0 ? -1 : remaining.findIndex((f) =>
+			f.type !== 'image' && norm(f.label) === norm(def.label) && isLongText(f.type) === isLongText(def.type));
+		if (exact >= 0) {
+			out.push(repairFromSpec(remaining.splice(exact, 1)[0], def));
+		} else if (loose >= 0) {
+			out.push(remaining.splice(loose, 1)[0]);
 		} else {
 			out.push(blankFromSpec(def));
 		}
@@ -587,6 +658,8 @@ export function mergeWithSpecDefaults(kind: EntityKind | null, fields: Character
 	out.push(...remaining);
 	return out;
 }
+
+const isLongText = (type: string) => type === 'textarea' || type === 'list' || type === 'table';
 
 /** A parsed field that shares a label with a kind field, with the type and settings the parser could not infer put back. */
 function repairFromSpec(found: CharacterField, def: EntityFieldSpec): CharacterField {
@@ -605,4 +678,103 @@ function repairFromSpec(found: CharacterField, def: EntityFieldSpec): CharacterF
 /** An empty field as the kind defines it — the sheet never wrote it because it was empty. */
 function blankFromSpec(def: EntityFieldSpec): CharacterField {
 	return { id: generateId(), label: def.label, value: defaultValueForType(def.type, def.config), type: def.type, ...(def.config ? { config: { ...def.config } } : {}) };
+}
+
+// ─── Exports: leave a sheet's planning out of the manuscript ────────────────
+
+/** One line as it reads: line ending and trailing spaces aside. */
+function readLine(line: string): string {
+	return line.replace(/\r?\n$/, '').replace(/[ \t]+$/, '');
+}
+
+/**
+ * If `content` (a section's text, verbatim) opens with exactly `expected` —
+ * line endings, trailing spaces and blank lines around it aside — return what
+ * follows it, byte for byte with its leading blank lines dropped. Otherwise
+ * null: the section no longer holds what the sheet stored.
+ */
+function afterStoredAnswer(content: string, expected: string): string | null {
+	const want = expected.replace(/\r\n?/g, '\n').split('\n').map((l) => l.replace(/[ \t]+$/, ''));
+	while (want.length && want[0].trim() === '') want.shift();
+	while (want.length && want[want.length - 1].trim() === '') want.pop();
+	if (!want.length) return null;
+	want[0] = want[0].trimStart();
+
+	const lines = content.match(/[^\n]*\n|[^\n]+/g) ?? [];
+	let i = 0;
+	while (i < lines.length && readLine(lines[i]).trim() === '') i++;
+	for (let w = 0; w < want.length; w++, i++) {
+		if (i >= lines.length) return null;
+		const got = w === 0 ? readLine(lines[i]).trimStart() : readLine(lines[i]);
+		if (got !== want[w]) return null;
+	}
+	while (i < lines.length && readLine(lines[i]).trim() === '') i++;
+	return lines.slice(i).join('');
+}
+
+/**
+ * A Plotverk sheet's planning, left out of an export: its `# Title`, its
+ * at-a-glance box and its own sections (Summary, Notes…). Everything else on
+ * the page — the writer's story text and their own headings — stays.
+ *
+ * When in doubt, text stays:
+ * - A section goes only when the sheet stored that field (its property is in
+ *   the frontmatter) and the section opens with exactly what was stored — for
+ *   a list or table, exactly the rows the stored value draws. Story typed
+ *   below the stored answer stays; a hand-edited section stays whole.
+ * - The page's last section always stays. A section runs to the end of the
+ *   page, so story typed at the bottom lands inside it — and once the sheet
+ *   editor has saved the page, that story IS the stored answer. There is no
+ *   telling them apart, so it is never left out.
+ * - The title goes only when it belongs to the file.
+ *
+ * `content` is the whole file; a page without `storygrid-type` comes back as is.
+ */
+export function stripSheetPlanning(content: string, fileBasename?: string): string {
+	const { frontmatter, body } = splitFrontmatter(content);
+	if (!frontmatter) return content;
+	const fmMatch = frontmatter.match(FRONTMATTER_RE);
+	const entries = fmMatch ? parseFrontmatterBlock(fmMatch[1]) : [];
+	if (!entries.some((e) => e.key === 'storygrid-type' && unquoteYaml(e.value).trim())) return content;
+
+	const stored = new Map(entries.map((e) => [e.key, e.value]));
+	const schemaEntry = entries.find((e) => e.key === 'storygrid-schema');
+	const { byLabel } = parseSchema(schemaEntry ? unquoteYaml(schemaEntry.value) : undefined);
+
+	const doc = parseBody(body);
+	const sections = doc.blocks.filter((b) => b.kind === 'section');
+	const lastSection = sections[sections.length - 1];
+	const kept: string[] = [];
+	for (const block of doc.blocks) {
+		if (block.kind === 'infobox') continue;
+		if (block.kind === 'h1') {
+			if (fileBasename && titleBelongsToFile(block.title, fileBasename)) continue;
+			kept.push(block.text);
+			continue;
+		}
+		if (block.kind !== 'section') { kept.push(block.text); continue; }
+
+		const schema = byLabel.get(block.label);
+		const key = typeof schema?.key === 'string' && schema.key ? schema.key : slugForLabel(block.label);
+		const raw = stored.get(key);
+		if (raw === undefined) { kept.push(block.text); continue; } // the writer's own heading, even an empty one
+
+		const content = block.content.trim();
+		if (content === '' || content === '_No content yet._') continue;
+		if (block === lastSection) { kept.push(block.text); continue; }
+
+		const type: FieldType = schema?.type ?? 'textarea';
+		const expected = type === 'textarea'
+			? decodeValue('textarea', raw)
+			: formatFieldValue(type, decodeValue(type, raw, schema?.config), schema?.config);
+		// An answer of several paragraphs stays whole: that is the shape of story
+		// text the sheet editor took into a field (typed at the bottom of the page,
+		// then a later field was added below it). Planning answers are short.
+		if (type === 'textarea' && /\n[ \t]*\n/.test(expected.replace(/\r\n?/g, '\n').trim())) { kept.push(block.text); continue; }
+		const rest = afterStoredAnswer(block.content, expected);
+		if (rest === null) { kept.push(block.text); continue; }
+		// The stored answer goes; story typed below it stays, as typed.
+		if (rest.trim()) kept.push(rest.replace(/\s+$/, '') + doc.eol + doc.eol);
+	}
+	return frontmatter + kept.join('');
 }

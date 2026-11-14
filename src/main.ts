@@ -46,10 +46,10 @@ import { scopeToBook } from './refs/project-scope';
 import { getCodexKindOrder, hasKind, registeredKinds, initKindRegistry } from './entities/entity-kinds';
 import { parseEntityDocument } from './entities/entity-parse';
 import { t } from './i18n';
-import { updateEntitySheet } from './entities/entity-write';
+import { retitleAfterFileRename, updateEntitySheet } from './entities/entity-write';
 import { ConfirmModal } from './modals/prompt-modal';
 import { StorygridSettings, QuickLinkKey, GridData, createEmptyGrid, applyTemplate, generateId, generateEntityId } from './grid-data';
-import { migrateLegacyWorkflow } from './utils/compile';
+import { addPlanningStep, migrateLegacyWorkflow } from './utils/compile';
 import { isModuleEnabled, migrateEnabledModules, LEGACY_INTENT_MAP, type ModuleId, type IntentId } from './modules';
 import { StorygridSettingsTab } from './settings/settings-tab';
 import { NewGridModal } from './modals/new-grid-modal';
@@ -185,7 +185,8 @@ export default class StorygridPlugin extends Plugin {
 			{ key: 'connectionsMap', icon: CONNECTIONS_MAP_ICON, fallback: '⬡', label: 'Open Social Maps', onClick: () => void this.openSocialMaps() },
 			{ key: 'dashboard', icon: DASHBOARD_ICON, fallback: '▦', label: 'Open Dashboard', onClick: () => void this.openDashboard() },
 			{ key: 'grid', icon: GRID_VIEW_ICON, fallback: '▦', label: 'Open Plot Grid', onClick: () => gridFile ? void this.openGridFile(gridFile) : void this._openCurrentGrid() },
-			{ key: 'codex', icon: CODEX_ICON, fallback: '◎', label: 'Open Codex', onClick: () => void this.openCodex() },
+			// The row knows its grid: open that story's Codex, not the last-opened one.
+			{ key: 'codex', icon: CODEX_ICON, fallback: '◎', label: 'Open Codex', onClick: () => void this.openCodex(gridFile ? projectRootFromGridPath(gridFile.path) : undefined) },
 			{ key: 'timeline', icon: TIMELINE_ICON, fallback: '📅', label: 'Open Timeline', onClick: () => void this.openOrCreateTimeline() },
 		];
 		let firstBtn: HTMLElement | null = null;
@@ -349,6 +350,20 @@ export default class StorygridPlugin extends Plugin {
 			this.manuscriptWordCache.delete(oldPath);
 			if (prev !== undefined && this.isSceneFile(f.path)) {
 				this.manuscriptWordCache.set(f.path, prev);
+			}
+			// A sheet renamed in Obsidian's file list: its page title follows, so
+			// the gallery, the page and the sheet editor all show the new name.
+			if (f instanceof TFile && f.extension === 'md' && !isSafetyNetPath(f.path)
+				&& this.app.metadataCache.getFileCache(f)?.frontmatter?.['storygrid-type']) {
+				const oldBasename = (oldPath.split('/').pop() ?? '').replace(/\.md$/i, '');
+				if (oldBasename && oldBasename !== f.basename) {
+					// Read first: nothing is written when the title stays as it is.
+					runSafely((async () => {
+						if (retitleAfterFileRename(await this.app.vault.cachedRead(f), oldBasename, f.basename) === null) return;
+						await this.app.vault.process(f, (content) =>
+							retitleAfterFileRename(content, oldBasename, f.basename) ?? content);
+					})());
+				}
 			}
 		}));
 		this.registerEvent(this.app.metadataCache.on('changed', (f) => {
@@ -541,6 +556,12 @@ export default class StorygridPlugin extends Plugin {
 		this.refreshModeChip();
 		this.registerEvent(this.app.workspace.on('active-leaf-change', () => {
 			this._activeFilePath = this.app.workspace.getActiveFile()?.path ?? null;
+			// Clicking a Plot Grid tab makes its story the current one, so the
+			// Codex (and every other "open" button) follows the grid in front of
+			// the writer, not the grid that happened to be opened last.
+			const active = this.app.workspace.getActiveViewOfType(StorygridView);
+			const gridPath = active?.getState().filePath;
+			if (typeof gridPath === 'string' && gridPath) runSafely(this.setActiveProjectRoot(projectRootFromGridPath(gridPath)));
 			// Only re-evaluate when scoping can actually change the outcome —
 			// refreshing on every leaf change reconfigures all editors and lags
 			if (this.settings.typewriterMode && this.settings.typewriterScope === 'scenes') {
@@ -2539,6 +2560,11 @@ export default class StorygridPlugin extends Plugin {
 		// Prose Coach: highlightsAlwaysOn/helpLevel → mode (off | revising | always).
 		if (this.settings.proseCoach && migrateProseCoach(this.settings.proseCoach)) await this.saveSettings();
 		await this.migrateCompileWorkflows();
+		if (!this.settings.compilePlanningStepAdded) {
+			addPlanningStep(this.settings.compileWorkflows ?? []);
+			this.settings.compilePlanningStepAdded = true;
+			await this.saveSettings();
+		}
 	}
 
 	/**

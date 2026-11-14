@@ -12,6 +12,7 @@ import { imagesFolderNameProblem, renameImagesFolders } from '../entities/sheet-
 import { t } from '../i18n';
 import { PUBLIC_BUILD } from '../build-flags';
 import { TemplateBuilderModal } from '../modals/template-builder-modal';
+import { ConfirmModal } from '../modals/prompt-modal';
 import { mountRelTypeWizard, renderLineStylePicker } from '../ui/rel-type-wizard';
 import { debounce } from '../utils/debounce';
 
@@ -868,11 +869,16 @@ export class StorygridSettingsTab extends PluginSettingTab {
 						.addButton((btn) => btn
 							.setButtonText(t('common.delete'))
 							.then((b) => b.buttonEl.addClass('mod-warning'))
-							.onClick(async () => {
-								this.plugin.settings[section.key] =
-									this.plugin.settings[section.key].filter((tpl) => tpl.id !== template.id);
-								await this.plugin.saveSettings();
-								this.display();
+							.onClick(() => {
+								// Ask first: a deleted template cannot be brought back.
+								new ConfirmModal(this.app, t('settings.codex.fieldTemplates.confirmDelete', { name: template.name }), t('common.delete'), () => {
+									runSafely((async () => {
+										this.plugin.settings[section.key] =
+											this.plugin.settings[section.key].filter((tpl) => tpl.id !== template.id);
+										await this.plugin.saveSettings();
+										this.display();
+									})());
+								}).open();
 							}));
 				});
 			}

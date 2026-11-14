@@ -164,6 +164,14 @@ export const en: LocaleDict = {
 	'settings.codex.templateBuilder.addField': 'Add field',
 	'settings.codex.templateBuilder.cancel': 'Cancel',
 	'settings.codex.templateBuilder.save': 'Save template',
+	'settings.codex.fieldTemplates.confirmDelete': 'Delete the template “{name}”? Entries you already made with it keep their fields.',
+	'settings.codex.templateBuilder.needName': 'Give the template a name first.',
+	'settings.codex.templateBuilder.needField': 'Add at least one field first.',
+	'settings.codex.templateBuilder.finishField': 'Finish the field you are adding first: add it, or cancel it.',
+	'settings.codex.templateBuilder.discardNew': 'Discard this template? Your changes will be lost.',
+	'settings.codex.templateBuilder.discardEdit': 'Discard your changes? The template stays as it was last saved.',
+	'settings.codex.templateBuilder.keepEditing': 'Keep editing',
+	'settings.codex.templateBuilder.discard': 'Discard',
 
 	// ── Settings: Relationship types ────────────────────────────────────────
 	'settings.relTypes.title': 'Relationship types',
@@ -1087,6 +1095,7 @@ export const en: LocaleDict = {
 	'codex.menu.rename': 'Rename…',
 	'codex.rename.title': 'Rename {name}',
 	'codex.notice.renameFailed': 'Could not rename: {msg}',
+	'codex.notice.nameTaken': 'Another entry here is already called “{name}”. Pick a different name.',
 	'codex.confirm.moveToTrash': 'Move “{name}” to the trash?',
 	'codex.notice.deleted': 'Deleted: {name}',
 	'codex.confirm.trashWithImagesOne': 'Move “{name}” to the trash? It has 1 image in its own folder. Move that image to the trash too?',

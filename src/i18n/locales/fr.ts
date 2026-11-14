@@ -164,6 +164,14 @@ export const fr: LocaleDict = {
 	'settings.codex.templateBuilder.addField': 'Ajouter un champ',
 	'settings.codex.templateBuilder.cancel': 'Annuler',
 	'settings.codex.templateBuilder.save': 'Enregistrer le modèle',
+	'settings.codex.fieldTemplates.confirmDelete': 'Supprimer le modèle « {name} » ? Les entrées déjà créées avec lui gardent leurs champs.',
+	'settings.codex.templateBuilder.needName': 'Donnez d’abord un nom au modèle.',
+	'settings.codex.templateBuilder.needField': 'Ajoutez d’abord au moins un champ.',
+	'settings.codex.templateBuilder.finishField': 'Terminez d’abord le champ en cours : ajoutez-le ou annulez-le.',
+	'settings.codex.templateBuilder.discardNew': 'Abandonner ce modèle ? Vos modifications seront perdues.',
+	'settings.codex.templateBuilder.discardEdit': 'Abandonner vos modifications ? Le modèle reste tel qu’il a été enregistré.',
+	'settings.codex.templateBuilder.keepEditing': 'Continuer',
+	'settings.codex.templateBuilder.discard': 'Abandonner',
 
 	// ── Settings: Relationship types ────────────────────────────────────────
 	'settings.relTypes.title': 'Types de relation',
@@ -1087,6 +1095,7 @@ export const fr: LocaleDict = {
 	'codex.menu.rename': 'Renommer…',
 	'codex.rename.title': 'Renommer {name}',
 	'codex.notice.renameFailed': 'Impossible de renommer : {msg}',
+	'codex.notice.nameTaken': 'Une autre entrée ici s’appelle déjà « {name} ». Choisissez un autre nom.',
 	'codex.confirm.moveToTrash': 'Déplacer « {name} » vers la corbeille ?',
 	'codex.notice.deleted': 'Supprimé : {name}',
 	'codex.confirm.trashWithImagesOne': 'Déplacer « {name} » vers la corbeille ? Elle a 1 image dans son propre dossier. Déplacer aussi cette image vers la corbeille ?',

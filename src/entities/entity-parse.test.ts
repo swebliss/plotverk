@@ -191,7 +191,7 @@ describe('legacy / hand-edited documents without storygrid-schema', () => {
 		expect(found?.value).toBe('bites nails, hums when lying');
 	});
 
-	test('hand-typed scalar YAML (bare number/boolean/date) parses without throwing', () => {
+	test('hand-typed scalar YAML (bare number/boolean/date) parses without throwing and stays with the writer', () => {
 		const doc = [
 			'---',
 			'storygrid-type: character',
@@ -205,8 +205,11 @@ describe('legacy / hand-edited documents without storygrid-schema', () => {
 		].join('\n');
 		expect(() => parseEntityDocument(doc, 'Mara')).not.toThrow();
 		const parsed = parseEntityDocument(doc, 'Mara');
-		expect(parsed.fields.find((f) => f.label === 'Charisma')?.value).toBe('62');
-		expect(parsed.fields.find((f) => f.label === 'Is Immortal')?.value).toBe('true');
+		// Taken in as text, a save would write them back as "62" and "true".
+		expect(parsed.fields.find((f) => f.label === 'Charisma')).toBeUndefined();
+		expect(parsed.fields.find((f) => f.label === 'Is Immortal')).toBeUndefined();
+		expect(parsed.ownedKeys).not.toContain('charisma');
+		expect(parsed.ownedKeys).not.toContain('is-immortal');
 	});
 
 	test('a corrupted storygrid-schema value is ignored, not thrown', () => {

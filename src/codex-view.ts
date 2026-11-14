@@ -16,7 +16,8 @@ import {
 	kindForFile,
 } from './entities/entity-manager';
 import { parseEntityDocument, mergeWithSpecDefaults } from './entities/entity-parse';
-import { retitleEntitySheet, updateEntitySheet } from './entities/entity-write';
+import { updateEntitySheet } from './entities/entity-write';
+import { renameEntitySheet, sheetFileName, sheetNameTaken, sheetPathFor } from './entities/sheet-rename';
 import { buildEntityTree, descendantNames, EntityTreeNode } from './entities/entity-tree';
 import { EntityModal } from './modals/entity-modal';
 import { TextPromptModal, ConfirmModal } from './modals/prompt-modal';
@@ -1030,12 +1031,12 @@ export class StorygridCodexView extends ItemView {
 			.onClick(() => {
 				new TextPromptModal(this.app, t('codex.rename.title', { name: entity.name }), entity.name, (newName) => { runSafely((async () => {
 					if (!newName || newName === entity.name) return;
-					const safe = newName.replace(/[\\/:*?"<>|#^[\]]/g, '-');
-					const newPath = `${entity.file.parent?.path}/${safe}.md`;
 					try {
-						await retitleEntitySheet(this.app, entity.file, newName);
-						await this.app.fileManager.renameFile(entity.file, newPath);
-						this.detailPath = newPath;
+						if (await renameEntitySheet(this.app, entity.file, newName) === 'taken') {
+							new Notice(t('codex.notice.nameTaken', { name: newName }));
+							return;
+						}
+						this.detailPath = entity.file.path;
 					} catch (err) {
 						new Notice(t('codex.notice.renameFailed', { msg: err instanceof Error ? err.message : '' }));
 					}
@@ -1798,12 +1799,11 @@ export class StorygridCodexView extends ItemView {
 			.setIcon('pencil')
 			.onClick(() => {
 				new TextPromptModal(this.app, t('codex.rename.title', { name: entity.name }), entity.name, (newName) => { runSafely((async () => {
-					if (newName === entity.name) return;
-					const safe = newName.replace(/[\\/:*?"<>|#^[\]]/g, '-');
-					const newPath = `${entity.file.parent?.path}/${safe}.md`;
+					if (!newName || newName === entity.name) return;
 					try {
-						await retitleEntitySheet(this.app, entity.file, newName);
-						await this.app.fileManager.renameFile(entity.file, newPath);
+						if (await renameEntitySheet(this.app, entity.file, newName) === 'taken') {
+							new Notice(t('codex.notice.nameTaken', { name: newName }));
+						}
 					} catch (err) {
 						new Notice(t('codex.notice.renameFailed', { msg: err instanceof Error ? err.message : '' }));
 					}
@@ -1893,13 +1893,24 @@ export class StorygridCodexView extends ItemView {
 		// was on disk has to be remembered now — the save diffs against it to know
 		// which fields the writer deleted or relabeled.
 		const before = merged.map((f) => ({ id: f.id, label: f.label, type: f.type }));
+		// The file is renamed only when the writer changes the name here. A title
+		// and file name that already differ (a rename in Obsidian's file list, a
+		// clashing name) must never send the file back to the title.
+		const startName = parsed.name;
 
 		new EntityModal(
 			this.app,
 			kind,
-			parsed.name,
+			startName,
 			merged,
 			async (name, fields, aliases) => {
+				const renamed = !!sheetFileName(name) && name.trim() !== startName.trim();
+				// Another sheet already has the new name: nothing is written, and the
+				// editor stays open with the writer's work so they can pick another.
+				if (renamed && sheetNameTaken(this.app, entity.file, name)) {
+					new Notice(t('codex.notice.nameTaken', { name: name.trim() }));
+					return;
+				}
 				try {
 					await updateEntitySheet(this.app, entity.file, {
 						kind,
@@ -1917,14 +1928,19 @@ export class StorygridCodexView extends ItemView {
 				}
 				// The sheet is saved. From here a hiccup is reported, never a reason to save again.
 				try {
-					// Keep the file name in sync with the sheet name
-					const safe = name.trim().replace(/[\\/:*?"<>|#^[\]]/g, '-');
-					if (safe && safe !== entity.file.basename) {
-						const newPath = `${entity.file.parent?.path}/${safe}.md`;
-						if (!this.app.vault.getAbstractFileByPath(newPath)) {
+					// The writer renamed the sheet in the editor: the file follows.
+					const newPath = sheetPathFor(entity.file, name);
+					if (renamed && newPath !== entity.file.path) {
+						if (!sheetNameTaken(this.app, entity.file, name)) {
 							const wasInDetail = this.detailPath === entity.file.path;
-							await this.app.fileManager.renameFile(entity.file, newPath);
-							if (wasInDetail) this.detailPath = newPath;
+							try {
+								await this.app.fileManager.renameFile(entity.file, newPath);
+							} catch (err) {
+								// The sheet is saved under its new title; only the file kept its
+								// old name. Say so plainly (the menu's Rename can try again).
+								new Notice(t('codex.notice.renameFailed', { msg: err instanceof Error ? err.message : '' }));
+							}
+							if (wasInDetail) this.detailPath = entity.file.path;
 						}
 					}
 					new Notice(t('codex.notice.entityUpdated', { singular: getKindSpec(kind).singular, name }));

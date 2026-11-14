@@ -164,6 +164,14 @@ export const es: LocaleDict = {
 	'settings.codex.templateBuilder.addField': 'Añadir campo',
 	'settings.codex.templateBuilder.cancel': 'Cancelar',
 	'settings.codex.templateBuilder.save': 'Guardar plantilla',
+	'settings.codex.fieldTemplates.confirmDelete': '¿Eliminar la plantilla «{name}»? Las entradas que ya creaste con ella conservan sus campos.',
+	'settings.codex.templateBuilder.needName': 'Primero ponle un nombre a la plantilla.',
+	'settings.codex.templateBuilder.needField': 'Primero añade al menos un campo.',
+	'settings.codex.templateBuilder.finishField': 'Primero termina el campo que estás añadiendo: añádelo o cancélalo.',
+	'settings.codex.templateBuilder.discardNew': '¿Descartar esta plantilla? Se perderán tus cambios.',
+	'settings.codex.templateBuilder.discardEdit': '¿Descartar tus cambios? La plantilla se queda como la guardaste por última vez.',
+	'settings.codex.templateBuilder.keepEditing': 'Seguir editando',
+	'settings.codex.templateBuilder.discard': 'Descartar',
 
 	// ── Settings: Relationship types ────────────────────────────────────────
 	'settings.relTypes.title': 'Tipos de relación',
@@ -1087,6 +1095,7 @@ export const es: LocaleDict = {
 	'codex.menu.rename': 'Renombrar…',
 	'codex.rename.title': 'Renombrar {name}',
 	'codex.notice.renameFailed': 'No se pudo renombrar: {msg}',
+	'codex.notice.nameTaken': 'Otra entrada aquí ya se llama «{name}». Elige otro nombre.',
 	'codex.confirm.moveToTrash': '¿Mover "{name}" a la papelera?',
 	'codex.notice.deleted': 'Eliminado: {name}',
 	'codex.confirm.trashWithImagesOne': '¿Mover "{name}" a la papelera? Tiene 1 imagen en su propia carpeta. ¿Mover también esa imagen a la papelera?',

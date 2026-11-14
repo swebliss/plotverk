@@ -32,9 +32,9 @@ export interface ProseCoachSettings {
 	neverWords?: string[];
 	/** "Not here": scene path → dismissal keys `${kind}:${word}`. */
 	dismissed?: Record<string, string[]>;
-	/** @deprecated read once by migrateProseCoach, then deleted. */
+	/** Legacy: read once by migrateProseCoach, then deleted. */
 	highlightsAlwaysOn?: boolean;
-	/** @deprecated the old help-level switch; deleted by migrateProseCoach. */
+	/** Legacy: the old help-level switch; deleted by migrateProseCoach. */
 	helpLevel?: string;
 }
 
