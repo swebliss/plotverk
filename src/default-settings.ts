@@ -112,7 +112,9 @@ export const DEFAULT_SETTINGS: StorygridSettings = {
 		},
 	],
 	activeColorPaletteId: 'tranquil',
-	gridFolder: '',
+	// New stories get their own folder instead of landing loose in the vault (Emma 2026-11-15).
+	// Only fresh installs see this; a saved setting (even empty) is kept.
+	gridFolder: 'Plotverk',
 	showFirstLinesCount: 3,
 	customTemplates: [],
 	characterFieldTemplates: [],

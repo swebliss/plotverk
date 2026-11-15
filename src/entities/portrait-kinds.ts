@@ -2,19 +2,21 @@ import type { EntityKind } from './entity-kinds';
 
 /**
  * Codex kinds drawn as the round-portrait card (round photo overlapping the
- * card) instead of the square-image tile: people, living creatures, and the
- * groups they form. The ONE list — every portrait-vs-tile decision in the
+ * card) instead of the square-image tile: people, living things, the groups
+ * they form, and faiths. The ONE list — every portrait-vs-tile decision in the
  * Codex gallery reads it.
  *
- * Wildlife is left out on purpose: it holds plants and crops as well as
- * animals. Illness is not a creature. Custom (user-made) kinds are never
- * portrait.
+ * Emma 2026-11-15: Plants & Wildlife and Religions & Beliefs are round too.
+ * Illness is not a living thing. Custom (user-made) kinds are never portrait.
  */
 export const PORTRAIT_KINDS: ReadonlySet<EntityKind> = new Set<EntityKind>([
 	'character',
 	// Creatures & Life
 	'species',
 	'monster',
+	'wildlife',
+	// Systems & Beliefs
+	'religion',
 	// Groups & Factions
 	'faction',
 	'bloodline',

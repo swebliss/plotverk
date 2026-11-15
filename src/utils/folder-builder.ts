@@ -43,6 +43,14 @@ export async function buildProjectStructure(
 	const charactersPath = entityFolderPath(projectFolder, 'character');
 	const locationsPath = entityFolderPath(projectFolder, 'location');
 
+	// The folder new stories go in ("Plotverk" by default, or e.g. "Writing/Stories")
+	// may not exist yet: build it one level at a time, parents first.
+	let parent = '';
+	for (const part of rootPath.split('/').filter(Boolean)) {
+		parent = parent ? `${parent}/${part}` : part;
+		await ensure(parent);
+	}
+
 	// Create the project root, then the manuscript folder, then the Codex
 	// container before its sub-folders (createFolder needs the parent first).
 	await ensure(projectFolder);

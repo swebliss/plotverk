@@ -2,14 +2,14 @@ import { isPortraitKind, portraitCardText, PORTRAIT_KINDS } from './portrait-kin
 import { CODEX_GROUPS } from './worldbuilding-kinds';
 
 describe('isPortraitKind', () => {
-	it('is true for characters, living creatures and every group kind', () => {
-		for (const k of ['character', 'species', 'monster', 'faction', 'bloodline', 'government', 'military', 'social-class']) {
+	it('is true for characters, living things, every group kind and religions', () => {
+		for (const k of ['character', 'species', 'monster', 'wildlife', 'religion', 'faction', 'bloodline', 'government', 'military', 'social-class']) {
 			expect(isPortraitKind(k)).toBe(true);
 		}
 	});
 
-	it('leaves wildlife (plants too), illness, places and custom kinds as normal tiles', () => {
-		for (const k of ['wildlife', 'illness', 'location', 'region', 'settlement', 'item', 'system', 'scene', 'event', 'my-custom-kind']) {
+	it('leaves illness, places and custom kinds as normal tiles', () => {
+		for (const k of ['illness', 'location', 'region', 'settlement', 'item', 'system', 'scene', 'event', 'my-custom-kind']) {
 			expect(isPortraitKind(k)).toBe(false);
 		}
 	});
@@ -44,10 +44,6 @@ describe('portraitCardText', () => {
 		expect(portraitCardText('The Crown', [{ key: 'Form', value: 'Monarchy' }]).subtitle).toBe('Monarchy');
 		expect(portraitCardText('Serfs', [{ key: 'rank', value: 'Bottom' }]).subtitle).toBe('Bottom');
 		expect(portraitCardText('Orcs', [{ key: 'type', value: 'Brute' }]).rows).toEqual([]);
-	});
-
-	it('leaves religion as a normal tile (not in the creatures or groups lists)', () => {
-		expect(isPortraitKind('religion')).toBe(false);
 	});
 
 	it('has no subtitle without a Type fact', () => {

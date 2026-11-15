@@ -32,8 +32,8 @@ export class TextPromptModal extends Modal {
 		input.value = this.initialValue;
 
 		const actions = contentEl.createDiv({ cls: 'sg-modal-actions' });
-		const okBtn = actions.createEl('button', { cls: 'sg-modal-btn sg-modal-btn-primary', text: 'OK' });
-		const cancelBtn = actions.createEl('button', { cls: 'sg-modal-btn', text: 'Cancel' });
+		const okBtn = actions.createEl('button', { cls: 'sg-modal-btn sg-modal-btn-primary', text: t('common.ok') });
+		const cancelBtn = actions.createEl('button', { cls: 'sg-modal-btn', text: t('common.cancel') });
 
 		const submit = () => {
 			const value = input.value.trim();

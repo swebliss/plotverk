@@ -58,10 +58,25 @@ describe('entityFolderForGrid', () => {
 				createFolder: async (p: string) => { folders.add(p); },
 			},
 		} as unknown as App;
-		for (const parent of ['', 'Writing']) {
+		for (const parent of ['', 'Writing', 'Plotverk']) {
 			const { safeName, gridFilePath } = newProjectGridLocation('My Novel', parent);
 			const { scenesPath } = await buildProjectStructure(app, parent, safeName);
 			expect(entityFolderForGrid(gridFilePath, 'scene')).toBe(scenesPath);
 		}
+	});
+
+	it('creates a missing new-story folder, parents first, before the project inside it', async () => {
+		const made: string[] = [];
+		const app = {
+			vault: {
+				getAbstractFileByPath: (p: string) => (made.includes(p) ? {} : null),
+				createFolder: async (p: string) => { made.push(p); },
+			},
+		} as unknown as App;
+		await buildProjectStructure(app, 'Writing/Stories', 'My Novel');
+		expect(made.slice(0, 3)).toEqual(['Writing', 'Writing/Stories', 'Writing/Stories/My Novel']);
+		// Already there: nothing is made twice.
+		await buildProjectStructure(app, 'Writing/Stories', 'Second Novel');
+		expect(made.filter((p) => p === 'Writing').length).toBe(1);
 	});
 });

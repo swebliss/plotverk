@@ -5,10 +5,11 @@
  * Pure (no Obsidian imports) so it can be unit-tested.
  */
 
-/** The no-story-yet screen: the i18n key of the text above the button, the button's label key, and what clicking it does. */
+/** The no-story-yet screen: the i18n key of the text above the button, the button's label key, and what clicking it does.
+ *  The words are the same either way ("New project"); only where the button leads differs. */
 export interface EmptyStateStart {
-	descKey: 'dashboard.empty.desc' | 'dashboard.empty.descNoGrid';
-	labelKey: 'dashboard.empty.cta' | 'dashboard.empty.ctaNoGrid';
+	descKey: 'dashboard.empty.desc';
+	labelKey: 'dashboard.empty.cta';
 	/** 'openGrid' = the open-grid command (picker, or setup when no grid exists); 'newStory' = story setup directly. */
 	action: 'openGrid' | 'newStory';
 }
@@ -16,7 +17,7 @@ export interface EmptyStateStart {
 export function emptyStateStart(plotGridOn: boolean): EmptyStateStart {
 	return plotGridOn
 		? { descKey: 'dashboard.empty.desc', labelKey: 'dashboard.empty.cta', action: 'openGrid' }
-		: { descKey: 'dashboard.empty.descNoGrid', labelKey: 'dashboard.empty.ctaNoGrid', action: 'newStory' };
+		: { descKey: 'dashboard.empty.desc', labelKey: 'dashboard.empty.cta', action: 'newStory' };
 }
 
 /** The "Start Writing — create your first scene" card: open the grid, or the Writers Panel's new-scene box. */

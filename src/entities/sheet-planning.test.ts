@@ -25,7 +25,7 @@ const sceneSheet = buildEntityDocument('scene', 'Eight Days', [
 	field('Notes', 'Remember the bell.\nAnd the tide.', 'textarea'),
 ]);
 
-/** Blank-line runs collapsed, as the "Tidy whitespace" step does. */
+/** Blank-line runs collapsed, as the "Tidy up empty lines" step does. */
 const tidy = (s: string) => s.replace(/\n{3,}/g, '\n\n');
 const strip = (doc: string) => tidy(stripFrontmatter(stripSheetPlanning(doc, 'Eight Days')));
 
@@ -137,7 +137,7 @@ describe('stripSheetPlanning — a sheet’s planning stays out of the book', ()
 	});
 });
 
-describe('the "Remove planning" export step', () => {
+describe('the "Keep only the story text" export step', () => {
 	const withStory = sceneSheet.replace('## Notes', STORY + '\n\n## The End\n\nIt ended.\n\n## Notes').replace(/## Notes[\s\S]*$/, '');
 
 	it('is in the default steps and every built-in workflow', () => {

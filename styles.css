@@ -506,8 +506,11 @@ button.sg-toolbar-btn--accent.sg-toolbar-btn--accent:hover {
 		var(--sg-header-bg);
 }
 
+/* The hover tint is see-through, so it is laid over the view's own background:
+   the same colour as before, but cards scrolled under the sticky header stay hidden
+   (a phone keeps this "touched" state until the next tap elsewhere). */
 .sg-col-header:hover {
-	background: var(--sg-hover-bg);
+	background: linear-gradient(var(--sg-hover-bg), var(--sg-hover-bg)), var(--background-primary);
 	box-shadow:
 		inset 0 1px 0 var(--sg-hover-inset),
 		rgba(0, 0, 0, 0.09) 0px 3px 12px;
@@ -555,7 +558,7 @@ tr .sg-row-header {
 }
 
 .sg-row-header:hover {
-	background: var(--sg-hover-bg);
+	background: linear-gradient(var(--sg-hover-bg), var(--sg-hover-bg)), var(--background-primary);
 	box-shadow:
 		inset 0 1px 0 var(--sg-hover-inset),
 		rgba(0, 0, 0, 0.09) 0px 3px 12px;
@@ -671,6 +674,37 @@ tr .sg-row-header {
 .sg-col-header--resizing .sg-resize-handle::after,
 .sg-row-header--resizing .sg-resize-handle::after {
 	opacity: 1;
+}
+
+/* A long-press on a header must start a resize, never a text selection or the
+   phone's copy menu. Renaming (the --editing label) still selects normally. */
+.sg-col-header,
+.sg-row-header {
+	-webkit-user-select: none;
+	user-select: none;
+	-webkit-touch-callout: none;
+}
+.sg-header-label--editing {
+	-webkit-user-select: text;
+	user-select: text;
+	-webkit-touch-callout: default;
+}
+/* While renaming, the resize strips step aside so every tap reaches the text. */
+.sg-header--renaming .sg-resize-handle {
+	pointer-events: none;
+}
+
+/* Phones have no hover: fingertip-wide grab strips, with the pill faintly
+   visible so the writer can find the spot. */
+.is-mobile .sg-resize-handle--col,
+.is-mobile .sg-resize-handle--row-w {
+	width: 28px;
+}
+.is-mobile .sg-resize-handle--row-h {
+	height: 28px;
+}
+.is-mobile .sg-resize-handle::after {
+	opacity: 0.35;
 }
 
 /* ── Data cells ────────────────────────────────────────────────────────────── */
@@ -1091,6 +1125,39 @@ tr .sg-row-header {
 /* Also target the .markdown-rendered wrapper Obsidian injects */
 .sg-card-synopsis .markdown-rendered,
 .sg-card-synopsis .markdown-rendered p { margin: 0; padding: 0; }
+
+/* Lists on a card: tight, so the card holds as much text as possible.
+   Obsidian's own list spacing (a paragraph gap above and below, a wide
+   indent, padding on every line) is sized for notes, not cards. */
+.sg-card-synopsis,
+.sg-card-notes,
+.sg-cell-note {
+	--list-indent: 1.1em;
+	--list-spacing: 0;
+}
+.sg-card-synopsis ul,
+.sg-card-synopsis ol,
+.sg-card-notes ul,
+.sg-card-notes ol,
+.sg-cell-note ul,
+.sg-cell-note ol {
+	margin: 0 0 2px;
+	padding-inline-start: 1.1em;
+}
+.sg-card-synopsis li,
+.sg-card-notes li,
+.sg-cell-note li {
+	margin: 0;
+	padding: 0;
+}
+.sg-card-synopsis li ul,
+.sg-card-synopsis li ol,
+.sg-card-notes li ul,
+.sg-card-notes li ol,
+.sg-cell-note li ul,
+.sg-cell-note li ol {
+	margin: 0;
+}
 
 /* Kill all the default paragraph/heading spacing inside cell notes —
    MarkdownRenderer adds <p> elements with large default margins that
@@ -1747,6 +1814,38 @@ button.sg-md-toolbar-btn.sg-md-toolbar-btn:active {
 
 .sg-prompt-modal .sg-modal-actions {
 	margin-top: 18px;
+}
+
+/* "Add a web link" (card editor): two labelled fields, a hint under the address. */
+.sg-web-link-field {
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+	margin-top: 10px;
+}
+
+.sg-web-link-field-label {
+	font-size: 0.85em;
+	font-weight: 600;
+	color: var(--text-muted);
+}
+
+.sg-web-link-error {
+	margin-top: 6px;
+	font-size: 0.85em;
+	color: var(--text-error);
+}
+
+.sg-web-link-error:empty {
+	display: none;
+}
+
+@media (max-width: 768px) {
+	.sg-prompt-modal .sg-modal-input,
+	.sg-web-link-modal .sg-modal-input {
+		min-height: 44px;
+		font-size: 16px; /* 16px or more: iOS won't zoom the page when the field is tapped */
+	}
 }
 
 /* ── Snapshot browser modal ──────────────────────────────────────────────── */
@@ -2940,8 +3039,11 @@ select.sg-panel-select.sg-panel-select:focus {
 /* Inline formatting rendered as real formatting, not raw markdown */
 .sg-panel-richtext h1 { font-size: 1.35em; font-weight: 700; margin: 0.3em 0 0.2em; line-height: 1.3; }
 .sg-panel-richtext h2 { font-size: 1.15em; font-weight: 700; margin: 0.3em 0 0.2em; line-height: 1.3; }
-.sg-panel-richtext ul { margin: 0.2em 0; padding-left: 1.4em; }
-.sg-panel-richtext li { margin: 0.1em 0; }
+.sg-panel-richtext ul,
+.sg-panel-richtext ol { margin: 0.1em 0; padding-left: 1.2em; }
+.sg-panel-richtext li { margin: 0; padding: 0; }
+.sg-panel-richtext li ul,
+.sg-panel-richtext li ol { margin: 0; }
 .sg-panel-richtext strong { font-weight: 700; }
 .sg-panel-richtext em { font-style: italic; }
 .sg-panel-richtext:first-child { margin-top: 0; }
@@ -11247,6 +11349,8 @@ body {
 /* ── Empty state CTA ── */
 .sg-dash-empty-cta {
 	margin-top: 16px;
+	min-height: 44px;
+	padding: 0 24px;
 }
 
 .sg-dash-empty-sample {
@@ -14405,8 +14509,17 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 /* ── "Link from Codex" (card editor) and its picker (CodexLinkModal) ────────
    Obsidian theme variables only, so light and dark both follow the theme. */
 
-.sg-chip-container .sg-panel-codex-link-btn {
+/* The four "add" buttons in Linked entries ("+ Add event", "+ Add character",
+   "+ Link to Codex", "+ Add web link"): one width, one shared left edge. */
+.sg-chip-container .sg-panel-add-btn {
 	margin-left: 0;
+	min-width: 9.5em;
+}
+
+/* Spanish and French labels are longer ("+ Ajouter un événement"): more room, so the four stay one width. */
+.sg-lang-es .sg-chip-container .sg-panel-add-btn,
+.sg-lang-fr .sg-chip-container .sg-panel-add-btn {
+	min-width: 14em;
 }
 
 /* Linked state: a filled check box on the left, a "Linked" tag on the right. */
@@ -14445,9 +14558,50 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 }
 
 @media (max-width: 768px) {
-	/* 44pt touch target; the doubled selector outranks the desktop "hug the label" reset. */
-	button.sg-panel-btn-small.sg-panel-codex-link-btn {
+	/* The four "add" buttons keep one width at the phone's larger text size. */
+	.sg-panel-section-content button.sg-panel-add-btn {
+		min-width: 11.5em;
+	}
+
+	.sg-lang-es .sg-panel-section-content button.sg-panel-add-btn,
+	.sg-lang-fr .sg-panel-section-content button.sg-panel-add-btn {
+		min-width: 17em;
+	}
+
+	/* Card editor on a phone: every small button ("+ Add event", "+ Add
+	   character", "+ Link to Codex", "+ Add web link") the same finger-sized shape, with room
+	   between them and between the rows they sit in. */
+	.sg-panel-section-content button.sg-panel-btn-small.sg-panel-btn-small {
 		min-height: 44px;
+		padding: 0 16px;
+		font-size: 13px;
+		border-radius: 8px;
+		margin-left: 0;
+	}
+	.sg-panel-section-content .sg-chip-container {
+		gap: 8px;
+		padding-top: 6px;
+	}
+	.sg-panel-section-content .sg-panel-entity-kind-row {
+		gap: 6px;
+		margin-bottom: 14px;
+	}
+	.sg-panel-section-content .sg-panel-entity-kind-label {
+		font-size: 11px;
+	}
+
+	/* Fold-out sections: a little air between the closed rows, and the open
+	   one's content sits clear of its header and of the next section. */
+	.sg-panel-section {
+		border-top: none;
+		margin-top: 8px;
+	}
+	.sg-panel-section-summary {
+		min-height: 48px;
+	}
+	.sg-panel-section--open .sg-panel-section-inner {
+		padding-top: 8px;
+		padding-bottom: 16px;
 	}
 }
 

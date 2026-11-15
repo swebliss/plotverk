@@ -12,10 +12,12 @@ import { EntityModal } from './modals/entity-modal';
 import { LinkDocModal } from './modals/link-doc-modal';
 import { EntityPickerModal } from './modals/entity-picker-modal';
 import { CodexLinkModal, CodexKindPickerModal } from './modals/codex-link-modal';
+import { WebLinkModal } from './modals/web-link-modal';
 import { getKindSpec } from './entities/entity-kinds';
 import { addCodexLink, groupCodexLinks, isCodexLinked, removeCodexLink, toggleCodexLink } from './utils/codex-links';
+import { addWebLink, cleanWebLinks, normalizeWebUrl, removeWebLink, webLinkLabel, WebLink } from './utils/web-links';
 import { SaveLayoutModal } from './modals/save-layout-modal';
-import { ConfirmModal } from './modals/prompt-modal';
+import { ConfirmModal, TextPromptModal } from './modals/prompt-modal';
 import { SnapshotBrowserModal } from './modals/snapshot-browser-modal';
 import { writeGridBackup, restoreNewestValidBackup } from './utils/grid-backup';
 import { getDocPreview } from './utils/doc-preview';
@@ -616,9 +618,15 @@ export class StorygridView extends ItemView {
 
 	private renderGridOnly(): void {
 		if (!this.scrollContainerEl || !this.gridData) return;
-		this.scrollContainerEl.empty();
-		this.renderGrid(this.scrollContainerEl);
+		// Emptying the container snaps it back to the top-left; put the writer
+		// back where they were, so a redraw never leaves them looking at blank space.
+		const sc = this.scrollContainerEl;
+		const { scrollTop, scrollLeft } = sc;
+		sc.empty();
+		this.renderGrid(sc);
 		this.applyZoom();
+		sc.scrollTop = scrollTop;
+		sc.scrollLeft = scrollLeft;
 		// Re-apply editing highlight after DOM re-render
 		if (this.panelCardId) {
 			this.contentEl.querySelector<HTMLElement>(`[data-card-id="${this.panelCardId}"]`)
@@ -2206,6 +2214,7 @@ export class StorygridView extends ItemView {
 		el.addEventListener('pointerdown', (e) => {
 			if (e.button !== 0) return;
 			if (e.pointerType !== 'mouse') return; // header reorder is mouse-only for now
+			if (el.querySelector('.sg-header-label--editing')) return; // renaming: clicks place the cursor
 			const rect = el.getBoundingClientRect();
 			if (e.clientY >= rect.bottom - this.EDGE_PX || e.clientX >= rect.right - this.EDGE_PX) return;
 			e.preventDefault();
@@ -2355,6 +2364,7 @@ export class StorygridView extends ItemView {
 		el.addEventListener('pointerdown', (e) => {
 			if (e.button !== 0) return;
 			if (e.pointerType !== 'mouse') return; // header reorder is mouse-only for now
+			if (el.querySelector('.sg-header-label--editing')) return; // renaming: clicks place the cursor
 			const rect = el.getBoundingClientRect();
 			if (e.clientX >= rect.right - this.EDGE_PX) return;
 			e.preventDefault();
@@ -2375,10 +2385,57 @@ export class StorygridView extends ItemView {
 	// The old EDGE_PX rect check stays as a fallback (wider zone for touch).
 
 	private readonly EDGE_PX = 10;
+	/** On touch, how far past a row/column line a fingertip may land and still grab that line. */
+	private readonly TOUCH_OVERSHOOT_PX = 14;
+
+	/** How far a pointer must move before a press on a resize edge counts as a drag (a fingertip wobbles). */
+	private dragSlop(pointerType: string): number {
+		return pointerType === 'mouse' ? 3 : 8;
+	}
+
+	/**
+	 * Whether a row line (y) or column line (x) is on screen, not scrolled
+	 * under the sticky column headers or the sticky row names.
+	 */
+	private lineIsVisible(pos: number, axis: 'x' | 'y'): boolean {
+		const corner = this.contentEl.querySelector<HTMLElement>('.sg-corner');
+		if (!corner) return true;
+		const r = corner.getBoundingClientRect();
+		return axis === 'y' ? pos >= r.bottom - 1 : pos >= r.right - 1;
+	}
 
 	/** Edge zone is wider for touch — a fingertip can't hit a 10px strip. */
 	private edgeFor(pointerType: string): number {
-		return pointerType === 'mouse' ? this.EDGE_PX : 24;
+		return pointerType === 'mouse' ? this.EDGE_PX : 28;
+	}
+
+	/**
+	 * Shared start of every header resize. A header label being renamed keeps
+	 * its taps (returns false). Otherwise any half-made text selection is
+	 * dropped, so a phone's long-press can't leave the row name highlighted.
+	 */
+	private beginHeaderResize(header: HTMLElement): boolean {
+		if (header.querySelector('.sg-header-label--editing')) return false;
+		header.win.getSelection()?.removeAllRanges();
+		return true;
+	}
+
+	/**
+	 * Shared end of every header resize. The tap that ends a drag also lands
+	 * as a click on the header's label, which would open it for renaming (and
+	 * pop the phone keyboard up over the grid). Swallow that one click.
+	 */
+	private endHeaderResize(doc: Document): void {
+		// Phones often send no click at all after a drag, so the guard also
+		// stands down at the next new touch or press: it must never eat a real tap.
+		const disarm = () => {
+			doc.removeEventListener('click', swallow, { capture: true });
+			doc.removeEventListener('pointerdown', disarm, { capture: true });
+		};
+		const swallow = (ev: MouseEvent) => { ev.stopPropagation(); ev.preventDefault(); disarm(); };
+		doc.addEventListener('click', swallow, { capture: true });
+		doc.addEventListener('pointerdown', disarm, { capture: true });
+		window.setTimeout(disarm, 400);
 	}
 
 	/**
@@ -2390,6 +2447,18 @@ export class StorygridView extends ItemView {
 		el.style.width = `${w}px`;
 		el.style.minWidth = `${w}px`;
 		el.style.maxWidth = `${w}px`;
+	}
+
+	/** Remember elements' inline sizes; the returned function puts them back (a cancelled resize). */
+	private snapshotWidths(els: HTMLElement[]): () => void {
+		const saved = els.map((el) => [el, el.style.width, el.style.minWidth, el.style.maxWidth] as const);
+		return () => {
+			for (const [el, w, minW, maxW] of saved) {
+				el.style.width = w;
+				el.style.minWidth = minW;
+				el.style.maxWidth = maxW;
+			}
+		};
 	}
 
 	private bindColEdgeResize(th: HTMLElement, col: GridColumn): void {
@@ -2408,28 +2477,42 @@ export class StorygridView extends ItemView {
 		th.addEventListener('pointerdown', (e) => {
 			if (e.button !== 0) return;
 			const rect = th.getBoundingClientRect();
-			if (e.clientX < rect.right - this.edgeFor(e.pointerType)) return;
-			this.startColResize(e, th, col);
+			if (e.clientX >= rect.right - this.edgeFor(e.pointerType)) {
+				this.startColResize(e, th, col);
+				return;
+			}
+			// A fingertip landing just past the line belongs to the column on its left.
+			if (e.pointerType !== 'mouse' && e.clientX <= rect.left + this.TOUCH_OVERSHOOT_PX && !th.querySelector('.sg-header-label--editing')) {
+				const prev = th.previousElementSibling;
+				const prevId = prev?.getAttribute('data-col-id');
+				const prevCol = prevId ? this.gridData?.columns.find((c) => c.id === prevId) : undefined;
+				if (prev?.instanceOf(HTMLElement) && prev.hasClass('sg-col-header') && prevCol && this.lineIsVisible(rect.left, 'x')) {
+					this.startColResize(e, prev, prevCol);
+				}
+			}
 		});
 	}
 
 	private startColResize(e: PointerEvent, th: HTMLElement, col: GridColumn): void {
 		const doc = th.doc;
+		if (!this.beginHeaderResize(th)) return;
 		e.preventDefault();
 		e.stopPropagation();
 
 		const startX = e.clientX;
 		const startWidth = th.offsetWidth;
-		th.classList.add('sg-col-header--resizing');
 		doc.body.addClass('sg-body-col-resize');
 
 		// Cache cells once so pointermove doesn't query DOM every frame
 		const cells = Array.from(
 			this.contentEl.querySelectorAll<HTMLElement>(`td[data-col-id="${col.id}"]`)
 		);
+		const restoreWidths = this.snapshotWidths([th, ...cells]);
 
 		let rafId = 0;
 		let done = false;
+		let moved = false;
+		let lastX = startX;
 		const cleanup = () => {
 			if (done) return;
 			done = true;
@@ -2438,10 +2521,16 @@ export class StorygridView extends ItemView {
 			doc.body.removeClass('sg-body-grabbing', 'sg-body-col-resize', 'sg-body-row-resize');
 			doc.removeEventListener('pointermove',   onMove);
 			doc.removeEventListener('pointerup',     onUp);
-			doc.removeEventListener('pointercancel', onUp);
+			doc.removeEventListener('pointercancel', onSystemCancel);
 		};
 
+		const onSystemCancel = (): void => onCancel(true);
+
 		const onMove = (moveEvt: PointerEvent) => {
+			if (!moved && Math.abs(moveEvt.clientX - startX) < this.dragSlop(e.pointerType)) return;
+			moved = true;
+			th.classList.add('sg-col-header--resizing');
+			lastX = moveEvt.clientX;
 			window.cancelAnimationFrame(rafId);
 			rafId = window.requestAnimationFrame(() => {
 				// clientX deltas are screen px; the table lives in zoomed px.
@@ -2451,12 +2540,23 @@ export class StorygridView extends ItemView {
 			});
 		};
 
+		// The system took the touch away (a phone gesture), or it was a tap with no
+		// drag: put the column back as it was instead of saving a half-made drag.
+		// Only a real drag or a system cancel swallows the click that follows.
+		const onCancel = (swallowClick = true) => {
+			cleanup();
+			if (swallowClick) this.endHeaderResize(doc);
+			restoreWidths();
+		};
+
 		const onUp = () => {
 			window.cancelAnimationFrame(rafId);
-			// Read the dragged target width from style — the last rAF may not
-			// have painted yet, and offsetWidth can lag behind it.
-			const finalWidth = Math.max(40, Math.round(parseFloat(th.style.width) || th.offsetWidth));
+			if (!moved) { onCancel(false); return; }
+			// From the last pointer position, not the painted style: the frame
+			// cancelled above may not have run yet, so a fast flick lost its tail.
+			const finalWidth = Math.max(40, Math.round(startWidth + (lastX - startX) / this.zoomLevel));
 			cleanup();
+			this.endHeaderResize(doc);
 			this.pinWidth(th, finalWidth);
 			for (const td of cells) this.pinWidth(td, finalWidth);
 			if (!this.gridData) return;
@@ -2472,7 +2572,7 @@ export class StorygridView extends ItemView {
 
 		doc.addEventListener('pointermove',   onMove);
 		doc.addEventListener('pointerup',     onUp);
-		doc.addEventListener('pointercancel', onUp);
+		doc.addEventListener('pointercancel', onSystemCancel);
 	}
 
 	private bindRowEdgeResize(rowHeader: HTMLElement, row: GridRow, tr: HTMLElement): void {
@@ -2504,6 +2604,15 @@ export class StorygridView extends ItemView {
 				this.startRowWidthResize(e, rowHeader);
 			} else if (e.clientY >= rect.bottom - edge) {
 				this.startRowHeightResize(e, rowHeader, row, tr);
+			} else if (e.pointerType !== 'mouse' && e.clientY <= rect.top + this.TOUCH_OVERSHOOT_PX && !rowHeader.querySelector('.sg-header-label--editing')) {
+				// A fingertip landing just below the line belongs to the row above.
+				const prevTr = tr.previousElementSibling;
+				const prevHeader = prevTr?.querySelector<HTMLElement>(':scope > td.sg-row-header');
+				const prevId = prevHeader?.getAttribute('data-row-id');
+				const prevRow = prevId ? this.gridData?.rows.find((r) => r.id === prevId) : undefined;
+				if (prevTr?.instanceOf(HTMLElement) && prevHeader && prevRow && this.lineIsVisible(rect.top, 'y')) {
+					this.startRowHeightResize(e, prevHeader, prevRow, prevTr);
+				}
 			}
 		});
 	}
@@ -2511,12 +2620,12 @@ export class StorygridView extends ItemView {
 	/** Right-edge drag on a row header — resizes ALL row headers together. */
 	private startRowWidthResize(e: PointerEvent, rowHeader: HTMLElement): void {
 		const doc = rowHeader.doc;
+		if (!this.beginHeaderResize(rowHeader)) return;
 		e.preventDefault();
 		e.stopPropagation();
 
 		const startX = e.clientX;
 		const startWidth = rowHeader.offsetWidth;
-		rowHeader.classList.add('sg-row-header--resizing');
 		doc.body.addClass('sg-body-col-resize');
 
 		// Get all row headers and the corner cell
@@ -2524,9 +2633,12 @@ export class StorygridView extends ItemView {
 			this.contentEl.querySelectorAll<HTMLElement>('td.sg-row-header')
 		);
 		const corner = this.contentEl.querySelector<HTMLElement>('.sg-corner');
+		const restoreWidths = this.snapshotWidths(corner ? [...allRowHeaders, corner] : allRowHeaders);
 
 		let rafId = 0;
 		let done = false;
+		let moved = false;
+		let lastX = startX;
 		const cleanup = () => {
 			if (done) return;
 			done = true;
@@ -2535,10 +2647,22 @@ export class StorygridView extends ItemView {
 			doc.body.removeClass('sg-body-grabbing', 'sg-body-col-resize', 'sg-body-row-resize');
 			doc.removeEventListener('pointermove',   onMove);
 			doc.removeEventListener('pointerup',     onUp);
-			doc.removeEventListener('pointercancel', onUp);
+			doc.removeEventListener('pointercancel', onSystemCancel);
 		};
 
+		const onCancel = (swallowClick = true) => {
+			cleanup();
+			if (swallowClick) this.endHeaderResize(doc);
+			restoreWidths();
+		};
+
+		const onSystemCancel = (): void => onCancel(true);
+
 		const onMove = (moveEvt: PointerEvent) => {
+			if (!moved && Math.abs(moveEvt.clientX - startX) < this.dragSlop(e.pointerType)) return;
+			moved = true;
+			rowHeader.classList.add('sg-row-header--resizing');
+			lastX = moveEvt.clientX;
 			window.cancelAnimationFrame(rafId);
 			rafId = window.requestAnimationFrame(() => {
 				const newWidth = Math.max(40, startWidth + (moveEvt.clientX - startX) / this.zoomLevel);
@@ -2549,8 +2673,10 @@ export class StorygridView extends ItemView {
 
 		const onUp = () => {
 			window.cancelAnimationFrame(rafId);
-			const finalWidth = Math.max(40, Math.round(parseFloat(rowHeader.style.width) || rowHeader.offsetWidth));
+			if (!moved) { onCancel(false); return; }
+			const finalWidth = Math.max(40, Math.round(startWidth + (lastX - startX) / this.zoomLevel));
 			cleanup();
+			this.endHeaderResize(doc);
 			allRowHeaders.forEach((rh) => this.pinWidth(rh, finalWidth));
 			if (corner) this.pinWidth(corner, finalWidth);
 			if (!this.gridData) return;
@@ -2565,22 +2691,29 @@ export class StorygridView extends ItemView {
 
 		doc.addEventListener('pointermove',   onMove);
 		doc.addEventListener('pointerup',     onUp);
-		doc.addEventListener('pointercancel', onUp);
+		doc.addEventListener('pointercancel', onSystemCancel);
 	}
 
 	/** Bottom-edge drag on a row header — resizes that row's height. */
 	private startRowHeightResize(e: PointerEvent, rowHeader: HTMLElement, row: GridRow, tr: HTMLElement): void {
 		const doc = rowHeader.doc;
+		if (!this.beginHeaderResize(rowHeader)) return;
 		e.preventDefault();
 		e.stopPropagation();
 
 		const startY = e.clientY;
 		const startHeight = tr.offsetHeight;
-		rowHeader.classList.add('sg-row-header--resizing');
 		doc.body.addClass('sg-body-row-resize');
+
+		// What a cancelled drag puts back: the row's height and its cards' limits.
+		const startRowHeight = tr.style.height;
+		const startCardLimits = Array.from(tr.querySelectorAll<HTMLElement>('.sg-card'))
+			.map((c) => [c, c.style.minHeight, c.style.maxHeight] as const);
 
 		let rafId = 0;
 		let done = false;
+		let moved = false;
+		let lastY = startY;
 		const cleanup = () => {
 			if (done) return;
 			done = true;
@@ -2589,10 +2722,26 @@ export class StorygridView extends ItemView {
 			doc.body.removeClass('sg-body-grabbing', 'sg-body-col-resize', 'sg-body-row-resize');
 			doc.removeEventListener('pointermove',   onMove);
 			doc.removeEventListener('pointerup',     onUp);
-			doc.removeEventListener('pointercancel', onUp);
+			doc.removeEventListener('pointercancel', onSystemCancel);
 		};
 
+		const onCancel = (swallowClick = true) => {
+			cleanup();
+			if (swallowClick) this.endHeaderResize(doc);
+			tr.style.height = startRowHeight;
+			for (const [c, minH, maxH] of startCardLimits) {
+				c.style.minHeight = minH;
+				c.style.maxHeight = maxH;
+			}
+		};
+
+		const onSystemCancel = (): void => onCancel(true);
+
 		const onMove = (moveEvt: PointerEvent) => {
+			if (!moved && Math.abs(moveEvt.clientY - startY) < this.dragSlop(e.pointerType)) return;
+			moved = true;
+			rowHeader.classList.add('sg-row-header--resizing');
+			lastY = moveEvt.clientY;
 			window.cancelAnimationFrame(rafId);
 			rafId = window.requestAnimationFrame(() => {
 				const newHeight = Math.max(40, startHeight + (moveEvt.clientY - startY) / this.zoomLevel);
@@ -2607,8 +2756,11 @@ export class StorygridView extends ItemView {
 
 		const onUp = () => {
 			window.cancelAnimationFrame(rafId);
-			const finalHeight = Math.max(40, parseInt(tr.style.height) || tr.offsetHeight);
+			// A tap with no drag changes nothing: no save, no redraw.
+			if (!moved) { onCancel(false); return; }
+			const finalHeight = Math.max(40, Math.round(startHeight + (lastY - startY) / this.zoomLevel));
 			cleanup();
+			this.endHeaderResize(doc);
 			if (!this.gridData) return;
 			this.gridData = {
 				...this.gridData,
@@ -2623,7 +2775,7 @@ export class StorygridView extends ItemView {
 
 		doc.addEventListener('pointermove',   onMove);
 		doc.addEventListener('pointerup',     onUp);
-		doc.addEventListener('pointercancel', onUp);
+		doc.addEventListener('pointercancel', onSystemCancel);
 	}
 
 	// ─── Grid Mutations ───────────────────────────────────────────────────────
@@ -2919,12 +3071,36 @@ export class StorygridView extends ItemView {
 	): void {
 		if (labelEl.contentEditable === 'true') return; // already editing
 
+		// The name shown now: after an earlier rename it is newer than the one the caller passed.
+		const currentName = (labelEl.textContent ?? '').trim() || originalValue;
+
+		// On a phone, typing inside the zoomed grid makes the phone scroll the grid
+		// away to make room for the keyboard (the page goes black and the name hides
+		// under the keyboard). There, the name is changed in a small window instead.
+		if (Platform.isMobile) {
+			const isRow = labelEl.closest('.sg-row-header') !== null;
+			new TextPromptModal(
+				this.app,
+				i18n(isRow ? 'grid.menu.renameRow' : 'grid.menu.renameColumn'),
+				currentName,
+				(value) => {
+					if (value === currentName) return;
+					labelEl.textContent = value; // the header shows the new name straight away
+					onSave(value);
+				}
+			).open();
+			return;
+		}
+
 		// Disable drag on parent while editing
 		const draggableParent = labelEl.closest<HTMLElement>('[draggable]');
 		if (draggableParent) draggableParent.draggable = false;
 
 		labelEl.contentEditable = 'true';
 		labelEl.classList.add('sg-header-label--editing');
+		// The header cell knows it is being renamed, so its resize strips step aside (styles.css).
+		const headerCell = labelEl.closest<HTMLElement>('.sg-col-header, .sg-row-header');
+		headerCell?.addClass('sg-header--renaming');
 		labelEl.focus();
 
 		// Select all text
@@ -2941,24 +3117,26 @@ export class StorygridView extends ItemView {
 			const newValue = (labelEl.textContent ?? '').trim();
 			labelEl.contentEditable = 'false';
 			labelEl.classList.remove('sg-header-label--editing');
+			headerCell?.removeClass('sg-header--renaming');
 			if (draggableParent) draggableParent.draggable = true;
 			labelEl.removeEventListener('keydown', onKeydown);
 			labelEl.removeEventListener('blur', onBlur);
-			if (newValue && newValue !== originalValue) {
+			if (newValue && newValue !== currentName) {
 				onSave(newValue);
 			} else {
 				// Restore original text without a full re-render
-				labelEl.textContent = originalValue;
+				labelEl.textContent = currentName;
 			}
 		};
 
 		const onKeydown = (e: KeyboardEvent) => {
 			if (e.key === 'Enter') { e.preventDefault(); commit(); }
 			if (e.key === 'Escape') {
-				labelEl.textContent = originalValue;
+				labelEl.textContent = currentName;
 				committed = true; // prevent save
 				labelEl.contentEditable = 'false';
 				labelEl.classList.remove('sg-header-label--editing');
+				headerCell?.removeClass('sg-header--renaming');
 				if (draggableParent) draggableParent.draggable = true;
 				labelEl.removeEventListener('keydown', onKeydown);
 				labelEl.removeEventListener('blur', onBlur);
@@ -3366,6 +3544,9 @@ export class StorygridView extends ItemView {
 			linkedDraftCopy[k] = Array.isArray(value) ? [...(value as string[])] : typeof value === 'string' && value ? [value] : [];
 		}
 		const draft: SceneCard = { ...card, tags: [...(card.tags ?? [])], characterPaths: [...(card.characterPaths ?? [])], linkedEntityPaths: linkedDraftCopy };
+		// Web links are cleaned the same way (junk in a hand-edited file must not break the editor);
+		// a card without any keeps no webLinks field at all.
+		if (card.webLinks !== undefined) draft.webLinks = cleanWebLinks(card.webLinks);
 		this._panelDraft = draft;
 		this._draftBaselines.set(draft, JSON.parse(JSON.stringify(draft)) as SceneCard);
 
@@ -3692,6 +3873,7 @@ export class StorygridView extends ItemView {
 		// ── SECTION: Linked entities (events, characters, locations, etc.) ──────
 		const hasLinkedEntities = !!(
 			(draft.characterPaths ?? []).length ||
+			(draft.webLinks ?? []).length ||
 			Object.values(draft.linkedEntityPaths ?? {}).some((arr) => arr.length > 0)
 		);
 		const linkedEntitiesSummaryEl = this.panelSection(body, 'linked-entities', i18n('grid.panel.linkedEntities'), hasLinkedEntities, (sec) => {
@@ -3722,7 +3904,7 @@ export class StorygridView extends ItemView {
 						renderEvents();
 					});
 				});
-				const addBtn = eventChips.createEl('button', { cls: 'sg-panel-btn-small', text: i18n('grid.panel.addEvent') });
+				const addBtn = eventChips.createEl('button', { cls: 'sg-panel-btn-small sg-panel-add-btn', text: i18n('grid.panel.addEvent') });
 				addBtn.addEventListener('click', () => {
 					const projectRoot = this.resolveProjectRoot();
 					new EntityPickerModal(
@@ -3794,7 +3976,7 @@ export class StorygridView extends ItemView {
 						autoSaveNow();
 					});
 				});
-				const addBtn = charContainer.createEl('button', { cls: 'sg-panel-btn-small', text: i18n('grid.panel.addCharacter') });
+				const addBtn = charContainer.createEl('button', { cls: 'sg-panel-btn-small sg-panel-add-btn', text: i18n('grid.panel.addCharacter') });
 				addBtn.addEventListener('click', () => {
 					const projectRoot = this.resolveProjectRoot();
 					new EntityPickerModal(
@@ -3848,7 +4030,7 @@ export class StorygridView extends ItemView {
 
 			// ── Every other Codex entry: one row per Codex group that has links ─
 			// Events keep their own row above, so they are left out here. A fresh
-			// card shows only the "Link to Codex" button.
+			// card shows the Codex and Web links headers, each with its button.
 			const codexLinksEl = sec.createDiv({ cls: 'sg-panel-codex-links' });
 			const renderLinks = () => {
 				renderEvents();
@@ -3868,6 +4050,17 @@ export class StorygridView extends ItemView {
 				draft.linkedEntityPaths = toggleCodexLink(draft.linkedEntityPaths, kind, entryPath).linked;
 				autoSaveNow();
 				renderLinks();
+			};
+			// Web links change on the live editor's draft, or straight on the card when this editor
+			// was rebuilt behind the Add web link window (then this draft is an old copy).
+			const changeWebLinks = (next: (links: WebLink[] | undefined) => WebLink[]) => {
+				if (this._panelDraft !== draft) {
+					this.changeWebLinksOnLiveCard(draft.id, next);
+					return;
+				}
+				draft.webLinks = next(draft.webLinks);
+				autoSaveNow();
+				renderCodexLinks();
 			};
 			const renderCodexLinks = () => {
 				codexLinksEl.empty();
@@ -3895,8 +4088,37 @@ export class StorygridView extends ItemView {
 						});
 					}
 				}
-				const btnRow = codexLinksEl.createDiv({ cls: 'sg-chip-container sg-panel-codex-link-row' });
-				const linkBtn = btnRow.createEl('button', { cls: 'sg-panel-btn-small sg-panel-codex-link-btn', text: i18n('grid.panel.linkFromCodex') });
+				// ── Codex: its own header + button, like Events and Characters ───
+				const codexRow = codexLinksEl.createDiv({ cls: 'sg-panel-entity-kind-row' });
+				codexRow.createSpan({ cls: 'sg-panel-entity-kind-label', text: i18n('grid.panel.kind.codex') });
+				const codexBtnWrap = codexRow.createDiv({ cls: 'sg-chip-container' });
+				const linkBtn = codexBtnWrap.createEl('button', { cls: 'sg-panel-btn-small sg-panel-add-btn', text: i18n('grid.panel.linkFromCodex') });
+
+				// ── Web links: pages on the internet, opened in the browser ──────
+				// Always shown with its header, so its button sits under a category like the others.
+				const webRow = codexLinksEl.createDiv({ cls: 'sg-panel-entity-kind-row' });
+				webRow.createSpan({ cls: 'sg-panel-entity-kind-label', text: i18n('grid.panel.kind.webLinks') });
+				const webChips = webRow.createDiv({ cls: 'sg-chip-container' });
+				for (const link of draft.webLinks ?? []) {
+					const chip = webChips.createDiv({ cls: 'sg-chip sg-chip--entity sg-chip--clickable sg-chip--web' });
+					chip.title = `${i18n('grid.panel.openWebLinkTooltip')}\n${link.url}`;
+					chip.createSpan({ text: `🔗 ${webLinkLabel(link)}` });
+					chip.addEventListener('click', (e) => {
+						if ((e.target as HTMLElement).classList.contains('sg-chip-remove')) return;
+						// Checked again on open: the address lives in the grid file, which can be edited by hand.
+						const safe = normalizeWebUrl(link.url);
+						if (safe) window.open(safe);
+					});
+					const x = chip.createEl('button', { cls: 'sg-chip-remove', text: '×' });
+					x.addEventListener('mousedown', (e) => {
+						e.preventDefault();
+						changeWebLinks((links) => removeWebLink(links, link.url));
+					});
+				}
+				const webBtn = webChips.createEl('button', { cls: 'sg-panel-btn-small sg-panel-add-btn', text: i18n('grid.panel.addWebLink') });
+				webBtn.addEventListener('click', () => {
+					new WebLinkModal(this.app, (link) => changeWebLinks((links) => addWebLink(links, link))).open();
+				});
 				linkBtn.addEventListener('click', () => {
 					const projectRoot = this.resolveProjectRoot();
 					new CodexLinkModal(
@@ -4085,6 +4307,16 @@ export class StorygridView extends ItemView {
 		this.gridData = updateCard(this.gridData, cardId, {
 			linkedEntityPaths: toggleCodexLink(card.linkedEntityPaths, kind, path).linked,
 		});
+		this.renderAll();
+		this.scheduleSave();
+	}
+
+	/** Change a card's web links straight in the grid and redraw: for an Add web link window that outlived its editor. */
+	private changeWebLinksOnLiveCard(cardId: string, next: (links: WebLink[] | undefined) => WebLink[]): void {
+		if (!this.gridData) return;
+		const card = this.gridData.cards.find((c) => c.id === cardId);
+		if (!card) return;
+		this.gridData = updateCard(this.gridData, cardId, { webLinks: next(cleanWebLinks(card.webLinks)) });
 		this.renderAll();
 		this.scheduleSave();
 	}

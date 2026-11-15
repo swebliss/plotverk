@@ -47,7 +47,7 @@ import { ReferenceIndex } from './refs/reference-index';
 import { scopeToBook } from './refs/project-scope';
 import { getCodexKindOrder, hasKind, registeredKinds, initKindRegistry } from './entities/entity-kinds';
 import { parseEntityDocument } from './entities/entity-parse';
-import { t } from './i18n';
+import { t, getLocale } from './i18n';
 import { retitleAfterFileRename, updateEntitySheet } from './entities/entity-write';
 import { ConfirmModal } from './modals/prompt-modal';
 import { StorygridSettings, QuickLinkKey, GridData, createEmptyGrid, applyTemplate, generateId, generateEntityId } from './grid-data';
@@ -289,6 +289,8 @@ export default class StorygridPlugin extends Plugin {
 		this.sprintLastMinutes = this.getDefaultSprintMinutes();
 		this.applyCodexSheetClasses();
 		this.mainBody.addClass('sg-plugin-active');
+		// The language as a class, for the few places where longer Spanish/French words need more room.
+		this.mainBody.addClass(`sg-lang-${getLocale()}`);
 
 		// v1: all features enabled locally; no server validation yet.
 		// When payment is wired up, replace enabledFeatures with the server response.
@@ -1435,7 +1437,7 @@ export default class StorygridPlugin extends Plugin {
 		if (this._coachRefreshTimer !== null) window.clearTimeout(this._coachRefreshTimer);
 		this._coachRefreshTimer = null;
 		registerEntityModalPlugin(null);
-		this.mainBody.classList.remove('sg-typewriter-on', 'sg-sheets-styled', 'sg-infobox-left', 'sg-infobox-top', 'sg-mode-write', 'sg-plugin-active');
+		this.mainBody.classList.remove('sg-typewriter-on', 'sg-sheets-styled', 'sg-infobox-left', 'sg-infobox-top', 'sg-mode-write', 'sg-plugin-active', 'sg-lang-en', 'sg-lang-es', 'sg-lang-fr');
 		this.mainBody.style.removeProperty('--sg-tw-dim-opacity');
 		this.mainBody.style.removeProperty('--sg-tw-line-pos');
 		this._leafHeaderBtn?.remove();
@@ -1938,8 +1940,8 @@ export default class StorygridPlugin extends Plugin {
 	async upgradeCodexSheets(): Promise<void> {
 		new ConfirmModal(
 			this.app,
-			'Upgrade all Codex documents to the current entry layout? Your text is kept — this only adds the modern structure (infobox and sections) where an entry is missing it.',
-			'Upgrade entries',
+			'Upgrade all Codex sheets to the current layout? Your text is kept — this only adds the modern structure (infobox and sections) where a sheet is missing it.',
+			'Upgrade sheets',
 			() => { runSafely((async () => {
 				let count = 0;
 				for (const project of findProjects(this.app)) {

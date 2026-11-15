@@ -49,7 +49,7 @@ export async function docWordCount(
 /**
  * Flatten the outline tree into ordered manuscript items. Dividers become
  * headings; doc nodes become scenes whose text is the file body read from the
- * vault (raw — the "Remove document properties" step decides on frontmatter).
+ * vault (raw — the "Leave out note properties" step decides on frontmatter).
  * Excluded doc paths and docs missing from disk are skipped. This runs on every
  * render of the Compile tab, so it must stay read-only — snapshots are written
  * by `snapshotCompiledScenes` at export time instead.

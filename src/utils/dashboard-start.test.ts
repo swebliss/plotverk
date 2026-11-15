@@ -4,12 +4,12 @@ import { es } from '../i18n/locales/es';
 import { fr } from '../i18n/locales/fr';
 
 describe('emptyStateStart', () => {
-	it('keeps today’s text and button when the Plot Grid is on', () => {
+	it('opens the grid setup when the Plot Grid is on', () => {
 		expect(emptyStateStart(true)).toEqual({ descKey: 'dashboard.empty.desc', labelKey: 'dashboard.empty.cta', action: 'openGrid' });
 	});
 
-	it('starts a new story, and says so, when the Plot Grid is off', () => {
-		expect(emptyStateStart(false)).toEqual({ descKey: 'dashboard.empty.descNoGrid', labelKey: 'dashboard.empty.ctaNoGrid', action: 'newStory' });
+	it('starts a new story directly when the Plot Grid is off, with the same words', () => {
+		expect(emptyStateStart(false)).toEqual({ descKey: 'dashboard.empty.desc', labelKey: 'dashboard.empty.cta', action: 'newStory' });
 	});
 
 	it('every text and label it can pick exists in English, Spanish and French', () => {
@@ -22,11 +22,12 @@ describe('emptyStateStart', () => {
 		}
 	});
 
-	it('with the Plot Grid off, the text never mentions a plot grid', () => {
-		expect(en['dashboard.empty.descNoGrid']).toBe('Start a story first. The Dashboard tracks your progress for each story.');
-		expect(en['dashboard.empty.descNoGrid']).not.toMatch(/grid/i);
-		expect(es['dashboard.empty.descNoGrid']).not.toMatch(/cuadrícula/i);
-		expect(fr['dashboard.empty.descNoGrid']).not.toMatch(/grille/i);
+	it('the text never mentions a plot grid, so it fits with the Plot Grid on or off', () => {
+		expect(en['dashboard.empty.desc']).toBe('Start a Plotverk project first to let the Dashboard help you with your progress.');
+		expect(en['dashboard.empty.cta']).toBe('New project');
+		expect(en['dashboard.empty.desc']).not.toMatch(/grid/i);
+		expect(es['dashboard.empty.desc']).not.toMatch(/cuadrícula/i);
+		expect(fr['dashboard.empty.desc']).not.toMatch(/grille/i);
 	});
 });
 

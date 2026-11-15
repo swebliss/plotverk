@@ -73,6 +73,15 @@ export interface SceneCard {
 	guide?: boolean;
 	/** Target word count for this scene (0 or missing = no goal). */
 	wordGoal?: number;
+	/** Web pages linked to this card (research, maps, pictures), opened in the browser. */
+	webLinks?: WebLink[];
+}
+
+/** A web page linked to a Plot Grid card. */
+export interface WebLink {
+	url: string;
+	/** The writer's own name for it; empty means "show the site's name". */
+	label?: string;
 }
 
 export interface GridData {
@@ -352,7 +361,7 @@ export interface StorygridSettings {
 	compileWorkflow?: unknown;
 	/** Named compile workflows (Longform-style). Created lazily. */
 	compileWorkflows?: CompileWorkflowSettings[];
-	/** The "Remove planning" export step was added to the saved workflows once (1.0.8). */
+	/** The "Keep only the story text" export step was added to the saved workflows once (1.0.8). */
 	compilePlanningStepAdded?: boolean;
 	/** Created lazily, like compileWorkflows, so DEFAULT_SETTINGS is never mutated. */
 	dashboard?: DashboardSettings;

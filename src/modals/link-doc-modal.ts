@@ -1,4 +1,5 @@
 import { App, SuggestModal, TFile } from 'obsidian';
+import { t } from '../i18n';
 import { isSafetyNetPath } from '../utils/safety-paths';
 
 /**
@@ -11,7 +12,7 @@ export class LinkDocModal extends SuggestModal<TFile> {
 	constructor(app: App, onSelect: (file: TFile) => void) {
 		super(app);
 		this.onSelect = onSelect;
-		this.setPlaceholder('Search for a document or canvas to link…');
+		this.setPlaceholder(t('grid.panel.linkNotePlaceholder'));
 	}
 
 	getSuggestions(query: string): TFile[] {
