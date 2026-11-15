@@ -226,40 +226,47 @@ export function anchorsForBook(loop: Loop, gridPath: string): LoopAnchor[] {
  * Remap every reference to `oldPath` to `newPath` across a TimelineData:
  * sceneDates keys, eventDisplay keys, loop anchors (gridPath and docPath),
  * and chrono links (scenePath and targetNotePath). Mirrors the
- * syncRenamedDocLinks rename-sync pattern used elsewhere in the plugin —
- * Phase 3 wires this into the vault's 'rename' event.
+ * syncRenamedDocLinks rename-sync pattern used elsewhere in the plugin.
+ * `oldPath` may be a folder: every path inside it follows too (whole path
+ * segments only — "Book" never matches "Book 2"). Wired to the vault's
+ * 'rename' event for open timelines (TimelineView) and closed ones (main.ts).
  */
 export function remapTimelinePath(data: TimelineData, oldPath: string, newPath: string): TimelineData {
+	const move = (p: string): string => {
+		if (p === oldPath) return newPath;
+		if (oldPath && p.startsWith(`${oldPath}/`)) return newPath + p.slice(oldPath.length);
+		return p;
+	};
 	const remapAnchor = (a: LoopAnchor): LoopAnchor => ({
 		...a,
-		gridPath: a.gridPath === oldPath ? newPath : a.gridPath,
-		docPath: a.docPath === oldPath ? newPath : a.docPath,
+		gridPath: typeof a.gridPath === 'string' ? move(a.gridPath) : a.gridPath,
+		docPath: typeof a.docPath === 'string' ? move(a.docPath) : a.docPath,
 	});
 
 	const sceneDates: Record<string, StoryDate> = {};
-	for (const [path, date] of Object.entries(data.sceneDates)) {
-		sceneDates[path === oldPath ? newPath : path] = date;
+	for (const [path, date] of Object.entries(data.sceneDates ?? {})) {
+		sceneDates[move(path)] = date;
 	}
 
 	const eventDisplay: Record<string, EventDisplay> = {};
-	for (const [path, display] of Object.entries(data.eventDisplay)) {
-		eventDisplay[path === oldPath ? newPath : path] = display;
+	for (const [path, display] of Object.entries(data.eventDisplay ?? {})) {
+		eventDisplay[move(path)] = display;
 	}
 
 	return {
 		...data,
 		sceneDates,
 		eventDisplay,
-		loops: data.loops.map((l) => ({
+		loops: !Array.isArray(data.loops) ? data.loops : data.loops.map((l) => ({
 			...l,
 			setup: remapAnchor(l.setup),
 			payoff: l.payoff ? remapAnchor(l.payoff) : undefined,
-			middles: l.middles.map(remapAnchor),
+			middles: Array.isArray(l.middles) ? l.middles.map(remapAnchor) : l.middles,
 		})),
-		links: data.links.map((link) => ({
+		links: !Array.isArray(data.links) ? data.links : data.links.map((link) => ({
 			...link,
-			scenePath: link.scenePath === oldPath ? newPath : link.scenePath,
-			targetNotePath: link.targetNotePath === oldPath ? newPath : link.targetNotePath,
+			scenePath: typeof link.scenePath === 'string' ? move(link.scenePath) : link.scenePath,
+			targetNotePath: typeof link.targetNotePath === 'string' ? move(link.targetNotePath) : link.targetNotePath,
 		})),
 	};
 }

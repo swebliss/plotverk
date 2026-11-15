@@ -36,7 +36,7 @@ export interface GridRow {
 	height?: number;
 	width?: number;
 	order: number;
-	/** Template-only: the beat's guide text ("~10% · what belongs here"). applyTemplate turns it into an ordinary card in a first "Beat guide" column and does not keep it on the row. */
+	/** Template-only: the beat's guide text ("~10% · what belongs here"). applyTemplate turns it into an ordinary card in a first guide column (e.g. "Save the Cat beat guide") and does not keep it on the row. */
 	hint?: string;
 }
 
@@ -107,6 +107,8 @@ export interface CharacterField {
 export interface StorygridTemplate {
 	id: string;
 	name: string;
+	/** Optional short name for the guide column header ("Save the Cat" → "Save the Cat beat guide") when the full name reads badly there. An empty string gives the plain "Beat guide". */
+	guideName?: string;
 	description: string;
 	rows: Omit<GridRow, 'id' | 'order'>[];
 	columns: Omit<GridColumn, 'id' | 'order'>[];
@@ -398,6 +400,8 @@ export interface StorygridSettings {
 	outlineCollapsedGroups?: Record<string, boolean>;
 	/** Open the Dashboard automatically when Obsidian starts. */
 	openDashboardOnStartup?: boolean;
+	/** Story setup has asked "Open your Dashboard when Obsidian starts?" (either answer) — never ask again. */
+	dashboardStartupAsked?: boolean;
 	/** The writer's name — default for title pages and EPUB metadata. */
 	authorName?: string;
 	/** Target number of finished sprints per day (0/unset = no goal). */
@@ -628,9 +632,10 @@ export function sortByOrder<T extends { order: number }>(items: T[]): T[] {
 /**
  * Apply a storytelling template to a grid.
  * Replaces rows and columns, clears cards. When the template's rows carry guide
- * text, a first "Beat guide" column is added holding one ordinary, editable card
- * per beat (title = where it falls, synopsis = what belongs there); the story
- * columns start one to the right.
+ * text, a first guide column (labelled `guideLabel`, e.g. "Save the Cat beat guide")
+ * is added holding one ordinary, editable card per beat (title = where it falls,
+ * synopsis = what belongs there); the story columns start one to the right.
+ * The guide cards carry `guide: true`; the column itself is an ordinary column.
  * Rows default to 130px height (landscape postcard) unless explicitly set in template.
  */
 export function applyTemplate(grid: GridData, template: StorygridTemplate, guideLabel = 'Beat guide'): GridData {

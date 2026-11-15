@@ -1,4 +1,5 @@
 import { plotverkEvents } from './utils/plotverk-events';
+import { movedRoot, onPathMove } from './utils/project-move';
 import { ItemView, WorkspaceLeaf, Platform, ViewStateResult, TAbstractFile, TFile } from 'obsidian';
 import type StorygridPlugin from './main';
 import { onSettingsChanged, runCommandById } from './utils/obsidian-internals';
@@ -27,6 +28,7 @@ import { resolveWidgetLayout, getWidgetDef, defaultHiddenWidgetIds, computePrese
 import { resolveSceneTree, type SceneTreeNode } from './utils/scene-tree';
 import { canUse } from './entitlements/entitlements';
 import { loadSampleStory } from './sample/load-sample';
+import { emptyStateStart, startWritingTarget } from './utils/dashboard-start';
 
 /** Dashboard sections that only exist with Pro (the whole-book coach + "Who's gone quiet"). */
 const PRO_WIDGETS: ReadonlySet<string> = new Set(['habits', 'pace', 'quiet']);
@@ -137,6 +139,10 @@ export class StorygridDashboardView extends ItemView {
 		const projectHandler = () => void this.render();
 		plotverkEvents.addEventListener('storygrid:project-changed', projectHandler);
 		this.register(() => plotverkEvents.removeEventListener('storygrid:project-changed', projectHandler));
+		// The project's folder was renamed or moved: keep showing it at its new place.
+		this.register(onPathMove((move) => {
+			if (this.projectRoot !== null) this.projectRoot = movedRoot(this.projectRoot, move) ?? this.projectRoot;
+		}));
 
 		this._sprintChangedHandler = () => this.refreshSprintPanel();
 		plotverkEvents.addEventListener('storygrid:sprint-changed', this._sprintChangedHandler);
@@ -276,10 +282,14 @@ export class StorygridDashboardView extends ItemView {
 		if (projects.length === 0) {
 			const empty = el.createDiv({ cls: 'sg-dash-empty' });
 			empty.createEl('h3', { text: t('dashboard.empty.title') });
-			empty.createEl('p', { text: t('dashboard.empty.desc') });
-			const cta = empty.createEl('button', { cls: 'sg-dash-empty-cta mod-cta', text: t('dashboard.empty.cta') });
+			// Plot Grid switched off: the grid command refuses to run, so start the story setup directly
+			// (and the text above the button talks about a story, not a plot grid).
+			const start = emptyStateStart(this.plugin.isModuleOn('plotGrid'));
+			empty.createEl('p', { text: t(start.descKey) });
+			const cta = empty.createEl('button', { cls: 'sg-dash-empty-cta mod-cta', text: t(start.labelKey) });
 			cta.addEventListener('click', () => {
-				this.runCommand(`${this.plugin.manifest.id}:open-grid`);
+				if (start.action === 'newStory') runSafely(this.plugin.createNewGrid());
+				else this.runCommand(`${this.plugin.manifest.id}:open-grid`);
 			});
 			const sample = empty.createEl('button', { cls: 'sg-dash-empty-sample', text: t('dashboard.empty.sampleCta') });
 			sample.addEventListener('click', () => void loadSampleStory(this.plugin));
@@ -755,7 +765,8 @@ if (projects.length > 1) {
 		// of the generic "create a scene" CTA (Pantsers never see this — they
 		// land straight in a blank scene at setup, per Step 9).
 		const recentGrid = [...project.gridFiles].sort((a, b) => b.stat.mtime - a.stat.mtime)[0];
-		if (this.plugin.settings.writingStyle === 'plotter' && recentGrid) {
+		// Plot Grid switched off: no grid card — the "Start Writing" card below takes its place.
+		if (this.plugin.settings.writingStyle === 'plotter' && recentGrid && this.plugin.isModuleOn('plotGrid')) {
 			makeCard('resume', 'squares-four', '◆', t('dashboard.action.openYourGrid'), recentGrid.basename,
 				() => void this.plugin.openGridFile(recentGrid));
 			this.promotedAction = 'plotGrid';
@@ -763,7 +774,13 @@ if (projects.length > 1) {
 		}
 
 		makeCard('resume', 'pen-nib', '✍', t('dashboard.action.startWriting'), t('dashboard.action.createFirstScene'), () => {
-			this.runCommand(`${this.plugin.manifest.id}:open-grid`);
+			// Plot Grid switched off: the grid command refuses to run, so go to the
+			// Writers Panel's "new scene" box for this story instead.
+			if (startWritingTarget(this.plugin.isModuleOn('plotGrid')) === 'writersPanelNewScene') {
+				runSafely(this.plugin.openWritersPanelNewScene(project.rootPath));
+			} else {
+				this.runCommand(`${this.plugin.manifest.id}:open-grid`);
+			}
 		});
 		this.promotedAction = null;
 	}

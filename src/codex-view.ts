@@ -1,4 +1,5 @@
 import { plotverkEvents } from './utils/plotverk-events';
+import { movedPath, movedRoot, onPathMove } from './utils/project-move';
 import { ItemView, WorkspaceLeaf, TFile, Notice, Menu, FuzzySuggestModal, App, MarkdownRenderer, Platform, ViewStateResult } from 'obsidian';
 import type StorygridPlugin from './main';
 import type { SocialMapsTab } from './social-maps-view';
@@ -42,6 +43,7 @@ import {
 import { t } from './i18n';
 import { isFamilyGroup, hasFamilyTie } from './utils/story-tree';
 import { isEchoOfEarlierField } from './entities/field-types';
+import { isPortraitKind, portraitCardText } from './entities/portrait-kinds';
 
 export const VIEW_TYPE_CODEX = 'storygrid-codex-view';
 
@@ -63,7 +65,7 @@ const VIRTUAL_OVERSCAN_MOBILE = 10;
 const VIRTUAL_CARD_H = 240;
 /** Shorter card on mobile. Must match CSS. */
 const VIRTUAL_CARD_H_MOBILE = 200;
-/** Taller card for portrait kinds (character/faction) — the overlapping photo adds height. Must match CSS. */
+/** Taller card for portrait kinds (see entities/portrait-kinds.ts) — the overlapping photo adds height. Must match CSS. */
 const VIRTUAL_CARD_H_PORTRAIT = 290;
 const VIRTUAL_CARD_H_PORTRAIT_MOBILE = 270;
 /** Gap between cards (px) — matches gap: 14px on .sg-codex-grid--tiles. */
@@ -141,11 +143,6 @@ export class StorygridCodexView extends ItemView {
 		return getKindSpec(kind).displayShape === 'row' ? 'list' : 'tiles';
 	}
 
-	/** People/group kinds use the overlapping-portrait card (round photo above the card). */
-	private isPortraitKind(kind: EntityKind): boolean {
-		return kind === 'character' || kind === 'faction';
-	}
-
 	constructor(leaf: WorkspaceLeaf, plugin: StorygridPlugin) {
 		super(leaf);
 		this.plugin = plugin;
@@ -214,6 +211,18 @@ export class StorygridCodexView extends ItemView {
 			void this.renderAll();
 		};
 		plotverkEvents.addEventListener('storygrid:project-changed', this._projectChangedHandler);
+		// The project's folder (or the open sheet) was renamed or moved: keep showing it at its
+		// new place. Runs before this view's own rename listener, which then redraws.
+		this.register(onPathMove((move) => {
+			if (this.projectRoot !== null) this.projectRoot = movedRoot(this.projectRoot, move) ?? this.projectRoot;
+			if (this.detailPath !== null) this.detailPath = movedPath(this.detailPath, move) ?? this.detailPath;
+			this._projectsDirty = true;
+		}));
+
+		// Plot Grid cards followed a renamed sheet and are saved: recount "In N scenes".
+		const onGridLinksChanged = () => scheduleRefresh();
+		plotverkEvents.addEventListener('storygrid:grid-links-changed', onGridLinksChanged);
+		this.register(() => plotverkEvents.removeEventListener('storygrid:grid-links-changed', onGridLinksChanged));
 
 		// Paste a picture while a sheet is open here (Ctrl+V / Cmd+V, or the
 		// paste box on a phone): it joins that sheet's images.
@@ -1289,7 +1298,7 @@ export class StorygridCodexView extends ItemView {
 		const grid = gallery.createDiv({
 			cls: `sg-codex-grid sg-codex-grid--${this.viewMode}`,
 		});
-		const portraitGrid = this.viewMode === 'tiles' && this.isPortraitKind(this.activeKind);
+		const portraitGrid = this.viewMode === 'tiles' && isPortraitKind(this.activeKind);
 		if (portraitGrid) grid.addClass('sg-codex-grid--portrait');
 
 		if (entities.length === 0) {
@@ -1573,8 +1582,8 @@ export class StorygridCodexView extends ItemView {
 			return;
 		}
 
-		// Portrait layout for person/group kinds
-		if (entity.kind === 'character' || entity.kind === 'faction') {
+		// Portrait layout for people, living creatures and groups (entities/portrait-kinds.ts)
+		if (isPortraitKind(entity.kind)) {
 			card.addClass('sg-codex-card--portrait');
 
 			// Visible card surface — sits below the overlapping photo. Name centered
@@ -1582,7 +1591,24 @@ export class StorygridCodexView extends ItemView {
 			const bodyEl = card.createDiv({ cls: 'sg-codex-card-portrait-body' });
 			bodyEl.createDiv({ cls: 'sg-codex-card-name', text: entity.name });
 
-			const fm = this.app.metadataCache.getFileCache(entity.file)?.frontmatter ?? {};
+			if (entity.kind !== 'character') {
+				// Creatures and groups: their own Type/Form/Rank as the subtitle, other
+				// gallery facts as labelled rows — no character-only labels.
+				const { subtitle, rows } = portraitCardText(entity.name, entity.facts);
+				if (subtitle) bodyEl.createDiv({ cls: 'sg-codex-card-portrait-subtitle', text: subtitle });
+				if (rows.length > 0) {
+					const inner = bodyEl.createDiv({ cls: 'sg-codex-card-portrait-inner' });
+					for (const fact of rows) {
+						const row = inner.createDiv({ cls: 'sg-codex-card-portrait-inner-row' });
+						row.createSpan({ cls: 'sg-codex-card-portrait-inner-label', text: fact.key });
+						row.createSpan({ cls: 'sg-codex-card-portrait-inner-value', text: fact.value });
+					}
+				}
+			}
+
+			const fm: Record<string, unknown> = entity.kind === 'character'
+				? this.app.metadataCache.getFileCache(entity.file)?.frontmatter ?? {}
+				: {};
 			const role = String(fm['role'] ?? '').trim();
 			const age = String(fm['age'] ?? '').trim();
 			const want = String(fm['want'] ?? '').trim();
@@ -1643,7 +1669,12 @@ export class StorygridCodexView extends ItemView {
 			}
 			if (!ring.querySelector('img')) {
 				const ph = ring.createDiv({ cls: 'sg-codex-card-portrait-placeholder' });
-				setPhosphorIcon(ph, entity.kind === 'faction' ? spec.icon : 'user', entity.kind === 'faction' ? spec.fallbackIcon : '👤');
+				if (entity.kind === 'character') {
+					setPhosphorIcon(ph, 'user', '👤');
+				} else {
+					const look = this.sheetIcon(entity.file, spec);
+					setPhosphorIcon(ph, look.icon, look.fallbackIcon);
+				}
 			}
 
 			const editBtn = card.createEl('button', { cls: 'sg-codex-card-edit', title: t('codex.card.editSheet'), attr: { 'aria-label': t('codex.card.editSheet') } });

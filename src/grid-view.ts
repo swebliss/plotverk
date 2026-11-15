@@ -11,6 +11,9 @@ import { onSettingsChanged } from './utils/obsidian-internals';
 import { EntityModal } from './modals/entity-modal';
 import { LinkDocModal } from './modals/link-doc-modal';
 import { EntityPickerModal } from './modals/entity-picker-modal';
+import { CodexLinkModal, CodexKindPickerModal } from './modals/codex-link-modal';
+import { getKindSpec } from './entities/entity-kinds';
+import { addCodexLink, groupCodexLinks, isCodexLinked, removeCodexLink, toggleCodexLink } from './utils/codex-links';
 import { SaveLayoutModal } from './modals/save-layout-modal';
 import { ConfirmModal } from './modals/prompt-modal';
 import { SnapshotBrowserModal } from './modals/snapshot-browser-modal';
@@ -18,6 +21,8 @@ import { writeGridBackup, restoreNewestValidBackup } from './utils/grid-backup';
 import { getDocPreview } from './utils/doc-preview';
 import { reportError, runSafely } from './utils/report-error';
 import { applyCardTagChanges, cardTagChanges, normalizeCardTag } from './utils/card-tag-sync';
+import { renameCardPaths, renameGridCardPaths } from './utils/card-paths';
+import { plotverkEvents } from './utils/plotverk-events';
 import { getContrastColor } from './utils/color-contrast';
 import { axisLineColor } from './utils/axis-line';
 import { markdownToHtml, htmlToMarkdown } from './utils/rich-text';
@@ -77,6 +82,10 @@ export class StorygridView extends ItemView {
 	private gridData: GridData | null = null;
 	private saveTimer: number | null = null;
 	private _selfWrite = false;
+	/** Cards followed a renamed sheet; the next save tells the Codex to recount scenes. */
+	private _linksFollowedUnsaved = false;
+	/** Renames seen while loadGrid is reading the file: one list per read still running. */
+	private _renamesDuringLoad = new Set<Array<[string, string]>>();
 	private _lastBackupAt = 0;
 	private static readonly BACKUP_INTERVAL_MS = 5 * 60 * 1000;
 
@@ -247,22 +256,56 @@ export class StorygridView extends ItemView {
 			} else if (this.filePath.startsWith(`${oldPath}/`)) {
 				this.repointFilePath(file.path + this.filePath.slice(oldPath.length));
 			}
-			if (!this.gridData) return;
-			let changed = false;
-			const newTitle = file.name.replace(/\.(md|canvas)$/, '');
-			const updatedCards = this.gridData.cards.map((card) => {
-				if (card.linkedDocPath === oldPath) {
-					changed = true;
-					return { ...card, linkedDocPath: file.path, title: newTitle };
-				}
-				return card;
-			});
-			if (changed) {
-				this.gridData = { ...this.gridData, cards: updatedCards, updatedAt: new Date().toISOString() };
-				this.scheduleSave();
-				this.renderAll();
-			}
+			this.followRenamedPath(oldPath, file.path);
 		}));
+	}
+
+	/**
+	 * Cards follow a renamed or moved file or folder. Called for every rename while
+	 * this view is open, and by the plugin for a grid opened after a rename it was
+	 * still catching up on (so the grid never keeps the old paths).
+	 */
+	followRenamedPath(oldPath: string, newPath: string): void {
+		// Every path a card keeps (scene page, characters, other linked sheets) follows,
+		// also in the card editor's working copy, the copied card and cards waiting on Undo,
+		// so none of them can later write the old path back.
+		const draft = this._panelDraft;
+		let draftChanged = false;
+		if (draft) {
+			const baseline = this._draftBaselines.get(draft);
+			const nextDraft = renameCardPaths(draft, oldPath, newPath);
+			draftChanged = nextDraft !== draft;
+			Object.assign(draft, nextDraft);
+			if (baseline) Object.assign(baseline, renameCardPaths(baseline, oldPath, newPath));
+		}
+		if (this.copiedCard) this.copiedCard = renameCardPaths(this.copiedCard, oldPath, newPath);
+		this._undoPool = this._undoPool.map((c) => renameCardPaths(c, oldPath, newPath));
+		// The grid is being read from disk right now: loadGrid applies this rename once it has it.
+		for (const list of this._renamesDuringLoad) list.push([oldPath, newPath]);
+		if (!this.gridData) return;
+		const next = this.renamedGrid(this.gridData, oldPath, newPath);
+		if (next !== this.gridData) {
+			this.gridData = { ...next, updatedAt: new Date().toISOString() };
+			this._linksFollowedUnsaved = true;
+			this.scheduleSave();
+			this.renderAll();
+		} else if (draftChanged) {
+			// Only the open card editor held the old path: redraw it so its links show the new one.
+			this.renderAll();
+		}
+	}
+
+	/** `grid` with its cards following a rename; a card linked to the renamed file also takes its new name as title. */
+	private renamedGrid(grid: GridData, oldPath: string, newPath: string): GridData {
+		const next = renameGridCardPaths(grid, oldPath, newPath);
+		if (next === grid) return grid;
+		const newTitle = (newPath.split('/').pop() ?? newPath).replace(/\.(md|canvas)$/, '');
+		return {
+			...next,
+			cards: next.cards.map((card, i) =>
+				grid.cards[i]?.linkedDocPath === oldPath ? { ...card, title: newTitle } : card
+			),
+		};
 	}
 
 	async onClose(): Promise<void> {
@@ -338,19 +381,30 @@ export class StorygridView extends ItemView {
 			return;
 		}
 		let data: GridData;
+		// Sheets renamed while the file is being read: the copy read may still hold their old paths.
+		const renames: Array<[string, string]> = [];
+		this._renamesDuringLoad.add(renames);
 		try {
 			const raw = await this.app.vault.read(file);
 			data = JSON.parse(raw) as GridData;
 		} catch {
+			this._renamesDuringLoad.delete(renames);
 			if (this.filePath !== filePath) return;
 			if (!this.gridData) this.renderAll();
 			// Only a file that cannot be read is "corrupted" — never a hiccup while drawing it.
 			await this.offerBackupRestore(file);
 			return;
 		}
+		this._renamesDuringLoad.delete(renames);
 		// Another grid was opened in this tab while this one was being read: that one wins.
 		if (this.filePath !== filePath) return;
+		const loaded = data;
+		for (const [from, to] of renames) data = this.renamedGrid(data, from, to);
 		this.gridData = data;
+		if (data !== loaded) {
+			this._linksFollowedUnsaved = true;
+			this.scheduleSave();
+		}
 		// Restore the grid's saved zoom level
 		this.zoomLevel = Math.min(2, Math.max(0.5, data.zoom ?? 1.0));
 		try {
@@ -444,6 +498,11 @@ export class StorygridView extends ItemView {
 		this._selfWrite = true;
 		try {
 			await this.app.vault.modify(file, JSON.stringify(this.gridData, null, 2));
+			// A renamed sheet's new path is on disk now: the Codex can recount its scenes.
+			if (this._linksFollowedUnsaved) {
+				this._linksFollowedUnsaved = false;
+				plotverkEvents.dispatchEvent(new CustomEvent('storygrid:grid-links-changed'));
+			}
 		} catch (err) {
 			// A failed write has to be loud — otherwise the user keeps editing a grid
 			// that stopped being persisted (locked file, Sync conflict, disk full).
@@ -3301,7 +3360,11 @@ export class StorygridView extends ItemView {
 
 		// Draft is mutable; auto-saved on every change
 		const linkedDraftCopy: Record<string, string[]> = {};
-		for (const [k, v] of Object.entries(card.linkedEntityPaths ?? {})) linkedDraftCopy[k] = [...v];
+		// A hand-edited file may hold a lone path (or junk) where a list belongs: keep a lone path, drop junk.
+		for (const [k, v] of Object.entries(card.linkedEntityPaths ?? {})) {
+			const value: unknown = v;
+			linkedDraftCopy[k] = Array.isArray(value) ? [...(value as string[])] : typeof value === 'string' && value ? [value] : [];
+		}
 		const draft: SceneCard = { ...card, tags: [...(card.tags ?? [])], characterPaths: [...(card.characterPaths ?? [])], linkedEntityPaths: linkedDraftCopy };
 		this._panelDraft = draft;
 		this._draftBaselines.set(draft, JSON.parse(JSON.stringify(draft)) as SceneCard);
@@ -3783,29 +3846,41 @@ export class StorygridView extends ItemView {
 			};
 			renderChars();
 
-			// Built per render, so the i18n() calls here are safe (nothing is baked in at
-			// module load). `addLabel` is spelled out per kind rather than composed from
-			// `kind`, so every key stays a literal the locale test can verify.
-			const ENTITY_LINK_KINDS: Array<{ kind: string; label: string; addLabel: string; emoji: string }> = [
-				{ kind: 'location', label: i18n('grid.panel.kind.places'), addLabel: i18n('grid.panel.addPlace'), emoji: '📍' },
-				{ kind: 'faction', label: i18n('grid.panel.kind.factions'), addLabel: i18n('grid.panel.addFaction'), emoji: '🏛' },
-				{ kind: 'system', label: i18n('grid.panel.kind.systems'), addLabel: i18n('grid.panel.addSystem'), emoji: '⚙' },
-				{ kind: 'item', label: i18n('grid.panel.kind.items'), addLabel: i18n('grid.panel.addItem'), emoji: '🗝' },
-				{ kind: 'research', label: i18n('grid.panel.kind.research'), addLabel: i18n('grid.panel.addResearch'), emoji: '🔬' },
-			];
-			for (const { kind, label, addLabel, emoji } of ENTITY_LINK_KINDS) {
-				const kindContainer = sec.createDiv({ cls: 'sg-panel-entity-kind-row' });
-				kindContainer.createSpan({ cls: 'sg-panel-entity-kind-label', text: label });
-				const chipContainer = kindContainer.createDiv({ cls: 'sg-chip-container' });
-				const renderKindChips = () => {
-					chipContainer.empty();
-					const paths = draft.linkedEntityPaths?.[kind] ?? [];
-					paths.forEach((entityPath, i) => {
+			// ── Every other Codex entry: one row per Codex group that has links ─
+			// Events keep their own row above, so they are left out here. A fresh
+			// card shows only the "Link to Codex" button.
+			const codexLinksEl = sec.createDiv({ cls: 'sg-panel-codex-links' });
+			const renderLinks = () => {
+				renderEvents();
+				renderCodexLinks();
+			};
+			// The links as they stand now: this editor's draft while it is the live one, else the card itself
+			// (the editor can be rebuilt behind an open picker — then this draft is an old copy nobody sees).
+			const currentLinks = (): Record<string, string[]> | undefined =>
+				this._panelDraft === draft
+					? draft.linkedEntityPaths
+					: this.gridData?.cards.find((c) => c.id === draft.id)?.linkedEntityPaths;
+			const toggleLink = (kind: string, entryPath: string) => {
+				if (this._panelDraft !== draft) {
+					this.toggleLinkOnLiveCard(draft.id, kind, entryPath);
+					return;
+				}
+				draft.linkedEntityPaths = toggleCodexLink(draft.linkedEntityPaths, kind, entryPath).linked;
+				autoSaveNow();
+				renderLinks();
+			};
+			const renderCodexLinks = () => {
+				codexLinksEl.empty();
+				for (const group of groupCodexLinks(draft.linkedEntityPaths, ['event'])) {
+					const groupRow = codexLinksEl.createDiv({ cls: 'sg-panel-entity-kind-row' });
+					groupRow.createSpan({ cls: 'sg-panel-entity-kind-label', text: group.label });
+					const chipContainer = groupRow.createDiv({ cls: 'sg-chip-container' });
+					for (const { kind, path: entityPath } of group.entries) {
 						const name = entityPath.split('/').pop()?.replace(/\.md$/, '') || entityPath;
 						const chip = chipContainer.createDiv({ cls: 'sg-chip sg-chip--entity' });
 						chip.title = i18n('grid.panel.openDocTooltip');
 						chip.addClass('sg-chip--clickable');
-						chip.createSpan({ text: `${emoji} ${name}` });
+						chip.createSpan({ text: `${getKindSpec(kind).fallbackIcon} ${name}` });
 						chip.addEventListener('click', (e) => {
 							if ((e.target as HTMLElement).classList.contains('sg-chip-remove')) return;
 							const file = this.app.vault.getAbstractFileByPath(entityPath);
@@ -3814,29 +3889,23 @@ export class StorygridView extends ItemView {
 						const x = chip.createEl('button', { cls: 'sg-chip-remove', text: '×' });
 						x.addEventListener('mousedown', (e) => {
 							e.preventDefault();
-							if (!draft.linkedEntityPaths) draft.linkedEntityPaths = {};
-							draft.linkedEntityPaths[kind] = paths.filter((_, idx) => idx !== i);
+							draft.linkedEntityPaths = removeCodexLink(draft.linkedEntityPaths, entityPath);
 							autoSaveNow();
-							renderKindChips();
+							renderLinks();
 						});
-					});
-					const addBtn = chipContainer.createEl('button', { cls: 'sg-panel-btn-small', text: addLabel });
-					addBtn.addEventListener('click', () => {
-						const projectRoot = this.resolveProjectRoot();
-						new EntityPickerModal(
-							this.app,
-							projectRoot,
-							kind,
-							(file: TFile) => {
-								if (!draft.linkedEntityPaths) draft.linkedEntityPaths = {};
-								const current = draft.linkedEntityPaths[kind] ?? [];
-								if (!current.includes(file.path)) {
-									draft.linkedEntityPaths[kind] = [...current, file.path];
-									autoSaveNow();
-								}
-								renderKindChips();
-							},
-							(k) => {
+					}
+				}
+				const btnRow = codexLinksEl.createDiv({ cls: 'sg-chip-container sg-panel-codex-link-row' });
+				const linkBtn = btnRow.createEl('button', { cls: 'sg-panel-btn-small sg-panel-codex-link-btn', text: i18n('grid.panel.linkFromCodex') });
+				linkBtn.addEventListener('click', () => {
+					const projectRoot = this.resolveProjectRoot();
+					new CodexLinkModal(
+						this.app,
+						projectRoot,
+						(entryPath) => isCodexLinked(currentLinks(), entryPath),
+						(entry) => toggleLink(entry.kind, entry.file.path),
+						() => {
+							new CodexKindPickerModal(this.app, (k) => {
 								new EntityModal(
 									this.app,
 									k,
@@ -3854,14 +3923,12 @@ export class StorygridView extends ItemView {
 										// The sheet exists. From here a hiccup is reported, never a reason to save again (a second copy).
 										try {
 											if (this._panelDraft !== draft) {
-												this.addLinkToLiveCard(draft.id, kind, file.path);
-											} else if (!(draft.linkedEntityPaths?.[kind] ?? []).includes(file.path)) {
-												if (!draft.linkedEntityPaths) draft.linkedEntityPaths = {};
-												const current = draft.linkedEntityPaths[kind] ?? [];
-												draft.linkedEntityPaths[kind] = [...current, file.path];
+												this.addLinkToLiveCard(draft.id, k, file.path);
+											} else if (!isCodexLinked(draft.linkedEntityPaths, file.path)) {
+												draft.linkedEntityPaths = addCodexLink(draft.linkedEntityPaths, k, file.path);
 												autoSaveNow();
 											}
-											renderKindChips();
+											renderLinks();
 										} catch (err) {
 											reportError(err);
 										}
@@ -3869,12 +3936,12 @@ export class StorygridView extends ItemView {
 									},
 									{ projectRoot }
 								).open();
-							}
-						).open();
-					});
-				};
-				renderKindChips();
-			}
+							}).open();
+						}
+					).open();
+				});
+			};
+			renderCodexLinks();
 		}, i18n('grid.panel.help.linkedEntities'));
 
 		// ── SECTION: Appearance (default closed) ─────────────────────────────
@@ -4003,6 +4070,21 @@ export class StorygridView extends ItemView {
 				linkedEntityPaths: { ...(card.linkedEntityPaths ?? {}), [kind]: [...current, path] },
 			});
 		}
+		this.renderAll();
+		this.scheduleSave();
+	}
+
+	/**
+	 * Link or unlink a Codex entry straight on the card in the grid and redraw. For the Codex link picker
+	 * when the card editor it was opened from has been rebuilt behind it (its draft is an old copy).
+	 */
+	private toggleLinkOnLiveCard(cardId: string, kind: string, path: string): void {
+		if (!this.gridData) return;
+		const card = this.gridData.cards.find((c) => c.id === cardId);
+		if (!card) return;
+		this.gridData = updateCard(this.gridData, cardId, {
+			linkedEntityPaths: toggleCodexLink(card.linkedEntityPaths, kind, path).linked,
+		});
 		this.renderAll();
 		this.scheduleSave();
 	}

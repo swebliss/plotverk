@@ -1,4 +1,5 @@
 import { plotverkEvents } from './utils/plotverk-events';
+import { movedPath, movedRoot, onPathMove } from './utils/project-move';
 import { ItemView, WorkspaceLeaf } from 'obsidian';
 import { onSettingsChanged } from './utils/obsidian-internals';
 import type StorygridPlugin from './main';
@@ -89,6 +90,30 @@ export class SocialMapsView extends ItemView {
 		const onProjectChanged = () => { if (this.setRequestedRoot(null)) this.remount(false); };
 		plotverkEvents.addEventListener('storygrid:project-changed', onProjectChanged);
 		this.register(() => plotverkEvents.removeEventListener('storygrid:project-changed', onProjectChanged));
+		// The project's folder was renamed or moved: keep the same project (and the person or
+		// faction in focus) on screen at its new place, instead of jumping to another one.
+		this.register(onPathMove((move) => {
+			const root = (r: string): string => movedRoot(r, move) ?? r;
+			const nextExplicit = this.explicitRoot === null ? null : root(this.explicitRoot);
+			// Only the paths that moved: { focusPath: new } etc. Empty = nothing of ours moved.
+			const follow = (state: Record<string, unknown>): Record<string, unknown> => {
+				const out: Record<string, unknown> = {};
+				for (const [key, value] of Object.entries(state)) {
+					if (typeof value !== 'string' || !(key.endsWith('Path') || key === 'egoAnchor')) continue;
+					const next = movedPath(value, move);
+					if (next !== null && next !== value) out[key] = next;
+				}
+				return out;
+			};
+			const treeMoved = follow(this.treeCtrl.getState());
+			const mapMoved = follow(this.mapCtrl.getState());
+			const rootsMoved = nextExplicit !== this.explicitRoot || root(this.scopeRoot) !== this.scopeRoot;
+			if (!rootsMoved && !Object.keys(treeMoved).length && !Object.keys(mapMoved).length) return;
+			this.explicitRoot = nextExplicit;
+			this.treeCtrl.setState(treeMoved);
+			this.mapCtrl.setState(mapMoved);
+			if (rootsMoved) this.remount(false);
+		}));
 		// Series mode on/off changes which projects exist (series vs books) without a project change.
 		// A custom event name, so it goes through the typed helper in utils/obsidian-internals.
 		this.registerEvent(onSettingsChanged(this.app.workspace, () => {

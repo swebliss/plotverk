@@ -1,4 +1,5 @@
 import { plotverkEvents } from './utils/plotverk-events';
+import { movedRoot, onPathMove } from './utils/project-move';
 import { ItemView, WorkspaceLeaf, ViewStateResult, TAbstractFile } from 'obsidian';
 import type StorygridPlugin from './main';
 import { setPhosphorIcon } from './utils/icons';
@@ -64,6 +65,10 @@ export class StorygridHistoryView extends ItemView {
 		const projectHandler = () => void this.render();
 		plotverkEvents.addEventListener('storygrid:project-changed', projectHandler);
 		this.register(() => plotverkEvents.removeEventListener('storygrid:project-changed', projectHandler));
+		// The project's folder was renamed or moved: keep showing it at its new place.
+		this.register(onPathMove((move) => {
+			if (this.projectRoot !== null) this.projectRoot = movedRoot(this.projectRoot, move) ?? this.projectRoot;
+		}));
 
 		await this.render();
 	}

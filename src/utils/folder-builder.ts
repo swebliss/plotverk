@@ -2,6 +2,18 @@ import { App } from 'obsidian';
 import { entityFolderPath, CODEX_FOLDER } from '../entities/entity-manager';
 
 /**
+ * Where a new story's grid file goes: `{parentFolder}/{safeName}/{safeName}.storygrid`,
+ * with characters a file name can't hold swapped for "-". `safeName` is also the
+ * project name to hand buildProjectStructure, so the grid sits in the root of the
+ * folders it builds.
+ */
+export function newProjectGridLocation(name: string, parentFolder: string): { safeName: string; gridFilePath: string } {
+	const safeName = name.trim().replace(/[\\/:*?"<>|]/g, '-');
+	const gridFolderPath = parentFolder ? `${parentFolder}/${safeName}` : safeName;
+	return { safeName, gridFilePath: `${gridFolderPath}/${safeName}.storygrid` };
+}
+
+/**
  * Create the standard project folder structure for a new story:
  * {projectName}/
  *   ├── {projectName}.storygrid   (the plot grid itself — lives in the root,

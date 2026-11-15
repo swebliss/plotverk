@@ -2,7 +2,7 @@ import { plotverkEvents } from './utils/plotverk-events';
 import { Plugin, WorkspaceLeaf, TFile, TFolder, TAbstractFile, Notice, setIcon, addIcon, Menu, FuzzySuggestModal, FuzzyMatch, MarkdownView, App, Platform, editorInfoField } from 'obsidian';
 import { EditorView } from '@codemirror/view';
 import { openOrReveal } from './utils/workspace';
-import { runSafely } from './utils/report-error';
+import { reportError, runSafely } from './utils/report-error';
 import { triggerSettingsChanged, leafTabHeader } from './utils/obsidian-internals';
 import { Extension } from '@codemirror/state';
 import { typewriterScroll, focusDimming } from './utils/typewriter';
@@ -24,20 +24,22 @@ import { WelcomeView, VIEW_TYPE_WELCOME } from './welcome-view';
 import { IntentView, VIEW_TYPE_INTENT } from './intent-view';
 import { StorygridDashboardView, VIEW_TYPE_DASHBOARD, ensureDashboard } from './dashboard-view';
 import { liveViews, loadedView, leafStateString } from './utils/live-views';
-import { writeProjectMirror, syncProjectMirrors, scheduleProjectMirror, flushProjectMirrors } from './utils/project-data-store';
+import { writeProjectMirror, syncProjectMirrors, scheduleProjectMirror, flushProjectMirrors, rekeyScheduledMirrors, holdProjectMirrors, releaseProjectMirrors } from './utils/project-data-store';
+import { announcePathMove, applyPathMove, gridRootMove, movedRoot, rebasePath, widenUnseenMove, type PathMove } from './utils/project-move';
 import { loadSampleStory } from './sample/load-sample';
 import { isSafetyNetPath, wasSafetyNetPath } from './utils/safety-paths';
 import { migrateSafetyFolders } from './utils/safety-folder';
-import { collectDocPaths, renameDocPath } from './utils/scene-tree';
+import { removeDeletedDocs } from './utils/scene-tree';
+import { renameGridCardPaths, renamedPath } from './utils/card-paths';
 import { ensureDailySnapshot, snapshotProjectNow } from './utils/scene-snapshots';
 import { countWords, dayKey, startOfWeek } from './utils/stats';
-import { findProjects, findCodexScopes, projectRootFromGridPath, entityFolderPath, StoryProject } from './entities/entity-manager';
+import { findProjects, findCodexScopes, projectRootFromGridPath, entityFolderPath, entityFolderForGrid, StoryProject } from './entities/entity-manager';
 import { StorygridRelGraphView, VIEW_TYPE_REL_GRAPH } from './rel-graph-view';
 import { StorygridStoryTreeView, VIEW_TYPE_STORY_TREE } from './story-tree-view';
 import { SocialMapsView, VIEW_TYPE_SOCIAL_MAPS, SocialMapsTab } from './social-maps-view';
 import { StorygridHistoryView, VIEW_TYPE_HISTORY } from './history-view';
 import { TimelineView, VIEW_TYPE_TIMELINE } from './timeline/timeline-view';
-import { createEmptyTimeline } from './timeline/timeline-data';
+import { createEmptyTimeline, remapTimelinePath, type TimelineData } from './timeline/timeline-data';
 import { GREGORIAN_CALENDAR } from './timeline/calendar';
 import { EntityIndex } from './entities/entity-index-store';
 import { configureSheetImages, followSheetRename, shouldFollowRename } from './entities/sheet-images';
@@ -56,8 +58,8 @@ import { NewGridModal } from './modals/new-grid-modal';
 import { registerEntityModalPlugin } from './modals/entity-modal';
 import { GridScopeModal, wizardText } from './modals/grid-scope-modal';
 import { GridPickerModal } from './modals/grid-picker-modal';
-import { getTemplateById } from './templates/story-templates';
-import { buildProjectStructure } from './utils/folder-builder';
+import { getTemplateById, guideColumnLabel } from './templates/story-templates';
+import { buildProjectStructure, newProjectGridLocation } from './utils/folder-builder';
 import { showTypewriterPopover } from './utils/tw-popover';
 import { toggleWriteMode } from './utils/writing-modes';
 import { showSprintSummary, openSprintSetup } from './modals/sprint-modal';
@@ -279,6 +281,8 @@ export default class StorygridPlugin extends Plugin {
 	}
 
 	async onload(): Promise<void> {
+		// No project data copy is written until the startup check has read them (see syncProjectDataMirrors).
+		holdProjectMirrors();
 		await this.loadSettings();
 		// Every sheet pop-up remembers "template or clean slate" through this.
 		registerEntityModalPlugin(this);
@@ -312,7 +316,18 @@ export default class StorygridPlugin extends Plugin {
 		this.referenceIndex = new ReferenceIndex(this.app, this.entityIndex);
 		this.relationSync = new RelationSync(this);
 		this.app.workspace.onLayoutReady(() => {
-			void this.pruneDeadSeries();
+			// Data copies first: a series moved while Obsidian was closed gets its
+			// registry pointed at the new folder before dead series are pruned.
+			runSafely((async () => {
+				try {
+					await this.syncProjectDataMirrors();
+				} finally {
+					// Views may seed and write project data from here on; let them redraw with it.
+					releaseProjectMirrors();
+					plotverkEvents.dispatchEvent(new CustomEvent('storygrid:tasks-changed', { detail: 'startup' }));
+					await this.pruneDeadSeries();
+				}
+			})());
 			this.entityIndex.rebuild();
 			// Codex names are known now: re-read open editors so names are never marked.
 			this.refreshCoachMode();
@@ -320,7 +335,6 @@ export default class StorygridPlugin extends Plugin {
 			this.referenceIndex.rebuild();
 			void this.buildManuscriptWordCache();
 			void this.stampMissingEntityIds();
-			void this.syncProjectDataMirrors();
 		});
 		// Safety-folder writes (backups, snapshots, the data copy) are Plotverk's own
 		// bookkeeping: none of them is an entity, a scene or a grid, so skip the indexes.
@@ -339,6 +353,7 @@ export default class StorygridPlugin extends Plugin {
 			if (this.settings.proseCoach && forgetDismissedPath(this.settings.proseCoach, f.path)) void this.saveSettingsQuiet();
 			this.manuscriptWordCache.delete(f.path);
 			void this.pruneDeletedProject(f.path);
+			void this.forgetDeletedScenes(f);
 		}));
 		this.registerEvent(this.app.vault.on('rename', (f, oldPath) => {
 			if (isSafetyNetPath(f.path) && (isSafetyNetPath(oldPath) || wasSafetyNetPath(oldPath))) return;
@@ -461,6 +476,18 @@ export default class StorygridPlugin extends Plugin {
 		this.registerEvent(
 			this.app.vault.on('rename', (file, oldPath) => {
 				if (isSafetyNetPath(file.path) && (isSafetyNetPath(oldPath) || wasSafetyNetPath(oldPath))) return;
+				// First, in the same tick: everything settings keep per project follows a moved project/series folder or grid.
+				// Never let a failure here stop the grid, compile, Prose Coach and picture follow-ups below.
+				try {
+					this.syncMovedProjectData(file, oldPath);
+				} catch (err) {
+					reportError(err);
+				}
+				try {
+					this.followRenameInClosedTimelines(oldPath, file.path);
+				} catch (err) {
+					reportError(err);
+				}
 				void this.syncRenamedDocLinks(file, oldPath);
 				void this.syncRenamedCompileState(file, oldPath);
 				// Prose Coach "Not here" choices follow their scene (or its folder).
@@ -1532,8 +1559,17 @@ export default class StorygridPlugin extends Plugin {
 		const intent = this.settings.intent;
 		if (intent === 'worldbuilder') {
 			await this.openCodex(file.parent?.path ?? '');
-		} else if (intent === 'novelist' && this.settings.writingStyle === 'pantser' && this.lastProjectPaths) {
-			await this.landPantser(this.lastProjectPaths.scenesPath);
+		} else if (intent === 'novelist' && this.settings.writingStyle === 'pantser') {
+			// The blank first scene goes into THIS grid's own Scenes folder, worked out from its
+			// path. Not lastProjectPaths: a new series builds every book before landing, so that
+			// holds the LAST book's folders while `file` is Book 1's grid.
+			await this.landPantser(entityFolderForGrid(file.path, 'scene'));
+		} else if (!this.isModuleOn('plotGrid')) {
+			// Plot Grid switched off: never open a grid tab — land on the
+			// Dashboard, pointed at the new story (the grid file still marks it).
+			const root = projectRootFromGridPath(file.path);
+			await this.setActiveProjectRoot(root);
+			await this.openDashboard(root);
 		} else {
 			await this.openGridFile(file);
 		}
@@ -1695,6 +1731,15 @@ export default class StorygridPlugin extends Plugin {
 		this.dedupeWritersPanels(leaf);
 		await this.app.workspace.revealLeaf(leaf);
 		return leaf.view instanceof StorygridOutlineView ? leaf.view : null;
+	}
+
+	/** The Dashboard's "Start Writing" card with the Plot Grid off: the Writers
+	 *  Panel on this story's Writing tab, cursor in the "new scene" box. */
+	async openWritersPanelNewScene(projectRoot: string): Promise<void> {
+		// The panel follows the active project — point it at the Dashboard's story first.
+		await this.setActiveProjectRoot(projectRoot);
+		const panel = await this.revealOutline();
+		if (panel) await panel.focusNewScene();
 	}
 
 
@@ -2385,110 +2430,245 @@ export default class StorygridPlugin extends Plugin {
 	private imageFollowTimer: number | null = null;
 	private imageFollowQueue: Promise<void> = Promise.resolve();
 
-	async syncRenamedDocLinks(file: TAbstractFile, oldPath: string): Promise<void> {
-		const isFile = file instanceof TFile;
-		if (isFile && file.extension !== 'md' && file.extension !== 'canvas') return;
-		const oldPrefix = `${oldPath}/`;
-		const newPrefix = `${file.path}/`;
+	private gridRenameQueue: Promise<void> = Promise.resolve();
+	/** Catch-ups of rename passes not finished yet, oldest first (see syncRenamedDocLinks). */
+	private pendingGridCatchUps: Array<() => void> = [];
 
-		// Grids LOADED in a view manage their own renames — skip those. A tab
-		// Obsidian hasn't loaded yet reads the file fresh later, so fix it on disk.
-		const openPaths = new Set(
-			liveViews(this.app.workspace, VIEW_TYPE_STORYGRID, StorygridView).map((v) => v.getFilePath())
-		);
+	/** Paths of the grids open in a view, also under the path a rename gives them (a view may not have followed it yet). */
+	private openGridPaths(oldPath: string, newPath: string): Set<string> {
+		const paths = new Set<string>();
+		for (const v of liveViews(this.app.workspace, VIEW_TYPE_STORYGRID, StorygridView)) {
+			const p = v.getFilePath();
+			if (!p) continue;
+			paths.add(p);
+			paths.add(renamedPath(p, oldPath, newPath));
+		}
+		return paths;
+	}
 
+	/**
+	 * Cards in grids that are not loaded in a view follow a renamed or moved
+	 * file or folder, on disk. Every path a card stores follows: scene page,
+	 * characters, other linked sheets. `catchUpOpenedGrids` hands the rename to
+	 * any grid opened in a view since it happened.
+	 */
+	private async followRenameInClosedGrids(oldPath: string, newPath: string, catchUpOpenedGrids: () => void): Promise<void> {
+		catchUpOpenedGrids();
+
+		const follow = (text: string): string | null => {
+			const grid = JSON.parse(text) as GridData;
+			const next = renameGridCardPaths(grid, oldPath, newPath);
+			return next === grid ? null : JSON.stringify({ ...next, updatedAt: new Date().toISOString() }, null, 2);
+		};
+		let anyGridChanged = false;
 		for (const gridFile of this.findAllGridFiles()) {
-			if (openPaths.has(gridFile.path)) continue;
+			// Grids LOADED in a view manage their own renames: never write under them.
+			if (this.openGridPaths(oldPath, newPath).has(gridFile.path)) continue;
 			try {
-				const grid = JSON.parse(await this.app.vault.read(gridFile)) as { cards?: { linkedDocPath?: string }[] } & Record<string, unknown>;
-				let changed = false;
-				const cards = (grid.cards ?? []).map((c) => {
-					if (!c.linkedDocPath) return c;
-					if (isFile && c.linkedDocPath === oldPath) {
-						changed = true;
-						return { ...c, linkedDocPath: file.path };
+				// Look first: a grid that doesn't point at the renamed path is never rewritten.
+				if (follow(await this.app.vault.read(gridFile)) === null) continue;
+				// Then change the file as it is NOW, in case anything wrote it meanwhile.
+				let written = false;
+				await this.app.vault.process(gridFile, (current) => {
+					// Opened in a view meanwhile: that view follows the rename (below).
+					if (this.openGridPaths(oldPath, newPath).has(gridFile.path)) return current;
+					try {
+						const next = follow(current);
+						written = next !== null;
+						return next ?? current;
+					} catch {
+						return current; // Unreadable grid — leave it exactly as it is
 					}
-					if (!isFile && c.linkedDocPath.startsWith(oldPrefix)) {
-						changed = true;
-						return { ...c, linkedDocPath: newPrefix + c.linkedDocPath.slice(oldPrefix.length) };
-					}
-					return c;
 				});
-				if (changed) {
-					await this.app.vault.modify(
-						gridFile,
-						JSON.stringify({ ...grid, cards, updatedAt: new Date().toISOString() }, null, 2)
-					);
-				}
+				if (written) anyGridChanged = true;
 			} catch {
 				// Unreadable grid — leave it alone
 			}
 		}
+		catchUpOpenedGrids();
+		if (anyGridChanged) plotverkEvents.dispatchEvent(new CustomEvent('storygrid:grid-links-changed'));
+	}
 
-		// Patch task link.path in dashboard settings when a linked doc is renamed.
-		let taskLinksChanged = false;
-		const changedRoots = new Set<string>();
-		const dash = this.settings.dashboard;
-		if (dash) {
-			for (const [root, projectTodos] of Object.entries(dash.todos ?? {})) {
-				for (const todo of projectTodos) {
-					if (!todo.link) continue;
-					if (isFile && todo.link.path === oldPath) {
-						todo.link.path = file.path;
-						todo.link.label = (file).basename;
-						taskLinksChanged = true;
-						changedRoots.add(root);
-					} else if (!isFile && todo.link.path.startsWith(oldPrefix)) {
-						todo.link.path = newPrefix + todo.link.path.slice(oldPrefix.length);
-						taskLinksChanged = true;
-						changedRoots.add(root);
-					}
+	async syncRenamedDocLinks(file: TAbstractFile, oldPath: string): Promise<void> {
+		if (file instanceof TFile && file.extension !== 'md' && file.extension !== 'canvas') return;
+
+		// One rename at a time: a renamed folder fires once for itself and once per
+		// file inside it. Run in order, the folder's pass fixes every grid and the
+		// passes after it find nothing left to change, so nothing is written twice.
+		// Nothing below waits for it: the outline's own refresh must see the
+		// renamed scene paths straight away.
+		const newPath = file.path;
+		// Older renames still waiting reach any newly opened grid first, so they
+		// can never land on top of this newer one later.
+		for (const earlier of [...this.pendingGridCatchUps]) earlier();
+		const openAtRename = this.openGridPaths(oldPath, newPath);
+		// A grid opened since this rename never saw it, and may have read the old
+		// paths from disk: its view follows it, in memory, and saves.
+		const catchUp = () => {
+			for (const v of liveViews(this.app.workspace, VIEW_TYPE_STORYGRID, StorygridView)) {
+				const p = v.getFilePath();
+				if (!p || openAtRename.has(p)) continue;
+				openAtRename.add(p);
+				// One view failing to redraw must not stop this rename for the
+				// other grids, the outline and the task links.
+				try {
+					v.followRenamedPath(oldPath, newPath);
+				} catch (err) {
+					reportError(err);
 				}
 			}
-			// Writers Panel manuscript order tracks scene docs by path — patch it
-			// too so a renamed scene keeps its place instead of dropping to the end.
-			for (const [root, order] of Object.entries(dash.sceneOrder ?? {})) {
-				for (let i = 0; i < order.length; i++) {
-					if (isFile && order[i] === oldPath) {
-						order[i] = file.path;
-						taskLinksChanged = true;
-						changedRoots.add(root);
-					} else if (!isFile && order[i].startsWith(oldPrefix)) {
-						order[i] = newPrefix + order[i].slice(oldPrefix.length);
-						taskLinksChanged = true;
-						changedRoots.add(root);
-					}
-				}
-			}
-			// Same for the outline tree — patch doc-node paths, structure untouched.
-			for (const [root, tree] of Object.entries(dash.sceneTree ?? {})) {
-				const affected = collectDocPaths(tree).filter((p) =>
-					isFile ? p === oldPath : p.startsWith(oldPrefix)
-				);
-				if (!affected.length) continue;
-				let next = tree;
-				for (const oldp of affected) {
-					const newp = isFile ? file.path : newPrefix + oldp.slice(oldPrefix.length);
-					next = renameDocPath(next, oldp, newp);
-				}
-				dash.sceneTree![root] = next;
-				taskLinksChanged = true;
-				changedRoots.add(root);
-			}
-			// "Who's gone quiet": a renamed character stays left out.
-			for (const [root, paths] of Object.entries(dash.quietLeftOut ?? {})) {
-				for (let i = 0; i < paths.length; i++) {
-					if (isFile ? paths[i] === oldPath : paths[i].startsWith(oldPrefix)) {
-						paths[i] = isFile ? file.path : newPrefix + paths[i].slice(oldPrefix.length);
-						taskLinksChanged = true;
-						changedRoots.add(root);
-					}
-				}
-			}
+		};
+		this.pendingGridCatchUps.push(catchUp);
+		this.gridRenameQueue = this.gridRenameQueue
+			.then(() => this.followRenameInClosedGrids(oldPath, newPath, catchUp))
+			.catch(reportError)
+			.finally(() => { this.pendingGridCatchUps = this.pendingGridCatchUps.filter((c) => c !== catchUp); });
+		// To-do links, the Writers Panel order/outline and "Who's gone quiet" follow in syncMovedProjectData.
+	}
+
+	/**
+	 * A file or folder was renamed or moved: everything settings keep per
+	 * project follows it in one pass (see utils/project-move.ts) — the
+	 * project's to-dos (and their links), goals, streaks, typed words, Writers
+	 * Panel order, series and book registry, the active project, sprint
+	 * history — then one save, and data copies written at the NEW place only.
+	 * Synchronous up to the save, so nothing (typing, a view) can write under
+	 * the old project name in between. Runs for every event of a folder
+	 * rename's burst; repeats find nothing left to change.
+	 */
+	private syncMovedProjectData(file: TAbstractFile, oldPath: string): void {
+		const isFolder = file instanceof TFolder;
+		const move: PathMove = { oldPath, newPath: file.path, isFolder };
+		if (file instanceof TFile && file.extension === 'storygrid') {
+			// A grid moved to another folder: when that leaves its old folder without a
+			// project and lands in a folder that isn't one yet, the project now lives at
+			// the grid's new folder, so its to-dos, goals and outline go there too.
+			move.rootMove = gridRootMove(
+				oldPath,
+				file.path,
+				this.findAllGridFiles().map((g) => g.path),
+				Object.values(this.settings.seriesRegistry ?? {}).map((s) => s.rootPath),
+			);
 		}
-		if (taskLinksChanged) {
+
+		// In-memory bookkeeping that isn't saved, but would otherwise write under the old name.
+		if (isFolder && this.lastProjectPaths) {
+			const lp = this.lastProjectPaths;
+			this.lastProjectPaths = {
+				charactersPath: renamedPath(lp.charactersPath, oldPath, file.path),
+				scenesPath: renamedPath(lp.scenesPath, oldPath, file.path),
+				locationsPath: renamedPath(lp.locationsPath, oldPath, file.path),
+			};
+		}
+		if (this.pendingTypedFile) {
+			const p = this.pendingTypedFile;
+			const path = isFolder ? renamedPath(p.path, oldPath, file.path) : (p.path === oldPath ? file.path : p.path);
+			// Same rule as trackTypedWords: the project is the folder holding Scenes/.
+			const m = path.match(/^(?:(.*)\/)?Scenes\//);
+			this.pendingTypedFile = { ...p, path, root: m ? (m[1] ?? '') : p.root };
+		}
+		for (const [p, count] of [...this.wordBaselines]) {
+			const next = isFolder ? renamedPath(p, oldPath, file.path) : (p === oldPath ? file.path : p);
+			if (next === p) continue;
+			this.wordBaselines.delete(p);
+			this.wordBaselines.set(next, count);
+		}
+		rekeyScheduledMirrors((root) => movedRoot(root, move));
+
+		const result = applyPathMove(this.settings, move);
+		// Open views keep their own project/grid path: they follow (cheap no-op when it isn't theirs).
+		announcePathMove(move);
+		if (!result.changed) return;
+		const dash = this.settings.dashboard;
+		runSafely((async () => {
 			await this.saveData(this.settings);
-			for (const root of changedRoots) void writeProjectMirror(this.app, root, dash!);
+			// Never at the old place: writeProjectMirror skips a folder that doesn't exist.
+			if (dash) for (const root of result.touchedRoots) void writeProjectMirror(this.app, root, dash);
+		})());
+		if (result.activeChanged || result.registryChanged) {
+			plotverkEvents.dispatchEvent(new CustomEvent('storygrid:project-changed'));
+		}
+	}
+
+	/**
+	 * Timelines keep scene, event and grid paths inside their .timeline file.
+	 * A timeline open in a view follows a rename itself (TimelineView); the
+	 * closed ones are patched on disk here, one rename at a time, in order.
+	 */
+	private timelineRenameQueue: Promise<void> = Promise.resolve();
+	private followRenameInClosedTimelines(oldPath: string, newPath: string): void {
+		const openPaths = (): Set<string> => {
+			const paths = new Set<string>();
+			for (const v of liveViews(this.app.workspace, VIEW_TYPE_TIMELINE, TimelineView)) {
+				const p = v.getFilePath();
+				if (p) {
+					paths.add(p);
+					paths.add(renamedPath(p, oldPath, newPath));
+				}
+			}
+			return paths;
+		};
+		const follow = (text: string): string | null => {
+			const data = JSON.parse(text) as TimelineData;
+			const before = JSON.stringify(data);
+			const next = remapTimelinePath(data, oldPath, newPath);
+			return JSON.stringify(next) === before ? null : JSON.stringify(next, null, 2);
+		};
+		this.timelineRenameQueue = this.timelineRenameQueue.then(async () => {
+			for (const tl of this.app.vault.getFiles()) {
+				if (tl.extension !== 'timeline' || isSafetyNetPath(tl.path) || openPaths().has(tl.path)) continue;
+				try {
+					// Look first: a timeline that doesn't mention the renamed path is never rewritten.
+					const raw = await this.app.vault.read(tl);
+					if (!raw.includes(JSON.stringify(oldPath).slice(1, -1)) || follow(raw) === null) continue;
+					await this.app.vault.process(tl, (current) => {
+						if (openPaths().has(tl.path)) return current; // opened meanwhile: the view follows it
+						try {
+							return follow(current) ?? current;
+						} catch {
+							return current; // unreadable timeline: leave it exactly as it is
+						}
+					});
+				} catch {
+					// Unreadable timeline — leave it alone
+				}
+			}
+		}).catch(reportError);
+	}
+
+	/**
+	 * A scene file (or a folder of them) was deleted from the vault: take its
+	 * row out of the Writers Panel outline so no "(missing file)" ghost stays
+	 * behind. Only the outline entry goes; files are never touched here. Runs
+	 * on the vault's own delete event, never on a guess from a missing file.
+	 */
+	async forgetDeletedScenes(f: TAbstractFile): Promise<void> {
+		const isFolder = f instanceof TFolder;
+		if (!isFolder && !(f instanceof TFile && f.extension === 'md')) return;
+		const dash = this.settings.dashboard;
+		if (!dash) return;
+		const prefix = `${f.path}/`;
+		const gone = (p: string) => (isFolder ? p.startsWith(prefix) : p === f.path);
+		const changedRoots = new Set<string>();
+		for (const [root, tree] of Object.entries(dash.sceneTree ?? {})) {
+			const next = removeDeletedDocs(tree, f.path, isFolder);
+			if (next === tree) continue;
+			dash.sceneTree![root] = next;
+			changedRoots.add(root);
+		}
+		// Legacy flat order (only read while a project has no tree yet).
+		for (const [root, order] of Object.entries(dash.sceneOrder ?? {})) {
+			if (!order.some(gone)) continue;
+			dash.sceneOrder![root] = order.filter((p) => !gone(p));
+			changedRoots.add(root);
+		}
+		if (!changedRoots.size) return;
+		await this.saveData(this.settings);
+		for (const root of changedRoots) {
+			// A whole project folder deleted: writing its data copy would bring
+			// the folder back, so leave a project that no longer exists alone.
+			if (root && !(this.app.vault.getAbstractFileByPath(root) instanceof TFolder)) continue;
+			void writeProjectMirror(this.app, root, dash);
 		}
 	}
 
@@ -2614,8 +2794,34 @@ export default class StorygridPlugin extends Plugin {
 		const roots = findProjects(this.app).map((p) => p.rootPath);
 		// Before anything writes pvbackup/: fold in the safety folder's first name (Plotverk/).
 		await migrateSafetyFolders(this.app);
-		const changed = await syncProjectMirrors(this.app, dash, roots);
+		const folderExists = (p: string): boolean => p === '' || this.app.vault.getAbstractFileByPath(p) instanceof TFolder;
+		// Climb from a book to its series folder only when that is a registered series folder
+		// that is gone, its new place exists, and every one of its books' grids is found there.
+		const canClimb = (oldParent: string, newParent: string): boolean => {
+			if (folderExists(oldParent) || !folderExists(newParent)) return false;
+			if (!Object.values(this.settings.seriesRegistry ?? {}).some((s) => s.rootPath === oldParent)) return false;
+			return Object.values(this.settings.bookRegistry ?? {}).every((b) => {
+				const moved = b.gridPath ? rebasePath(b.gridPath, oldParent, newParent) : null;
+				return moved === null || this.app.vault.getAbstractFileByPath(moved) instanceof TFile;
+			});
+		};
+		let moved = false;
+		const changed = await syncProjectMirrors(this.app, dash, roots, {
+			// A project (or the series folder around it) was moved while Plotverk wasn't
+			// watching: carry everything along exactly as a rename seen live would.
+			adoptMovedProject: (from, to) => {
+				const wide = widenUnseenMove(from, to, canClimb);
+				const unseen: PathMove = { oldPath: wide.from, newPath: wide.to, isFolder: true };
+				rekeyScheduledMirrors((root) => movedRoot(root, unseen));
+				const result = applyPathMove(this.settings, unseen);
+				// Views restored with the old folder in their saved tab state follow it too.
+				announcePathMove(unseen);
+				if (result.activeChanged || result.registryChanged) moved = true;
+				return result.changed;
+			},
+		});
 		if (changed) await this.saveData(this.settings);
+		if (moved) plotverkEvents.dispatchEvent(new CustomEvent('storygrid:project-changed'));
 	}
 
 	async saveSettings(): Promise<void> {
@@ -2736,15 +2942,13 @@ export default class StorygridPlugin extends Plugin {
 
 	/** Create one .storygrid file + its project folders under `parentFolder`. Returns the file or null on error. */
 	private async createGridFile(name: string, parentFolder: string, templateId: string): Promise<TFile | null> {
-		const safeName = name.trim().replace(/[\\/:*?"<>|]/g, '-');
-		const gridFolderPath = parentFolder ? `${parentFolder}/${safeName}` : safeName;
-		const gridFilePath = `${gridFolderPath}/${safeName}.storygrid`;
+		const { safeName, gridFilePath } = newProjectGridLocation(name, parentFolder);
 
 		let gridData = createEmptyGrid(name.trim(), templateId);
 		const template =
 			getTemplateById(templateId) ??
 			this.settings.customTemplates.find((t) => t.id === templateId);
-		if (template) gridData = applyTemplate(gridData, template, t('grid.guide.header'));
+		if (template) gridData = applyTemplate(gridData, template, guideColumnLabel(template));
 
 		try {
 			const { charactersPath, scenesPath, locationsPath } = await buildProjectStructure(

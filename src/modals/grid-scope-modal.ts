@@ -1,6 +1,8 @@
 import { App, Modal } from 'obsidian';
 import type StorygridPlugin from '../main';
 import { t } from '../i18n';
+import { shouldAskDashboardStartup } from '../utils/dashboard-startup';
+import { runSafely } from '../utils/report-error';
 
 /**
  * Creator Grid View talks about projects, not novels and books. Each key listed here has a
@@ -26,14 +28,21 @@ export type ProjectSetupResult =
  * Step 1: Series or standalone novel?
  * Step 2a (standalone): name the novel.
  * Step 2b (series): name the series + one-or-more books (+ to add more).
+ * Dashboard step (asked at most once ever): open the Dashboard when Obsidian starts?
  * The template picker (NewGridModal step 3) runs afterwards in main.ts.
  */
 export class GridScopeModal extends Modal {
 	private plugin: StorygridPlugin;
 	private onComplete: (result: ProjectSetupResult) => void;
 
-	private step: 1 | 2 = 1;
+	private step: 1 | 2 | 'dashboard' = 1;
 	private kind: ProjectKind | null = null;
+	/** Names collected in step 2, held while the Dashboard question is on screen. */
+	private pendingResult: ProjectSetupResult | null = null;
+	/** Decided once when the wizard opens, so Back/forward can't change whether the step shows. */
+	private readonly askDashboard: boolean;
+	/** When the Dashboard question appeared — a double-click on "Next" must not also answer it. */
+	private dashboardShownAt = 0;
 
 	// Standalone
 	private novelName: string = '';
@@ -51,6 +60,7 @@ export class GridScopeModal extends Modal {
 		this.plugin = plugin;
 		this.onComplete = onComplete;
 		this.author = plugin.settings.authorName ?? '';
+		this.askDashboard = shouldAskDashboardStartup(plugin.settings);
 	}
 
 	/** "Written by" field, shared by both step-2 variants. */
@@ -88,6 +98,7 @@ export class GridScopeModal extends Modal {
 		contentEl.empty();
 		contentEl.addClass('sg-scope-modal');
 		if (this.step === 1) this.renderTypeStep();
+		else if (this.step === 'dashboard') this.renderDashboardStep();
 		else if (this.kind === 'standalone') this.renderNovelStep();
 		else this.renderSeriesStep();
 	}
@@ -143,8 +154,7 @@ export class GridScopeModal extends Modal {
 		this.renderNav(contentEl, () => {
 			if (!this.novelName.trim()) { input.addClass('sg-series-mgr-err'); return; }
 			void this.saveAuthor();
-			this.close();
-			this.onComplete({ kind: 'standalone', novelName: this.novelName.trim() });
+			this.advance({ kind: 'standalone', novelName: this.novelName.trim() });
 		});
 	}
 
@@ -208,16 +218,60 @@ export class GridScopeModal extends Modal {
 				firstInput?.addClass('sg-series-mgr-err');
 				return;
 			}
-			this.close();
-			this.onComplete({ kind: 'series', seriesName: this.seriesName.trim(), bookNames: books });
+			this.advance({ kind: 'series', seriesName: this.seriesName.trim(), bookNames: books });
 		});
+	}
+
+	/** After naming: ask the one-time Dashboard question if it's due, otherwise hand over to the template picker. */
+	private advance(result: ProjectSetupResult): void {
+		if (this.askDashboard) {
+			this.pendingResult = result;
+			this.step = 'dashboard';
+			this.render();
+			return;
+		}
+		this.finish(result);
+	}
+
+	private finish(result: ProjectSetupResult): void {
+		this.close();
+		this.onComplete(result);
+	}
+
+	// ── Dashboard step: open the Dashboard when Obsidian starts? (asked once) ──
+	private renderDashboardStep(): void {
+		const { contentEl } = this;
+		contentEl.createEl('h2', { text: t('wizard.dashboardStep.title') });
+		contentEl.createEl('p', { cls: 'sg-scope-modal-desc', text: t('wizard.dashboardStep.desc') });
+		this.dashboardShownAt = Date.now();
+
+		const actions = contentEl.createDiv({ cls: 'sg-modal-actions' });
+		const backBtn = actions.createEl('button', { cls: 'sg-modal-btn', text: t('wizard.back') });
+		backBtn.addEventListener('click', () => { this.step = 2; this.render(); });
+		const noBtn = actions.createEl('button', { cls: 'sg-modal-btn', text: t('wizard.dashboardStep.no') });
+		noBtn.addEventListener('click', () => this.answerDashboard(false));
+		const yesBtn = actions.createEl('button', { cls: 'sg-modal-btn sg-modal-btn-primary', text: t('wizard.dashboardStep.yes') });
+		yesBtn.addEventListener('click', () => this.answerDashboard(true));
+	}
+
+	private answerDashboard(open: boolean): void {
+		const result = this.pendingResult;
+		if (!result) return;
+		if (Date.now() - this.dashboardShownAt < 400) return; // second click of a double-click on "Next"
+		this.pendingResult = null; // a second click can't run setup twice
+		const settings = this.plugin.settings;
+		if (open) settings.openDashboardOnStartup = true;
+		settings.dashboardStartupAsked = true;
+		runSafely(this.plugin.saveSettings());
+		this.finish(result);
 	}
 
 	private renderNav(container: HTMLElement, onNext: () => void): void {
 		const actions = container.createDiv({ cls: 'sg-modal-actions' });
 		const backBtn = actions.createEl('button', { cls: 'sg-modal-btn', text: t('wizard.back') });
 		backBtn.addEventListener('click', () => { this.step = 1; this.render(); });
-		const nextBtn = actions.createEl('button', { cls: 'sg-modal-btn sg-modal-btn-primary', text: t('wizard.chooseTemplate') });
+		const nextLabel = this.askDashboard ? t('wizard.next') : t('wizard.chooseTemplate');
+		const nextBtn = actions.createEl('button', { cls: 'sg-modal-btn sg-modal-btn-primary', text: nextLabel });
 		nextBtn.addEventListener('click', onNext);
 	}
 }

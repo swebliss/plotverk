@@ -279,6 +279,25 @@ export function removeDocByPath(tree: SceneTree, path: string): SceneTree {
 	});
 }
 
+/**
+ * After a vault delete: drop every doc node for the deleted file (or, when a
+ * folder was deleted, every doc inside it). Nested rows move up into the
+ * removed row's place; dividers are never touched. Returns the same tree
+ * object when nothing matched, so callers can skip a save.
+ */
+export function removeDeletedDocs(tree: SceneTree, path: string, isFolder: boolean): SceneTree {
+	const prefix = `${path}/`;
+	const hit = (n: SceneTreeNode) =>
+		n.kind === 'doc' && !!n.docPath && (isFolder ? n.docPath.startsWith(prefix) : n.docPath === path);
+	const walk = (nodes: SceneTreeNode[]): SceneTreeNode[] =>
+		nodes.flatMap((n) => {
+			const children = walk(n.children);
+			return hit(n) ? children : [{ ...n, children }];
+		});
+	const anyHit = (nodes: SceneTreeNode[]): boolean => nodes.some((n) => hit(n) || anyHit(n.children));
+	return anyHit(tree) ? walk(tree) : tree;
+}
+
 export function collectDocPaths(tree: SceneTree): string[] {
 	const out: string[] = [];
 	const walk = (nodes: SceneTreeNode[]) => {

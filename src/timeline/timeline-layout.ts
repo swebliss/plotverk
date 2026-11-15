@@ -861,7 +861,12 @@ export function computeSpineTicks(
 		.map((e) => storyDateToAbsoluteDay(calendar, { era: e.name, year: e.resetsYearTo1 ? 1 : e.startYear, month: months ? 1 : undefined, day: 1 }))
 		.sort((a, b) => a - b);
 
-	while (cursor <= stop && ticks.length < maxTicks) {
+	// Steps that add no chip (before the range, or a thinned chip too close to
+	// the last) don't count toward maxTicks, so the walk also has a step cap of
+	// its own: whatever the span or the years, it ends. Ordinary views take a
+	// handful of steps more than they draw chips, far below this.
+	const maxSteps = maxTicks * 4 + 16;
+	for (let steps = 0; cursor <= stop && ticks.length < maxTicks && steps < maxSteps; steps++) {
 		// Re-derive the date at the cursor so era boundaries relabel correctly.
 		const date = absoluteDayToStoryDate(calendar, cursor);
 		if (inRange(cursor)) {

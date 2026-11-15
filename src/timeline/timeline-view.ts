@@ -1,7 +1,7 @@
 import { ItemView, WorkspaceLeaf, TFile, TFolder, TAbstractFile, Notice, ViewStateResult } from 'obsidian';
 import { isSafetyNetPath } from '../utils/safety-paths';
 import type StorygridPlugin from '../main';
-import { TimelineData, createEmptyTimeline } from './timeline-data';
+import { TimelineData, createEmptyTimeline, remapTimelinePath } from './timeline-data';
 import { GREGORIAN_CALENDAR } from './calendar';
 import { TimelineController } from './timeline-render';
 import { setPhosphorIcon } from '../utils/icons';
@@ -72,6 +72,7 @@ export class TimelineView extends ItemView {
 		this.registerEvent(this.app.vault.on('create', scheduleRefresh));
 		this.registerEvent(this.app.vault.on('delete', scheduleRefresh));
 		this.registerEvent(this.app.vault.on('rename', scheduleRefresh));
+		this.registerEvent(this.app.vault.on('rename', (file, oldPath) => this.followRenamedPath(oldPath, file.path)));
 
 		// Our own file deleted while open: drop the stale drawing and offer a
 		// fresh start instead of saving back into a file that no longer exists.
@@ -106,6 +107,40 @@ export class TimelineView extends ItemView {
 
 	getState(): Record<string, unknown> {
 		return { filePath: this.filePath };
+	}
+
+	getFilePath(): string | null {
+		return this.filePath;
+	}
+
+	/**
+	 * A file or folder was renamed or moved while this timeline is open. When it
+	 * is this timeline's own file (or its project folder), keep saving to it at
+	 * its new place — otherwise every later edit would be dropped. Scene dates,
+	 * story loops and links that point at moved paths follow too, and are saved.
+	 * Closed timelines are patched on disk by the plugin instead.
+	 */
+	followRenamedPath(oldPath: string, newPath: string): void {
+		let fileMoved = false;
+		if (this.filePath !== null) {
+			const next = this.filePath === oldPath ? newPath
+				: this.filePath.startsWith(`${oldPath}/`) ? newPath + this.filePath.slice(oldPath.length)
+				: this.filePath;
+			if (next !== this.filePath) {
+				this.filePath = next;
+				fileMoved = true;
+			}
+		}
+		if (this.timelineData) {
+			const before = JSON.stringify(this.timelineData);
+			const next = remapTimelinePath(this.timelineData, oldPath, newPath);
+			if (JSON.stringify(next) !== before) {
+				this.timelineData = next;
+				this.scheduleSave();
+			}
+		}
+		// The project folder is read once per render: redraw so new events land in the moved project.
+		if (fileMoved && this.timelineData) this.renderAll();
 	}
 
 	async onLoadFile(file: TFile): Promise<void> {

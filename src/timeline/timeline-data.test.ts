@@ -196,4 +196,15 @@ describe('remapTimelinePath() — rename sync', () => {
 		remapTimelinePath(original, 'Scenes/Old.md', 'Scenes/New.md');
 		expect(original).toEqual(snapshot);
 	});
+
+	test('a renamed folder carries every path inside it (and never a sibling that only starts the same)', () => {
+		const data = fixture();
+		data.sceneDates['Scenes 2/Keep.md'] = { year: 1 };
+		const remapped = remapTimelinePath(data, 'Scenes', 'Chapters');
+		expect(remapped.sceneDates).toEqual({ 'Chapters/Old.md': { year: 900 }, 'Scenes 2/Keep.md': { year: 1 } });
+		expect(remapped.loops[0].setup.docPath).toBe('Chapters/Old.md');
+		expect(remapped.loops[0].middles[0].docPath).toBe('Chapters/Other.md');
+		expect(remapped.links[0].scenePath).toBe('Chapters/Old.md');
+		expect(remapped.eventDisplay).toEqual({ 'Events/Old Event.md': { color: '#fff' } });
+	});
 });

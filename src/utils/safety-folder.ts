@@ -73,9 +73,11 @@ function queueForPath<T>(path: string, task: () => Promise<T>): Promise<T> {
 /**
  * Writes `content` to `path`, creating parent folders as needed, and skips the
  * write when the file already holds exactly that — so an unchanged copy never
- * touches the disk (no sync churn, no vault events).
+ * touches the disk (no sync churn, no vault events). `beforeCreate`, when
+ * given, runs (in queue order) before a missing file is created; false = skip
+ * the write (e.g. the project folder was renamed away meanwhile).
  */
-export function writeTextIfChanged(app: App, path: string, content: string): Promise<void> {
+export function writeTextIfChanged(app: App, path: string, content: string, beforeCreate?: () => Promise<boolean>): Promise<void> {
 	return queueForPath(path, async () => {
 		const existing = app.vault.getAbstractFileByPath(path);
 		if (existing instanceof TFile) {
@@ -83,6 +85,7 @@ export function writeTextIfChanged(app: App, path: string, content: string): Pro
 			await app.vault.modify(existing, content);
 			return;
 		}
+		if (beforeCreate && !(await beforeCreate())) return;
 		await ensureFolderPath(app, parentPath(path));
 		await app.vault.create(path, content);
 	});

@@ -2088,6 +2088,11 @@ body:not(.is-mobile) .modal.sg-new-grid-modal {
 	margin: 0 0 16px;
 }
 
+/* Three wizard buttons (Back, Not now, Yes) wrap instead of overflowing on narrow phones. */
+.sg-scope-modal .sg-modal-actions {
+	flex-wrap: wrap;
+}
+
 .sg-scope-modal-desc {
 	color: var(--text-normal);
 	font-size: 16px;
@@ -5093,7 +5098,8 @@ button.sg-chip-remove.sg-chip-remove {
 	height: 12px;
 }
 
-/* ── Portrait cards (character & faction) ──────────────────────────────────── */
+/* ── Portrait cards (characters, creatures, groups) ───────────────────────── */
+/* The kind list lives in src/entities/portrait-kinds.ts. */
 
 /*
  * Layout: the outer .sg-codex-card is transparent and only provides the
@@ -5223,6 +5229,11 @@ button.sg-chip-remove.sg-chip-remove {
 	color: var(--sg-cdx-fact-key);
 	font-weight: 500;
 	flex-shrink: 0;
+	/* Creature/group cards use real field names — a long one must not eat the value */
+	max-width: 55%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 .sg-codex-card-portrait-inner-value {
@@ -14389,6 +14400,55 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 
 .theme-dark .sg-chip--entity {
 	background: var(--background-modifier-border);
+}
+
+/* ── "Link from Codex" (card editor) and its picker (CodexLinkModal) ────────
+   Obsidian theme variables only, so light and dark both follow the theme. */
+
+.sg-chip-container .sg-panel-codex-link-btn {
+	margin-left: 0;
+}
+
+/* Linked state: a filled check box on the left, a "Linked" tag on the right. */
+.sg-codex-link-check {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 16px;
+	height: 16px;
+	border: 1px solid var(--background-modifier-border-hover);
+	border-radius: 4px;
+	font-size: 11px;
+	line-height: 1;
+	color: var(--text-on-accent);
+	flex-shrink: 0;
+}
+
+.sg-codex-link-row--linked .sg-codex-link-check {
+	background: var(--interactive-accent);
+	border-color: var(--interactive-accent);
+}
+
+.sg-codex-link-state {
+	display: none;
+	margin-left: auto;
+	padding: 1px 6px;
+	border: 1px solid currentcolor;
+	border-radius: 3px;
+	font-size: 10px;
+	color: var(--interactive-accent);
+	flex-shrink: 0;
+}
+
+.sg-codex-link-row--linked .sg-codex-link-state {
+	display: inline;
+}
+
+@media (max-width: 768px) {
+	/* 44pt touch target; the doubled selector outranks the desktop "hug the label" reset. */
+	button.sg-panel-btn-small.sg-panel-codex-link-btn {
+		min-height: 44px;
+	}
 }
 
 /* ── History / Activity view ─────────────────────────────────────────────── */

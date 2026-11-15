@@ -5,10 +5,10 @@
 // outward to a whole year, or a round 5/10 on a long span), and the writer
 // gets one plain notice. Never shrinks on its own.
 
-import { absoluteDayToStoryDate, resolveAbsoluteYear, storyDateToAbsoluteDay } from './calendar';
+import { absoluteDayToStoryDate, absoluteYearStartDay, resolveAbsoluteYear } from './calendar';
 import type { CalendarDef, StoryDate, TimelineRange } from './timeline-data';
 
-/** Year numbers a writer can type. Day math walks year by year, so a typo like 1e9 must never reach it. */
+/** Year numbers a writer can type for "Years shown" — a sane span to pick, well inside what the day math covers. */
 export const RANGE_YEAR_LIMIT = 100000;
 
 /** A range in absolute years, plus its days: `startDay` is the first day shown, `endDay` the first day AFTER the last year (exclusive). */
@@ -32,7 +32,7 @@ export interface RangeItem {
 
 /** First day of an absolute year. */
 export function yearStartDay(calendar: CalendarDef, absoluteYear: number): number {
-	return storyDateToAbsoluteDay(calendar, { year: absoluteYear });
+	return absoluteYearStartDay(calendar, absoluteYear);
 }
 
 /** The absolute year a day falls in. */

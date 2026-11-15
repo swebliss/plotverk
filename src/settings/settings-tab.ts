@@ -238,6 +238,8 @@ export class StorygridSettingsTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.openDashboardOnStartup ?? false)
 					.onChange(async (v) => {
 						this.plugin.settings.openDashboardOnStartup = v;
+						// The writer chose here, so story setup won't ask them again.
+						this.plugin.settings.dashboardStartupAsked = true;
 						await this.plugin.saveSettings();
 					})
 			);

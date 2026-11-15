@@ -33,6 +33,27 @@ export const GREGORIAN_CALENDAR: CalendarDef = {
 	unitNames: { hour: 'hours', minute: 'minutes' },
 };
 
+/**
+ * Furthest year (either side of Year 1) the day math places. A date beyond it
+ * — a typo like 1e12 — is drawn at this edge instead; its saved text is never
+ * changed. A billion years keeps every day count an exact whole number in a
+ * JS double (≈3.65e11 days for a 365-day year, far below 2^53).
+ */
+export const MAX_STORY_YEAR = 1_000_000_000;
+
+/**
+ * Pulls a year into -MAX_STORY_YEAR..`top`. NaN passes through (the day math
+ * has always read it as Year 1's start). A year stored as text in a
+ * hand-edited file ("-4") becomes the number the old walk's comparisons and
+ * `y++` turned it into.
+ */
+function clampYear(year: number, top = MAX_STORY_YEAR): number {
+	const y = Number(year);
+	if (y > top) return top;
+	if (y < -MAX_STORY_YEAR) return -MAX_STORY_YEAR;
+	return y;
+}
+
 const DEFAULT_MONTHLESS_YEAR_LENGTH = 365;
 const DEFAULT_MINUTES_PER_DAY = 1440;
 
@@ -75,15 +96,11 @@ function daysInYear(calendar: CalendarDef, absoluteYear: number): number {
 }
 
 // ─── Day-math cache (performance) ──────────────────────────────────────────
-// daysBeforeYear/yearForAbsoluteDay below both walk year-by-year from Year 1
-// (or down from Year 1, for years/days before it) — negligible for ordinary
-// story-length ranges, but a real per-frame cost for a fantasy calendar with
-// a huge year number (e.g. 50,000): computeSpineTicks() (timeline-layout.ts)
-// calls into this math up to ~240 times per call, and that call itself runs
-// on every animation frame while panning/zooming the timeline
-// (timeline-render.ts's renderAxisTicks, rAF-scheduled from applyTransform).
-// A single pan/zoom gesture re-asks about the same (or heavily overlapping)
-// set of years/days on every frame, so memoizing is a direct fix.
+// daysBeforeYear/yearForAbsoluteDay below used to walk year-by-year from
+// Year 1, which froze Obsidian on a typed year like 999999999. They are now
+// closed-form (see "Fast year math" below), but computeSpineTicks()
+// (timeline-layout.ts) still asks about the same years/days on every pan/zoom
+// animation frame, so the answers stay memoized.
 //
 // Cached per calendar OBJECT (WeakMap keyed by reference, not by `id` or a
 // content hash): everywhere this codebase changes a calendar's definition, it
@@ -100,6 +117,8 @@ function daysInYear(calendar: CalendarDef, absoluteYear: number): number {
 // CalendarDef's fields in place instead of replacing the object, this cache
 // would need a different key.
 interface DayMathCache {
+	/** The calendar's year-length pattern (see yearShape). */
+	shape: YearShape;
 	/** year -> daysBeforeYear(calendar, year) */
 	beforeYear: Map<number, number>;
 	/** dayFloor -> yearForAbsoluteDay(calendar, dayFloor) */
@@ -111,51 +130,166 @@ const dayMathCaches = new WeakMap<CalendarDef, DayMathCache>();
 function dayMathCache(calendar: CalendarDef): DayMathCache {
 	let cache = dayMathCaches.get(calendar);
 	if (!cache) {
-		cache = { beforeYear: new Map(), forDay: new Map() };
+		cache = { shape: yearShape(calendar), beforeYear: new Map(), forDay: new Map() };
 		dayMathCaches.set(calendar, cache);
 	}
 	return cache;
 }
 
-/** Absolute day count at the start of `year` (0-based, day 0 = Year 1's first day). Memoized per calendar object — see the cache note above. */
-function daysBeforeYear(calendar: CalendarDef, year: number): number {
-	const cache = dayMathCache(calendar).beforeYear;
-	const cached = cache.get(year);
-	if (cached !== undefined) return cached;
-	const total = computeDaysBeforeYear(calendar, year);
-	cache.set(year, total);
+// ─── Fast year math ─────────────────────────────────────────────────────────
+// A year's length is always `base` (the year no leap rule touches) plus one
+// day for each leap rule that fires that year — rules only ever ADD a day
+// (see monthsForYear/daysInYear). A rule "every N years" fires on whole years
+// divisible by N. So the days before a year are `years × base` plus, per
+// rule, a count of multiples in a range — plain floor arithmetic, the same
+// cost for Year 5 as for Year 999,999,999. For whole-number data the result
+// is identical to the old year-by-year walk (every partial sum is an exact
+// integer in a double); calendar-fast-math.test.ts checks that against a
+// verbatim copy of the old walk.
+
+interface YearShape {
+	/** Days in a year where no leap rule fires (months + festival days, or 365 without months). */
+	base: number;
+	/**
+	 * One entry per leap rule that can add a day: the whole-year period it
+	 * fires on (a rule fires on year y exactly when y is a multiple of it),
+	 * or Infinity for a rule that only ever fires on year 0.
+	 */
+	periods: number[];
+	/** False when a rule's everyYears is fractional — such a rule can also fire on a fractional year (hand-edited files only). */
+	wholeRules: boolean;
+	/** Every year has at least one day, so day -> year can binary-search (the old walk threw on a zero-length year instead). */
+	searchable: boolean;
+}
+
+/**
+ * Read a calendar's leap rules the way ruleApplies/monthsForYear apply them:
+ * `everyYears > 0` and `year % everyYears === 0`, and with months only when
+ * `addDaysToMonth` names a month that exists.
+ */
+function yearShape(calendar: CalendarDef): YearShape {
+	const base = daysInYear({ ...calendar, leapRules: [] }, 0);
+	const monthSlots = (calendar.months ?? []).map((m) => ({ ...m }));
+	const periods: number[] = [];
+	let wholeRules = true;
+	let everyYear = 0;
+	for (const rule of calendar.leapRules ?? []) {
+		// Number() coerces exactly like `>` and `%` do in ruleApplies.
+		const n = Number(rule.everyYears);
+		if (!(n > 0)) continue;
+		if (calendar.months && !monthSlots[rule.addDaysToMonth - 1]) continue;
+		if (n === Infinity) {
+			// y % Infinity === 0 only for y === 0.
+			periods.push(Infinity);
+			continue;
+		}
+		// A finite double is p / 2^k with p a whole number (odd when k > 0);
+		// a whole year y is an exact multiple of it exactly when p divides y.
+		// At most ~1074 doublings, and it stops before it could overflow.
+		let p = n;
+		while (!Number.isInteger(p)) {
+			p *= 2;
+			wholeRules = false;
+		}
+		periods.push(p);
+		if (p === 1) everyYear += 1;
+	}
+	return { base, periods, wholeRules, searchable: Number.isFinite(base) && base + everyYear > 0 };
+}
+
+/** How many whole years in [from, to] (inclusive, from <= to) are multiples of `period`. */
+function multiplesIn(period: number, from: number, to: number): number {
+	if (period === Infinity) return from <= 0 && 0 <= to ? 1 : 0;
+	return Math.floor(to / period) - Math.floor((from - 1) / period);
+}
+
+/** Sum of daysInYear over the whole years from..to (inclusive, from <= to). */
+function daysInYears(shape: YearShape, from: number, to: number): number {
+	let total = (to - from + 1) * shape.base;
+	for (const p of shape.periods) total += multiplesIn(p, from, to);
 	return total;
 }
 
-/** Uncached walk — identical to daysBeforeYear's old body; daysBeforeYear itself now just memoizes this. */
-function computeDaysBeforeYear(calendar: CalendarDef, year: number): number {
-	let total = 0;
+/** Fractional years below 1 with a fractional everyYears: walk, but never more than this many years (absurd hand-edited data only). */
+const FRACTIONAL_WALK_LIMIT = 100_000;
+
+/** Closed-form days before `year` — the same answer the old year-by-year walk from Year 1 gave. */
+function computeDaysBeforeYear(calendar: CalendarDef, shape: YearShape, year: number): number {
+	// The old walk ran zero times for NaN (and so returned 0).
+	if (Number.isNaN(year)) return 0;
 	if (year >= 1) {
-		for (let y = 1; y < year; y++) total += daysInYear(calendar, y);
-	} else {
-		for (let y = year; y < 1; y++) total -= daysInYear(calendar, y);
+		// The old walk summed the whole years 1, 2, … while y < year.
+		const last = Math.ceil(year) - 1;
+		return last < 1 ? 0 : daysInYears(shape, 1, last);
 	}
+	if (Number.isInteger(year)) return -daysInYears(shape, year, 0);
+	// A fractional year below 1 (hand-edited file): the old walk visited
+	// year, year+1, … — never a whole year, so a whole-number rule never fires
+	// and each visited year is just `base` long.
+	const visited = Math.ceil(1 - year);
+	if (shape.wholeRules || visited > FRACTIONAL_WALK_LIMIT) return -(visited * shape.base);
+	let total = 0;
+	for (let y = year; y < 1; y++) total -= daysInYear(calendar, y);
+	return total;
+}
+
+/** Absolute day count at the start of `year` (0-based, day 0 = Year 1's first day). Memoized per calendar object — see the cache note above. */
+function daysBeforeYear(calendar: CalendarDef, year: number): number {
+	const cache = dayMathCache(calendar);
+	const cached = cache.beforeYear.get(year);
+	if (cached !== undefined) return cached;
+	const total = computeDaysBeforeYear(calendar, cache.shape, year);
+	cache.beforeYear.set(year, total);
 	return total;
 }
 
 /** Inverse of daysBeforeYear + daysInYear: which absolute year (and 1-based day-of-year) a 0-based absolute day falls in. Memoized per calendar object — see the cache note above. */
 function yearForAbsoluteDay(calendar: CalendarDef, dayFloor: number): { year: number; dayOfYear: number } {
-	const cache = dayMathCache(calendar).forDay;
-	const cached = cache.get(dayFloor);
+	const cache = dayMathCache(calendar);
+	const cached = cache.forDay.get(dayFloor);
 	if (cached !== undefined) return cached;
-	const result = computeYearForAbsoluteDay(calendar, dayFloor);
-	cache.set(dayFloor, result);
+	const result = cache.shape.searchable
+		? searchYearForAbsoluteDay(calendar, cache.shape, dayFloor)
+		// NaN/±Infinity could never finish the walk (it hung on them before).
+		: walkYearForAbsoluteDay(calendar, Number.isFinite(dayFloor) ? dayFloor : 0);
+	cache.forDay.set(dayFloor, result);
 	return result;
 }
 
-/** Uncached walk — identical to yearForAbsoluteDay's old body; yearForAbsoluteDay itself now just memoizes this. */
-function computeYearForAbsoluteDay(calendar: CalendarDef, dayFloor: number): { year: number; dayOfYear: number } {
+/**
+ * Day -> year by binary search over ±MAX_STORY_YEAR (~31 steps). Every year
+ * is at least one day long here, so the year whose start is the last one at
+ * or before the day is unique — the same year the old walk stopped on. A day
+ * past either edge (or NaN, which used to hang the walk) is held at the edge
+ * (NaN: day 0, Year 1's first day).
+ */
+function searchYearForAbsoluteDay(calendar: CalendarDef, shape: YearShape, dayFloor: number): { year: number; dayOfYear: number } {
+	const before = (y: number): number => computeDaysBeforeYear(calendar, shape, y);
+	const firstDay = before(-MAX_STORY_YEAR);
+	const lastDay = before(MAX_STORY_YEAR + 1) - 1;
+	const day = Number.isNaN(dayFloor) ? 0 : Math.min(lastDay, Math.max(firstDay, dayFloor));
+	let lo = -MAX_STORY_YEAR;
+	let hi = MAX_STORY_YEAR;
+	while (lo < hi) {
+		const mid = Math.floor((lo + hi + 1) / 2);
+		if (before(mid) <= day) lo = mid;
+		else hi = mid - 1;
+	}
+	return { year: lo, dayOfYear: day - before(lo) + 1 };
+}
+
+/**
+ * The old year-by-year walk, kept only for a calendar that has a year with no
+ * days (or no readable length). There it stops within two years — on the
+ * first such year, with the same error as before — so it can't run long.
+ */
+function walkYearForAbsoluteDay(calendar: CalendarDef, dayFloor: number): { year: number; dayOfYear: number } {
 	if (dayFloor >= 0) {
 		let year = 1;
 		let cursor = 0;
 		for (;;) {
 			const len = daysInYear(calendar, year);
-			if (len <= 0) throw new Error(`Calendar has no days in year ${year} — check its month definitions.`);
+			if (!(len > 0)) throw new Error(`Calendar has no days in year ${year} — check its month definitions.`);
 			if (dayFloor < cursor + len) return { year, dayOfYear: dayFloor - cursor + 1 };
 			cursor += len;
 			year += 1;
@@ -166,7 +300,7 @@ function computeYearForAbsoluteDay(calendar: CalendarDef, dayFloor: number): { y
 	for (;;) {
 		year -= 1;
 		const len = daysInYear(calendar, year);
-		if (len <= 0) throw new Error(`Calendar has no days in year ${year} — check its month definitions.`);
+		if (!(len > 0)) throw new Error(`Calendar has no days in year ${year} — check its month definitions.`);
 		cursor -= len;
 		if (dayFloor >= cursor) return { year, dayOfYear: dayFloor - cursor + 1 };
 	}
@@ -220,6 +354,19 @@ function eraForAbsoluteYear(calendar: CalendarDef, absoluteYear: number): Calend
 	return match;
 }
 
+/**
+ * Holds a day count inside the years the day math covers (±MAX_STORY_YEAR),
+ * so a huge day number (a monthless "Day 1e15") lands at the edge like a huge
+ * year does. Only on a calendar where every year has days — on a broken one
+ * the edges mean nothing, and its numbers pass through as before.
+ */
+function clampDayCount(calendar: CalendarDef, dayCount: number): number {
+	if (!dayMathCache(calendar).shape.searchable) return dayCount;
+	const firstDay = daysBeforeYear(calendar, -MAX_STORY_YEAR);
+	const lastDay = daysBeforeYear(calendar, MAX_STORY_YEAR + 1) - 1;
+	return Math.min(lastDay, Math.max(firstDay, dayCount));
+}
+
 /** Resolve a StoryDate's `year` field to an absolute year, unwinding a year-resetting era if the date names one. */
 export function resolveAbsoluteYear(calendar: CalendarDef, date: StoryDate): number {
 	if (date.era) {
@@ -232,12 +379,26 @@ export function resolveAbsoluteYear(calendar: CalendarDef, date: StoryDate): num
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 /**
+ * First day of an absolute year — what storyDateToAbsoluteDay gives for a
+ * year-only date. One difference: the year right after the top edge
+ * (MAX_STORY_YEAR + 1) keeps its own start, so "the end of the last year"
+ * (an era band's or the main line's far end) never folds back onto that
+ * year's start and turns into a zero-length line.
+ */
+export function absoluteYearStartDay(calendar: CalendarDef, absoluteYear: number): number {
+	return daysBeforeYear(calendar, clampYear(absoluteYear, MAX_STORY_YEAR + 1));
+}
+
+/**
  * Convert a StoryDate to an absolute day number (0-based, fractional part
  * encodes time-of-day). Used for layout/sort math — never shown to the user.
  */
 export function storyDateToAbsoluteDay(calendar: CalendarDef, date: StoryDate): number {
-	const absYear = resolveAbsoluteYear(calendar, date);
-	const dayCount = daysBeforeYear(calendar, absYear) + (dayOfYearIndex(calendar, absYear, date) - 1);
+	// A year past ±MAX_STORY_YEAR (a typo like 1e12, or Infinity) is placed at
+	// the edge — the date's own fields are untouched, so its label still reads
+	// what was typed.
+	const absYear = clampYear(resolveAbsoluteYear(calendar, date));
+	const dayCount = clampDayCount(calendar, daysBeforeYear(calendar, absYear) + (dayOfYearIndex(calendar, absYear, date) - 1));
 	const minutesPerDay = calendar.minutesPerDay ?? DEFAULT_MINUTES_PER_DAY;
 	const fraction = date.minute != null ? Math.min(Math.max(date.minute, 0), minutesPerDay - 1) / minutesPerDay : 0;
 	return dayCount + fraction;

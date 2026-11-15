@@ -9,6 +9,7 @@ import {
 	outdentNode,
 	renameDocPath,
 	removeDocByPath,
+	removeDeletedDocs,
 	collectDocPaths,
 	addMissingDocs,
 	resolveSceneTree,
@@ -156,6 +157,50 @@ describe('scene-tree', () => {
 		const next = removeDocByPath(tree, 'deep.md');
 		expect(collectDocPaths(next)).toEqual([]);
 		expect(next[0].children).toEqual([]);
+	});
+
+	describe('removeDeletedDocs (a scene file deleted from the vault)', () => {
+		test('drops the deleted scene, its nested scenes move up into its place', () => {
+			const act = createDividerNode('Act 1');
+			const parent = createDocNode('P/Scenes/parent.md');
+			const child = createDocNode('P/Scenes/child.md');
+			parent.children = [child];
+			act.children = [createDocNode('P/Scenes/a.md'), parent, createDocNode('P/Scenes/b.md')];
+			const next = removeDeletedDocs([act], 'P/Scenes/parent.md', false);
+			expect(collectDocPaths(next)).toEqual(['P/Scenes/a.md', 'P/Scenes/child.md', 'P/Scenes/b.md']);
+			expect(flattenTree(next).map((f) => f.depth)).toEqual([0, 1, 1, 1]);
+			expect(next[0].label).toBe('Act 1');
+		});
+
+		test('a deleted folder drops every scene inside it, and only those', () => {
+			const tree = buildTreeFromFlatOrder(['P/Scenes/Old/x.md', 'P/Scenes/keep.md', 'P/Scenes/Old/y.md', 'P/Scenes/Older.md']);
+			const next = removeDeletedDocs(tree, 'P/Scenes/Old', true);
+			expect(collectDocPaths(next)).toEqual(['P/Scenes/keep.md', 'P/Scenes/Older.md']);
+		});
+
+		test('a folder delete never matches a file that merely shares the name', () => {
+			const tree = buildTreeFromFlatOrder(['P/Scenes/Old']);
+			expect(removeDeletedDocs(tree, 'P/Scenes/Old', true)).toBe(tree);
+		});
+
+		test('removes every copy of the path, wherever it sits', () => {
+			const beat = createDividerNode('Beat');
+			beat.children = [createDocNode('gone.md')];
+			const tree: SceneTree = [createDocNode('gone.md'), beat];
+			const next = removeDeletedDocs(tree, 'gone.md', false);
+			expect(collectDocPaths(next)).toEqual([]);
+			expect(next.map((n) => n.kind)).toEqual(['divider']);
+		});
+
+		test('dividers are never removed, even when one has the deleted text as its label', () => {
+			const tree: SceneTree = [createDividerNode('gone.md')];
+			expect(removeDeletedDocs(tree, 'gone.md', false)).toBe(tree);
+		});
+
+		test('returns the very same tree when nothing matched (so callers can skip a save)', () => {
+			const tree = buildTreeFromFlatOrder(['a.md', 'b.md']);
+			expect(removeDeletedDocs(tree, 'c.md', false)).toBe(tree);
+		});
 	});
 
 	test('addMissingDocs appends unknown paths alphabetically without disturbing existing tree', () => {

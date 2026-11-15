@@ -1,12 +1,13 @@
 import { plotverkEvents } from './utils/plotverk-events';
-import { ItemView, WorkspaceLeaf, TFile, TAbstractFile, Notice, Menu, Platform, MarkdownView, ViewStateResult } from 'obsidian';
+import { movedPath, onPathMove } from './utils/project-move';
+import { ItemView, WorkspaceLeaf, TFile, TFolder, TAbstractFile, Notice, Menu, Platform, MarkdownView, ViewStateResult } from 'obsidian';
 import type StorygridPlugin from './main';
 import { onSettingsChanged } from './utils/obsidian-internals';
 import { setPhosphorIcon, WRITERS_PANEL_ICON, DASHBOARD_ICON, CODEX_ICON } from './utils/icons';
 import { TaskListController } from './ui/task-list';
-import { GridData, SceneCard, generateId } from './grid-data';
+import { GridData, SceneCard, TodoItem, generateId } from './grid-data';
 import { ensureDashboard } from './dashboard-view';
-import { writeProjectMirror } from './utils/project-data-store';
+import { projectDataReady, writeProjectMirror } from './utils/project-data-store';
 import { isSafetyNetPath } from './utils/safety-paths';
 import { debounce } from './utils/debounce';
 import { reportError, runSafely } from './utils/report-error';
@@ -67,6 +68,7 @@ import {
 	SceneTreeNode,
 	ProjectionRow,
 	resolveSceneTree,
+	collectDocPaths,
 	createDocNode,
 	createDividerNode,
 	indentNode,
@@ -115,6 +117,8 @@ export class StorygridOutlineView extends ItemView {
 	/** Whether the collapsible "Formatting options" group is open in the Compile tab. */
 	private _compileOptsOpen = false;
 	private _taskList = new TaskListController();
+	/** To-dos added before the startup check of the project data copies, per project; stored right after it. */
+	private _earlyTodos = new Map<string, TodoItem[]>();
 	private refreshTimer: number | null = null;
 	private _wordCache: WordCountCache = new Map();
 	/** 1-second tick driving the live sprint countdown on the Progress tab. */
@@ -199,6 +203,10 @@ export class StorygridOutlineView extends ItemView {
 
 		this._projectChangedHandler = () => void this.renderAll();
 		plotverkEvents.addEventListener('storygrid:project-changed', this._projectChangedHandler);
+		// The grid's file or folder was renamed or moved: keep showing that grid (the rename itself redraws).
+		this.register(onPathMove((move) => {
+			if (this.gridPath) this.gridPath = movedPath(this.gridPath, move) ?? this.gridPath;
+		}));
 
 		this._wordsChangedHandler = () => {
 			// Cancel any pending full re-render so typing never triggers a flash
@@ -317,6 +325,29 @@ export class StorygridOutlineView extends ItemView {
 		this.gridPath = gridPath;
 		this.activeTab = 'compile';
 		await this.renderAll();
+	}
+
+	/**
+	 * Show the Writing tab and put the cursor in its "new scene" box (the
+	 * Dashboard's "Start Writing" card when the Plot Grid is off). The panel
+	 * follows the active project. If a refresh redraws the panel right after,
+	 * the box is looked up again once on the next frame. Does nothing when the
+	 * Writing tab is hidden in this mode.
+	 */
+	async focusNewScene(): Promise<void> {
+		this.activeTab = 'writing';
+		await this.renderAll();
+		const focusBox = (): boolean => {
+			const input = this.contentEl.querySelector<HTMLInputElement>('input.sg-outline-new-scene');
+			if (!input) return false;
+			input.focus();
+			return true;
+		};
+		focusBox();
+		window.requestAnimationFrame(() => {
+			if (this.contentEl.doc.activeElement?.matches('input.sg-outline-new-scene')) return;
+			focusBox();
+		});
 	}
 
 	/** Deep-link: show the World tab with an entity's read-only preview card on top.
@@ -514,6 +545,11 @@ export class StorygridOutlineView extends ItemView {
 		if (gen !== this._renderGen) return;
 		// Clear only now that the new content is ready — keeps the old panel
 		// visible during the async read so it repaints in one shot (no flash).
+		// A redraw (a vault change, a project switch) must not take the cursor —
+		// or a half-typed name — out of the "new scene" box.
+		const focused = el.doc.activeElement;
+		const newSceneDraft = focused && el.contains(focused) && focused.instanceOf(HTMLInputElement)
+			&& focused.matches('input.sg-outline-new-scene') ? focused.value : null;
 		el.empty();
 		if (!grid) {
 			el.createDiv({ cls: 'sg-outline-empty', text: i18n('outline.empty.readError') });
@@ -531,6 +567,11 @@ export class StorygridOutlineView extends ItemView {
 		const body = el.createDiv({ cls: 'sg-outline-body' });
 		if (this.activeTab === 'writing') {
 			this.renderWritingTab(body, gridFile, grid);
+			const newSceneBox = newSceneDraft !== null ? body.querySelector<HTMLInputElement>('input.sg-outline-new-scene') : null;
+			if (newSceneBox) {
+				newSceneBox.value = newSceneDraft ?? '';
+				newSceneBox.focus();
+			}
 		} else if (this.activeTab === 'world') {
 			this.renderWorldTab(body, gridFile);
 		} else if (this.activeTab === 'coach') {
@@ -813,7 +854,9 @@ export class StorygridOutlineView extends ItemView {
 		// Reference inequality alone is a false positive here: `?? []` mints a
 		// fresh empty array on every render, so an empty tree would otherwise
 		// look "changed" and force a save + project-mirror write every time.
-		if (JSON.stringify(tree) !== JSON.stringify(storedTree)) {
+		// Not before the startup check of the project data copies: an outline built
+		// from the files alone must never stand in for the writer's saved one.
+		if (projectDataReady() && JSON.stringify(tree) !== JSON.stringify(storedTree)) {
 			// New docs on disk got appended — persist quietly, no full rerender.
 			(dash.sceneTree ??= {})[projectRoot] = tree;
 			void this.plugin.saveData(this.plugin.settings);
@@ -821,6 +864,22 @@ export class StorygridOutlineView extends ItemView {
 		}
 
 		const byPath = new Map(docs.map((d) => [d.path, d]));
+		// A scene moved out of the Scenes folder keeps its row (the rename
+		// listener already points it at the new path) — show it as the real file
+		// instead of "(missing file)", the same way Compile already includes it.
+		// Paths still inside Scenes are left alone: there, absent from `docs`
+		// means another book's scene in Series Mode, not a moved one.
+		const scenesPrefix = (projectRoot ? `${projectRoot}/Scenes` : 'Scenes') + '/';
+		const bookId = this.plugin.settings.isSeriesMode ? this.plugin.settings.activeBookId : undefined;
+		for (const p of collectDocPaths(tree)) {
+			if (byPath.has(p) || p.startsWith(scenesPrefix) || isSafetyNetPath(p)) continue;
+			const moved = this.app.vault.getAbstractFileByPath(p);
+			if (!(moved instanceof TFile) || moved.extension !== 'md') continue;
+			// Same book rule as sceneDocsFor: a scene stamped for another book stays hidden.
+			const movedBook: unknown = this.app.metadataCache.getFileCache(moved)?.frontmatter?.['storygrid-book-id'];
+			if (bookId && movedBook && movedBook !== bookId) continue;
+			byPath.set(p, moved);
+		}
 		// First card linking each doc supplies the status dot + word goal.
 		const cardByDoc = new Map<string, SceneCard>();
 		for (const c of grid.cards) {
@@ -1060,13 +1119,26 @@ export class StorygridOutlineView extends ItemView {
 			menu.addSeparator();
 			menu.addItem((m) =>
 				m.setTitle(i18n('common.delete')).setIcon('trash').onClick(() => {
-					const label = isDivider ? (node.label || i18n('outline.writing.thisDividerFallback')) : (doc?.basename ?? i18n('outline.writing.thisSceneFallback'));
-					const message = isDivider
+					// A "(missing file)" row has no file to trash: Delete only takes the
+					// row out of the outline, so it gets the divider wording (nested rows
+					// move up, nothing else is deleted), which is exactly what happens.
+					// Ghost = the file is gone from the whole vault, checked now (not at
+					// render). A row hidden only because its scene belongs to another
+					// book in Series Mode is not a ghost and must keep its place.
+					const fileGone = () => !node.docPath || !this.app.vault.getAbstractFileByPath(node.docPath);
+					const isGhost = !isDivider && !doc && fileGone();
+					const label = isDivider
+						? (node.label || i18n('outline.writing.thisDividerFallback'))
+						: (doc?.basename ?? i18n('outline.writing.missingFile'));
+					const message = isDivider || isGhost
 						? i18n('outline.writing.deleteDividerConfirm', { label })
 						: i18n('outline.writing.deleteSceneConfirm', { label });
 					new ConfirmModal(this.app, message, i18n('common.delete'), () => {
-						if (isDivider) {
-							ctx.persistTree(removeNodePromotingChildren(fullTree, node.id));
+						if (isGhost && !fileGone()) return; // came back meanwhile (e.g. Sync): keep it
+						if (isDivider || isGhost) {
+							// Start from the saved outline: a vault delete may have changed it while the confirm was open.
+							const current = ensureDashboard(this.plugin.settings).sceneTree?.[ctx.projectRoot] ?? fullTree;
+							ctx.persistTree(removeNodePromotingChildren(current, node.id));
 						} else if (doc) {
 							runSafely((async () => {
 								await this.app.fileManager.trashFile(doc);
@@ -1787,15 +1859,29 @@ export class StorygridOutlineView extends ItemView {
 		const today = dayKey(now);
 		const history = dash.typedWords[projectRoot] ?? {};
 
+		// Until Plotverk has checked the project data copies at startup, nothing is
+		// seeded: a project moved or restored while Obsidian was closed gets its own
+		// goals and to-dos first (a re-render follows once they are in).
+		const dataReady = projectDataReady();
+		// To-dos added before the startup check were kept on screen only (storing them
+		// would have stopped the project's data from being recovered): store them now,
+		// after whatever was recovered, never over it.
+		const early = this._earlyTodos.get(projectRoot);
+		if (dataReady && early) {
+			this._earlyTodos.delete(projectRoot);
+			const stored = dash.todos[projectRoot];
+			dash.todos[projectRoot] = stored ? [...stored, ...early.filter((t) => !stored.some((s) => s.id === t.id))] : early;
+			quietSave();
+		}
 		// Seed default goals on first visit for this project
-		if (!dash.goals[projectRoot]) {
+		if (dataReady && !dash.goals[projectRoot]) {
 			dash.goals[projectRoot] = { daily: 500, weekly: 3500 };
 			quietSave();
 		}
-		const goals = dash.goals[projectRoot];
+		const goals = dash.goals[projectRoot] ?? { daily: 500, weekly: 3500 };
 
 		// Seed starter todos on first visit for this project (unless onboarding disabled)
-		if (!dash.todos[projectRoot]) {
+		if (dataReady && !dash.todos[projectRoot]) {
 			if (this.plugin.settings.taskOnboarding !== false) {
 				const t = (text: string) => ({ id: generateId(), text, done: false, createdAt: new Date().toISOString() });
 				dash.todos[projectRoot] = [
@@ -1810,7 +1896,9 @@ export class StorygridOutlineView extends ItemView {
 			}
 			quietSave();
 		}
-		const todos = dash.todos[projectRoot];
+		// Only before the startup check can the list on screen be a stand-in not yet stored.
+		const standIn = dash.todos[projectRoot] === undefined;
+		const todos = dash.todos[projectRoot] ?? this._earlyTodos.get(projectRoot) ?? [];
 
 		// ── Goal progress bars (read-only — set goals in the Dashboard) ─────────
 		const windows = this.plugin.settings.sidebarGoalWindows ?? ['daily', 'weekly'];
@@ -1872,6 +1960,17 @@ export class StorygridOutlineView extends ItemView {
 			container: todoSec,
 			todos,
 			save: () => {
+				// A to-do added on a stand-in list: before the startup check it stays on screen
+				// only (stored at the next draw after the check); after it, the list is stored
+				// now, never over one that arrived meanwhile, and never under a project folder
+				// that has since been renamed or moved away.
+				const stored = dash.todos[projectRoot];
+				const folderThere = projectRoot === '' || this.app.vault.getAbstractFileByPath(projectRoot) instanceof TFolder;
+				if (standIn && !projectDataReady()) {
+					this._earlyTodos.set(projectRoot, todos);
+				} else if (standIn && folderThere && stored !== todos) {
+					dash.todos[projectRoot] = stored ? [...stored, ...todos.filter((t) => !stored.some((s) => s.id === t.id))] : todos;
+				}
 				quietSave();
 				plotverkEvents.dispatchEvent(new CustomEvent('storygrid:tasks-changed', { detail: 'outline' }));
 			},
