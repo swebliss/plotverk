@@ -7,6 +7,7 @@ import { applyFields, parseBody, renderBody, setTitle } from './entity-body';
 import { emptyFieldsToKeep, parseEntityDocument, splitFrontmatter, titleBelongsToFile } from './entity-parse';
 import { slugsForLabels, toYamlValue } from './field-types';
 import { RelationLine, fieldsToRelationSections, parseRelationLines } from '../utils/relations';
+import { processKeepingText } from '../utils/safe-process';
 
 /**
  * The one place Plotverk writes an entity sheet's frontmatter.
@@ -117,7 +118,7 @@ export function retitleAfterFileRename(content: string, oldBasename: string, new
 
 /** Rename a sheet's title in place, atomically. The caller renames the file itself. */
 export async function retitleEntitySheet(app: App, file: TFile, name: string): Promise<void> {
-	await app.vault.process(file, (content) => retitleDocument(content, name));
+	await processKeepingText(app, file, (content) => retitleDocument(content, name));
 }
 
 /**
@@ -257,8 +258,24 @@ export interface UpdateEntitySheetOptions {
  * kept only what the builder knew how to emit.
  */
 export async function updateEntitySheet(app: App, file: TFile, opts: UpdateEntitySheetOptions): Promise<void> {
-	const writes = planFieldWrites(opts.before, opts.fields);
-	await app.vault.process(file, (content) => applyEntityEdits(content, opts.kind, opts.name, writes));
+	await updateEntitySheetFrom(app, file, () => opts);
+}
+
+/**
+ * `updateEntitySheet`, deciding what to write from the sheet's text at the
+ * very moment of writing (inside `vault.process`): a change that lands
+ * between reading the sheet and writing it is seen, never written over.
+ * Hands back what was written.
+ */
+export async function updateEntitySheetFrom<P extends UpdateEntitySheetOptions>(app: App, file: TFile, decide: (content: string) => P): Promise<P> {
+	let chosen: P | null = null;
+	await processKeepingText(app, file, (content) => {
+		const plan = decide(content);
+		chosen = plan;
+		return applyEntityEdits(content, plan.kind, plan.name, planFieldWrites(plan.before, plan.fields));
+	});
+	const opts = chosen as P | null;
+	if (!opts) throw new Error('the sheet could not be read');
 	const entityId = opts.entityId ?? generateEntityId();
 	await app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
 		// Built in here, where the sheet's own clean-slate mark can be read: it
@@ -271,6 +288,7 @@ export async function updateEntitySheet(app: App, file: TFile, opts: UpdateEntit
 		const owned = buildEntityFrontmatter(opts.kind, opts.fields, entityId, opts.aliases, keepEmpty, taken);
 		applyOwnedFrontmatter(fm, owned, opts.staleKeys ?? []);
 	});
+	return opts;
 }
 
 /** The result of {@link editRelationshipsField}: the new document and the frontmatter half of the same change. */
@@ -347,7 +365,7 @@ export async function updateEntityRelationships(
 	edit: (value: string, elsewhere: RelationLine[]) => string,
 ): Promise<boolean> {
 	let result: RelationshipsFieldEdit | null = null;
-	await app.vault.process(file, (content) => {
+	await processKeepingText(app, file, (content) => {
 		result = editRelationshipsField(content, file.basename, edit);
 		return result ? result.content : content;
 	});

@@ -7,6 +7,7 @@ import { TimelineController } from './timeline-render';
 import { setPhosphorIcon } from '../utils/icons';
 import { t } from '../i18n';
 import { reportError, runSafely } from '../utils/report-error';
+import { isFromNewerPlotverk, isWholeTimeline } from '../utils/write-guard';
 
 export const VIEW_TYPE_TIMELINE = 'storygrid-timeline-view';
 
@@ -23,9 +24,15 @@ export class TimelineView extends ItemView {
 	private filePath: string | null = null;
 	private timelineData: TimelineData | null = null;
 	private controller: TimelineController | null = null;
+	/** The view has closed: a late change (a sheet editor tab saved after) must not write its old copy back. */
+	private closed = false;
 
 	private saveTimer: number | null = null;
 	private _selfWrite = false;
+	/** The open file was saved by a newer Plotverk: shown, never saved over. */
+	private _newerFile = false;
+	/** "Not saved" was said once for this timeline. */
+	private _saveRefusedWarned = false;
 
 	constructor(leaf: WorkspaceLeaf, plugin: StorygridPlugin) {
 		super(leaf);
@@ -85,6 +92,7 @@ export class TimelineView extends ItemView {
 	}
 
 	async onClose(): Promise<void> {
+		this.closed = true;
 		this.controller?.unmount();
 		this.controller = null;
 		try { await this.flushSave(); } catch (err) { reportError(err); }
@@ -162,6 +170,9 @@ export class TimelineView extends ItemView {
 		try {
 			const raw = await this.app.vault.read(file);
 			this.timelineData = JSON.parse(raw) as TimelineData;
+			this._newerFile = isFromNewerPlotverk((this.timelineData as { version?: unknown }).version);
+			this._saveRefusedWarned = false;
+			if (this._newerFile) new Notice(t('safety.newerFile', { name: file.basename }), 15000);
 			this.renderAll();
 		} catch {
 			new Notice('Plotverk: This timeline file is corrupted.');
@@ -233,10 +244,18 @@ export class TimelineView extends ItemView {
 		this.contentEl.empty();
 		if (!this.timelineData || !this.filePath) return;
 		const projectRoot = this.projectRoot();
+		// The timeline this drawing belongs to: by path, and by file object (which
+		// follows a rename; the path survives Sync replacing the file).
+		const shownPath = this.filePath;
+		const shownFile = this.app.vault.getAbstractFileByPath(shownPath);
 		this.controller = new TimelineController(this.plugin, this.contentEl, {
 			getData: () => this.timelineData!,
 			mutate: (updater) => {
 				if (!this.timelineData) return;
+				// A change arriving late (a sheet editor tab saved after this view
+				// closed or moved to another timeline) must not land on the wrong copy.
+				if (this.closed || !this.filePath) return;
+				if (this.filePath !== shownPath && this.app.vault.getAbstractFileByPath(this.filePath) !== shownFile) return;
 				this.timelineData = updater(this.timelineData);
 				this.scheduleSave();
 			},
@@ -261,6 +280,14 @@ export class TimelineView extends ItemView {
 		if (!this.timelineData || !this.filePath) return;
 		const file = this.app.vault.getAbstractFileByPath(this.filePath);
 		if (!(file instanceof TFile)) return;
+		// Never save over a newer Plotverk's file, or save a timeline that came out broken.
+		if (this._newerFile || !isWholeTimeline(this.timelineData)) {
+			if (!this._saveRefusedWarned) {
+				this._saveRefusedWarned = true;
+				new Notice(t(this._newerFile ? 'safety.newerNotSaved' : 'safety.brokenNotSaved', { name: file.basename }), 15000);
+			}
+			return;
+		}
 		this._selfWrite = true;
 		// A failed write reaches the writer (runSafely / onClose), and never leaves the
 		// view deaf to changes made elsewhere.

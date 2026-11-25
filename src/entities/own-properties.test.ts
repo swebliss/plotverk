@@ -1,6 +1,6 @@
 import { parseEntityDocument, isTakeableTextProperty, titleBelongsToFile } from './entity-parse';
 import { buildEntityDocument, buildEntityFrontmatter } from './entity-doc';
-import { retitleAfterFileRename } from './entity-write';
+import { retitleAfterFileRename, applyOwnedFrontmatter } from './entity-write';
 import { CharacterField } from '../grid-data';
 
 /** A Plotverk character sheet with the writer's own Obsidian properties added on top. */
@@ -132,5 +132,35 @@ describe('retitleAfterFileRename', () => {
 
 	it('leaves a note that is not a sheet', () => {
 		expect(retitleAfterFileRename('# Anna\n\nText', 'Anna', 'Anna Berg')).toBeNull();
+	});
+});
+
+describe("a setup sheet's bookkeeping", () => {
+	const doc = buildEntityDocument('character', 'The hidden sword', [{ id: 'a', label: 'Role', value: 'x', type: 'text' }])
+		.replace(/^---\n/, [
+			'---',
+			'storygrid-marks:',
+			'  - "planted · text:pv-abc123 · Beneath the hearthstone"',
+			'storygrid-linked-ids:',
+			'  - sg_k2',
+			'storygrid-pays-off: later-book',
+			'storygrid-let-go: true',
+			'',
+		].join('\n'));
+	const parsed = parseEntityDocument(doc, 'The hidden sword');
+
+	it('never becomes a field or an owned key', () => {
+		for (const key of ['storygrid-marks', 'storygrid-linked-ids', 'storygrid-pays-off', 'storygrid-let-go']) {
+			expect(parsed.ownedKeys).not.toContain(key);
+		}
+		const labels = parsed.fields.map((f) => f.label.toLowerCase());
+		expect(labels.some((l) => l.includes('storygrid') || l.includes('pays off') || l.includes('let go'))).toBe(false);
+	});
+
+	it('a save cannot remove it (it is never a stale owned key)', () => {
+		const fm: Record<string, unknown> = { 'storygrid-pays-off': 'later-book', 'storygrid-marks': ['x'] };
+		applyOwnedFrontmatter(fm, { role: 'y' }, parsed.ownedKeys);
+		expect(fm['storygrid-pays-off']).toBe('later-book');
+		expect(fm['storygrid-marks']).toEqual(['x']);
 	});
 });

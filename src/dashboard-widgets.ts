@@ -37,6 +37,7 @@ export const DASHBOARD_WIDGETS: DashboardWidgetDef[] = [
 	{ id: 'activity', label: 'Activity', icon: 'chart-line', fallbackIcon: '📈', slot: 'left', defaultVisible: true },
 	{ id: 'balance', label: 'Character balance', icon: 'user', fallbackIcon: '👥', slot: 'left', defaultVisible: true, hideForIntent: ['journalist'] },
 	{ id: 'quiet', label: "Who's gone quiet", icon: 'user-minus', fallbackIcon: '…', slot: 'left', defaultVisible: true, hideForIntent: ['journalist'] },
+	{ id: 'setups', label: 'Setups', icon: 'plant', fallbackIcon: '🌱', slot: 'left', defaultVisible: true, hideForIntent: ['journalist'] },
 	{ id: 'todos', label: 'To-dos', icon: 'check-square', fallbackIcon: '✓', slot: 'right', defaultVisible: true },
 	{ id: 'statuses', label: 'Scene status', icon: 'kanban', fallbackIcon: '▦', slot: 'right', defaultVisible: true, hideForIntent: ['journalist', 'worldbuilder'] },
 	// Pro coach, whole book (src/prose/pro/book.ts).

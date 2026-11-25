@@ -1,5 +1,5 @@
 import { App, Modal, Setting } from 'obsidian';
-import { STORY_TEMPLATES } from '../templates/story-templates';
+import { RECOMMENDED_TEMPLATE, STORY_TEMPLATES, templatePickerOrder } from '../templates/story-templates';
 import { StorygridTemplate } from '../grid-data';
 import { FolderSuggest } from './folder-suggest';
 // Imported as `i18n`, not `t`: renderStep3's map callback binds `t` to a template.
@@ -136,7 +136,7 @@ export class NewGridModal extends Modal {
 		contentEl.createEl('p', { cls: 'sg-template-step-desc', text: i18n('wizard.templateStep.desc') });
 
 		const templates: StorygridTemplate[] = [
-			...STORY_TEMPLATES,
+			...templatePickerOrder(STORY_TEMPLATES),
 			...this.customTemplates.map((t) => ({ ...t, description: t.description || i18n('wizard.customTemplate') })),
 		];
 		const templateContainer = contentEl.createDiv({ cls: 'sg-template-picker' });
@@ -145,6 +145,11 @@ export class NewGridModal extends Modal {
 			const card = templateContainer.createEl('button', { cls: 'sg-template-card', attr: { type: 'button' } });
 			card.classList.toggle('sg-template-card--selected', template.id === this.templateId);
 
+			// For writers who don't know which one to pick.
+			if (template.id === RECOMMENDED_TEMPLATE) {
+				card.addClass('sg-template-card--recommended');
+				card.createDiv({ cls: 'sg-template-card-badge', text: i18n('wizard.templateStep.recommended') });
+			}
 			card.createDiv({ cls: 'sg-template-card-title', text: template.name });
 			card.createDiv({ cls: 'sg-template-card-desc', text: template.description });
 

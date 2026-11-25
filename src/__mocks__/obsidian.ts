@@ -37,3 +37,11 @@ export class TFile extends TAbstractFile {
 export class TFolder extends TAbstractFile {
 	children: TAbstractFile[] = [];
 }
+
+/** Notices shown during a test are collected here, so a test can check what the writer was told. */
+export const shownNotices: string[] = [];
+export class Notice {
+	constructor(message: string) {
+		shownNotices.push(message);
+	}
+}

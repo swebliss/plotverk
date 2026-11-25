@@ -62,9 +62,11 @@ import { openOrReveal } from '../utils/workspace';
 import { setPhosphorIcon } from '../utils/icons';
 import { ERA_LABEL_LINE, ERA_LABEL_PAD, EraBand, defaultEraColor, eraBandRect, eraEndDay, isEraHowLong, layoutEraBands, placeEraLabels } from './timeline-eras';
 import { EVENT_ICONS, EventIconEntry, fallbackEventIcon, phosphorIconValue, resolveEventIcon } from '../utils/event-icons';
-import { EntityModal } from '../modals/entity-modal';
+import { openSheetEditor } from '../sheet-editor-view';
+import { followPathMoves, pathMoveMark } from '../utils/project-move';
 import { t } from '../i18n';
 import { reportError, runSafely } from '../utils/report-error';
+import { processKeepingText } from '../utils/safe-process';
 
 /** An event target as a Node, or null (focus/pointer targets may also be a Window). */
 function asNode(target: EventTarget | null): Node | null {
@@ -2437,6 +2439,21 @@ export class TimelineController {
 				.setIcon('ruler')
 				.onClick(() => this.openEventSizePopover(anchor, file.path, !!event?.end || (!!event && this.isDrawnOngoing(event, this.presentDay())))));
 		}
+		// An event can carry a setup (never a character's born/died dot).
+		if (!event || event.kind === 'event') {
+			menu.addItem((item) => item
+				.setTitle(t('setups.menu.plant'))
+				.setIcon('sprout')
+				.onClick(() => this.plugin.setupActions.plantFromEntity(this.host, anchor, file)));
+			menu.addItem((item) => item
+				.setTitle(t('setups.menu.remind'))
+				.setIcon('bell')
+				.onClick(() => this.plugin.setupActions.pickFromEntity(this.host, anchor, file, 'reminded')));
+			menu.addItem((item) => item
+				.setTitle(t('setups.menu.payOff'))
+				.setIcon('badge-check')
+				.onClick(() => this.plugin.setupActions.pickFromEntity(this.host, anchor, file, 'paid-off')));
+		}
 		menu.addSeparator();
 		if (dated) {
 			menu.addItem((item) => item
@@ -2866,7 +2883,7 @@ export class TimelineController {
 	private async writeSheetTextField(file: TFile, label: string, type: 'text' | 'textarea' | 'color', value: string): Promise<void> {
 		const key = slugForLabel(label);
 		const write: CharacterField = { id: `timeline-${key}`, label, type, value };
-		await this.app.vault.process(file, (content) => {
+		await processKeepingText(this.app, file, (content) => {
 			const { frontmatter, body } = splitFrontmatter(content);
 			return frontmatter + renderBody(applyFields(parseBody(body), [write], 'event'));
 		});
@@ -3408,7 +3425,7 @@ export class TimelineController {
 		// An End Date set or cleared here also answers the sheet's How Long, so
 		// the sheet and the canvas agree ("A moment" would otherwise hide a new end).
 		if (howLong) writes.push({ field: { id: 'timeline-how-long', label: 'How Long', type: 'select', value: howLong }, key: 'how-long' });
-		await this.app.vault.process(file, (content) => {
+		await processKeepingText(this.app, file, (content) => {
 			const { frontmatter, body } = splitFrontmatter(content);
 			return frontmatter + renderBody(applyFields(parseBody(body), writes.map((w) => w.field), 'event'));
 		});
@@ -3577,6 +3594,8 @@ export class TimelineController {
 	private openAddEventSheet(prefill?: { plotlineId?: string; date?: StoryDate; era?: boolean }): void {
 		this.closeAddPopover?.();
 		const projectRoot = this.ctrlHost.getProjectRoot();
+		// The editor is a tab: if the project folder is renamed meanwhile, the sheet goes where it is now.
+		const moveMark = pathMoveMark();
 		let plotlineId = prefill?.plotlineId ?? '';
 		// "Add era": the same Event pop-up, with the era's own clean slate and
 		// guided fields and How Long already set to "An era". No plotline, and no
@@ -3590,7 +3609,7 @@ export class TimelineController {
 		const s = this.plugin.settings;
 		const store = s.customKindFieldTemplates ?? (s.customKindFieldTemplates = {});
 		const eventTemplates = store.event ?? (store.event = []);
-		new EntityModal(
+		openSheetEditor(
 			this.app,
 			'event',
 			'',
@@ -3598,7 +3617,7 @@ export class TimelineController {
 			async (name, fields, aliases, start) => {
 				let file: TFile;
 				try {
-					file = await createEntityFile(this.app, projectRoot, 'event', name, fields, aliases, start?.cleanSlate);
+					file = await createEntityFile(this.app, followPathMoves(projectRoot, moveMark), 'event', name, fields, aliases, start?.cleanSlate);
 				} catch (err) {
 					// Nothing back: the sheet editor stays open with the writer's work.
 					new Notice(t('codex.notice.createFailed', { kind: 'event', msg: err instanceof Error ? err.message : '' }));
@@ -3655,7 +3674,7 @@ export class TimelineController {
 					select.addEventListener('change', () => { plotlineId = select.value; });
 				},
 			}
-		).open();
+		);
 	}
 
 	private positionPopover(popover: HTMLElement, anchor: Element): void {

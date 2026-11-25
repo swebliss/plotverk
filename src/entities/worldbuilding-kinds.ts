@@ -851,6 +851,39 @@ const PROPHECY_SPEC: EntityKindSpec = {
 	],
 };
 
+/**
+ * A setup: a promise to the reader, planted in the text and later reminded
+ * and paid off (setups & payoffs, 2026-11). An ordinary Codex sheet — name,
+ * a short description and notes. Where it stands and where it is written
+ * about live in Plotverk's own frontmatter keys (see setups/setup-marks.ts),
+ * never in fields, so renaming the sheet keeps every mark.
+ */
+export const SETUP_SPEC: EntityKindSpec = {
+	kind: 'setup',
+	singular: 'Setup',
+	plural: 'Setups',
+	icon: 'plant',
+	fallbackIcon: '🌱',
+	folderName: 'Setups',
+	calloutType: 'note',
+	calloutTitle: 'Setup at a Glance',
+	tagline: 'Promises and clues you make to hook the reader, and where you keep them.',
+	defaultName: 'Untitled Setup',
+	// No Name field: the sheet's own name (top left in the editor) is the one name
+	// (Emma 2026-11-24: two name boxes made no sense).
+	defaultFields: [
+		f('Description', 'textarea', 'What is it about, in a few words? It shows on its card on the board.'),
+		f('Notes', 'textarea', 'Anything you want to remember about it…'),
+	],
+	cleanSlateFields: [
+		f('Description', 'textarea', 'What is it about, in a few words? It shows on its card on the board.'),
+		f('Notes', 'textarea', 'Anything you want to remember about it…'),
+	],
+	displayShape: 'row',
+	// Emma 2026-11-24: setups need no pictures.
+	noImages: true,
+};
+
 /** Every kind introduced by the restructure, in no particular order. */
 export const NEW_WORLDBUILDING_KINDS: EntityKindSpec[] = [
 	REGION_SPEC, SETTLEMENT_SPEC, ZONE_SPEC, LANDMARK_SPEC,
@@ -880,11 +913,22 @@ export interface CodexGroupSpec {
 }
 
 /**
- * The nine main Codex categories. This array is the single source of truth for
+ * The main Codex categories: Setups on its own at the top, then the nine
+ * worldbuilding groups. This array is the single source of truth for
  * sidebar order — getCodexKindOrder() flattens it, so a kind that is not listed
  * here will not appear in the sidebar.
  */
 export const CODEX_GROUPS: CodexGroupSpec[] = [
+	// Setups first and set apart: a promise in the story, not a part of the
+	// world (Emma 2026-11-24: "move it to the top").
+	{
+		id: 'setups',
+		label: 'Setups',
+		info: 'Promises you make to the reader: where you plant them, remind of them and pay them off.',
+		icon: 'plant',
+		fallbackIcon: '🌱',
+		kinds: ['setup'],
+	},
 	{
 		id: 'characters',
 		label: 'Characters',

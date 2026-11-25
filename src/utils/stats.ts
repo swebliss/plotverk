@@ -12,6 +12,7 @@ import { SceneCard, CardStatus } from '../grid-data';
 export function countWords(text: string): number {
 	let body = text.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '');
 	body = body
+		.replace(/(^|\s)\^pv-[a-z0-9]{6}(?![A-Za-z0-9-])/g, ' ') // setup tags are not words
 		.replace(/!\[\[[^\]]*\]\]/g, ' ') // image embeds are not prose
 		.replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, '$2') // wikilink display text
 		.replace(/\[\[([^\]]+)\]\]/g, '$1')

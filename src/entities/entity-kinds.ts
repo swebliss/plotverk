@@ -1,7 +1,7 @@
 import { CharacterField, generateId } from '../grid-data';
 import { FieldConfig, defaultValueForType } from './field-types';
 import { attributeCategoriesFor } from './attribute-catalog';
-import { NEW_WORLDBUILDING_KINDS, CODEX_GROUPS, CodexGroupSpec } from './worldbuilding-kinds';
+import { NEW_WORLDBUILDING_KINDS, SETUP_SPEC, CODEX_GROUPS, CodexGroupSpec } from './worldbuilding-kinds';
 
 export type { CodexGroupSpec } from './worldbuilding-kinds';
 export { CODEX_GROUPS } from './worldbuilding-kinds';
@@ -90,6 +90,8 @@ export interface EntityKindSpec {
 	color?: string;
 	/** How the Codex gallery renders this kind: rich 'card' (default) or dense 'row' for high-count kinds like a lexicon. */
 	displayShape?: 'card' | 'row';
+	/** True when sheets of this kind never need a picture (a setup): the sheet editor shows no image box. */
+	noImages?: boolean;
 	/** True for the seven shipped kinds, false for user-defined custom kinds. Set automatically by the registry — do not set by hand. */
 	builtin?: boolean;
 }
@@ -567,6 +569,7 @@ export const ENTITY_KINDS: Record<BuiltinEntityKind, EntityKindSpec> = {
 const SHIPPED_SPECS = new Map<EntityKind, EntityKindSpec>([
 	...(Object.keys(ENTITY_KINDS) as BuiltinEntityKind[]).map((k) => [k, ENTITY_KINDS[k]] as const),
 	...NEW_WORLDBUILDING_KINDS.map((s) => [s.kind, s] as const),
+	[SETUP_SPEC.kind, SETUP_SPEC],
 ]);
 
 /**

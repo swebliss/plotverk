@@ -4,6 +4,7 @@ import { EntityKind, getKindSpec, hasKind, getCodexKindOrder } from './entity-ki
 import { t, hasKey } from '../i18n';
 import { createEntitySheet } from './entity-write';
 import { parseParentRef } from './entity-tree';
+import { PLOTVERK_INTERNAL_KEYS } from './field-types';
 import { assignRoot, type IndexedEntity } from './entity-index';
 
 export { buildEntityDocument } from './entity-doc';
@@ -257,7 +258,7 @@ function buildEntityInfo(
 	const fm = cache?.frontmatter ?? {};
 	const parent = parseParentRef(fm['storygrid-parent']);
 	for (const [key, raw] of Object.entries(fm)) {
-		if (key === 'storygrid-type' || key === 'storygrid-parent' || key === 'storygrid-id' || key === 'storygrid-schema' || key === 'storygrid-start' || key === 'tags' || key === 'position') continue;
+		if (PLOTVERK_INTERNAL_KEYS.has(key) || key === 'tags' || key === 'position') continue;
 		// Internal/styling frontmatter is never a story fact
 		if (key === 'cssclasses' || key === 'cssclass' || key === 'aliases') continue;
 		if (facts.length >= FACT_LIMIT) break;

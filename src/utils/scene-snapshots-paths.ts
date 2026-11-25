@@ -10,7 +10,7 @@ export const SNAPSHOT_FOLDER_NAME = '.storygrid-snapshots';
 /** Snapshots are `.txt`, never `.md`: an indexed `.md` copy would count as a scene, a mention and a search hit. */
 export const SNAPSHOT_EXT = 'txt';
 
-export type SnapshotReason = 'daily' | 'compile' | 'manual' | 'pre-restore';
+export type SnapshotReason = 'daily' | 'compile' | 'manual' | 'pre-restore' | 'pre-change';
 
 /**
  * Where a document's snapshots live.
@@ -57,7 +57,7 @@ export function snapshotFileName(reason: SnapshotReason, now: Date = new Date())
 
 /** Inverse of `snapshotFileName` — recovers the timestamp/reason from a snapshot file's basename. */
 export function parseSnapshotFileName(basename: string): { timestamp: string; reason: SnapshotReason } | null {
-	const m = basename.match(/^(.+)\.(daily|compile|manual|pre-restore)$/);
+	const m = basename.match(/^(.+)\.(daily|compile|manual|pre-restore|pre-change)$/);
 	if (!m) return null;
 	return { timestamp: m[1], reason: m[2] as SnapshotReason };
 }

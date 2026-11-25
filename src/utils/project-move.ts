@@ -1,3 +1,4 @@
+import { mergeTextChanges, remapTextChangePaths, TextChangeRecord } from './text-changes';
 import type { DashboardSettings, StorygridSettings, StreakData, TodoItem } from '../grid-data';
 import { collectDocPaths, renameDocPath } from './scene-tree';
 import type { SceneTree, SceneTreeNode } from './scene-tree';
@@ -81,7 +82,46 @@ export function movedRoot(root: string, move: PathMove): string | null {
 export const PATHS_MOVED_EVENT = 'storygrid:paths-moved';
 
 export function announcePathMove(move: PathMove): void {
+	recordPathMove(move);
 	plotverkEvents.dispatchEvent(new CustomEvent<PathMove>(PATHS_MOVED_EVENT, { detail: move }));
+}
+
+/**
+ * The moves announced lately, oldest first, so a path remembered earlier can
+ * catch up: a new-sheet editor tab that remembered its project's folder when
+ * it opened saves into wherever that folder is now, never re-creating the
+ * old one. Kept short — only an editor left open across many renames could
+ * miss the oldest, and then it saves where it remembered, as before.
+ */
+const MOVE_LOG_SIZE = 500;
+const moveLog: PathMove[] = [];
+/** How many moves have dropped off the front of the log. */
+let moveLogDropped = 0;
+
+export function recordPathMove(move: PathMove): void {
+	// A folder rename arrives as one event per file and folder inside it; those
+	// are already explained by the folder's own move, so they are not logged
+	// (a big project can't push the folder's move off the end of the log).
+	if (moveLog.some((earlier) => earlier.isFolder && movedPath(move.oldPath, earlier) === move.newPath)) return;
+	moveLog.push(move);
+	if (moveLog.length > MOVE_LOG_SIZE) {
+		moveLog.shift();
+		moveLogDropped++;
+	}
+}
+
+/** A bookmark in the move log: pass it to `followPathMoves` later. */
+export function pathMoveMark(): number {
+	return moveLogDropped + moveLog.length;
+}
+
+/** Where `path` is now, after every move recorded since `mark`. */
+export function followPathMoves(path: string, mark: number): string {
+	let now = path;
+	for (let i = Math.max(0, mark - moveLogDropped); i < moveLog.length; i++) {
+		now = movedPath(now, moveLog[i]) ?? now;
+	}
+	return now;
 }
 
 export function onPathMove(handler: (move: PathMove) => void): () => void {
@@ -157,7 +197,7 @@ function mergeTree(kept: SceneTree, moved: SceneTree): SceneTree {
 }
 
 type RootMaps = {
-	[K in 'goals' | 'todos' | 'typedWords' | 'streaks' | 'celebratedGoals' | 'skippedWords' | 'sceneOrder' | 'sceneTree' | 'quietLeftOut']:
+	[K in 'goals' | 'todos' | 'typedWords' | 'streaks' | 'celebratedGoals' | 'skippedWords' | 'sceneOrder' | 'sceneTree' | 'quietLeftOut' | 'textChanges']:
 		{ merge: (kept: never, moved: never) => unknown }
 };
 
@@ -171,6 +211,7 @@ const ROOT_MAPS: RootMaps = {
 	sceneOrder: { merge: mergeList },
 	sceneTree: { merge: mergeTree },
 	quietLeftOut: { merge: mergeList },
+	textChanges: { merge: mergeTextChanges },
 };
 
 /**
@@ -225,6 +266,10 @@ function patchDashboardPaths(dash: DashboardSettings, move: PathMove): string[] 
 				touched.add(root);
 			}
 		}
+	}
+	for (const [root, records] of Object.entries(dash.textChanges ?? {})) {
+		if (!Array.isArray(records)) continue;
+		if (remapTextChangePaths(records, (p) => movedPath(p, move) ?? p)) touched.add(root);
 	}
 	for (const [root, tree] of Object.entries(dash.sceneTree ?? {})) {
 		if (!Array.isArray(tree)) continue;
@@ -334,6 +379,7 @@ interface PathCarryingSlice {
 	sceneOrder?: string[];
 	sceneTree?: SceneTree;
 	quietLeftOut?: string[];
+	textChanges?: TextChangeRecord[];
 }
 
 /**
@@ -362,6 +408,11 @@ export function rebaseSlicePaths<T extends PathCarryingSlice>(
 	if (Array.isArray(slice.sceneOrder)) out.sceneOrder = slice.sceneOrder.map((p) => (typeof p === 'string' ? map(p) : p));
 	if (Array.isArray(slice.sceneTree)) out.sceneTree = walk(slice.sceneTree);
 	if (Array.isArray(slice.quietLeftOut)) out.quietLeftOut = slice.quietLeftOut.map((p) => (typeof p === 'string' ? map(p) : p));
+	if (Array.isArray(slice.textChanges)) {
+		const copy = JSON.parse(JSON.stringify(slice.textChanges)) as TextChangeRecord[];
+		remapTextChangePaths(copy, map);
+		out.textChanges = copy;
+	}
 	return out;
 }
 

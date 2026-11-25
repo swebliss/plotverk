@@ -1,3 +1,4 @@
+import { cleanTextChanges, TextChangeRecord } from './text-changes';
 import { App, TFile, TFolder } from 'obsidian';
 import { DashboardSettings, ProjectGoals, TodoItem, StreakData } from '../grid-data';
 import { buildTreeFromFlatOrder } from './scene-tree';
@@ -39,6 +40,8 @@ export interface ProjectDataSlice {
 	sceneTree?: SceneTree;
 	/** "Who's gone quiet": character sheet paths the writer left out. */
 	quietLeftOut?: string[];
+	/** Text changes (alias renames followed into the links) with their Undo / Redo state. */
+	textChanges?: TextChangeRecord[];
 	/** Only in the copy on disk: the folder it was written for. Absent in copies written by older versions. */
 	projectRoot?: string;
 }
@@ -58,7 +61,7 @@ function isEmptySlice(slice: ProjectDataSlice): boolean {
 	const none = (o: object | undefined): boolean => !o || Object.keys(o).length === 0;
 	return none(slice.goals) && !slice.todos?.length && none(slice.typedWords)
 		&& none(slice.streaks) && none(slice.celebratedGoals) && none(slice.skippedWords)
-		&& !slice.sceneOrder?.length && !slice.sceneTree?.length && !slice.quietLeftOut?.length;
+		&& !slice.sceneOrder?.length && !slice.sceneTree?.length && !slice.quietLeftOut?.length && !slice.textChanges?.length;
 }
 
 export function extractProjectSlice(dash: DashboardSettings, projectRoot: string): ProjectDataSlice {
@@ -72,6 +75,7 @@ export function extractProjectSlice(dash: DashboardSettings, projectRoot: string
 		sceneOrder: dash.sceneOrder?.[projectRoot],
 		sceneTree: dash.sceneTree?.[projectRoot],
 		quietLeftOut: dash.quietLeftOut?.[projectRoot],
+		textChanges: dash.textChanges?.[projectRoot],
 	};
 }
 
@@ -305,6 +309,7 @@ export async function syncProjectMirrors(
 			if (Array.isArray(recovered.quietLeftOut)) {
 				(dash.quietLeftOut ??= {})[root] = recovered.quietLeftOut.filter((p): p is string => typeof p === 'string');
 			}
+			if (Array.isArray(recovered.textChanges)) (dash.textChanges ??= {})[root] = cleanTextChanges(recovered.textChanges);
 			settingsChanged = true;
 			// The copy now says the folder it really is in, so it is never taken for a moved project later.
 			await writeMirrorNow(app, root, dash);

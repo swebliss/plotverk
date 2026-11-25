@@ -181,13 +181,31 @@ export function defaultValueForType(type: FieldType, config?: FieldConfig): stri
 }
 
 /**
+ * A setup sheet's bookkeeping, written only by the setups module through
+ * `processFrontMatter`: the marked places, the linked Codex entries (by id),
+ * "pays off in a later book" and "let it go". A sheet save never reads them as
+ * fields, never owns them and never rewrites them.
+ */
+export const SETUP_FRONTMATTER_KEYS = ['storygrid-marks', 'storygrid-linked-ids', 'storygrid-pays-off', 'storygrid-let-go'] as const;
+
+/**
+ * Every frontmatter key Plotverk keeps for itself — never a field, never a
+ * fact on a Codex card. The one list the parser, the fact reader and the
+ * reserved-slug check all use.
+ */
+export const PLOTVERK_INTERNAL_KEYS: ReadonlySet<string> = new Set([
+	'storygrid-type', 'storygrid-id', 'storygrid-parent', 'storygrid-schema', 'storygrid-start',
+	...SETUP_FRONTMATTER_KEYS,
+]);
+
+/**
  * Frontmatter keys already reserved by Obsidian or Plotverk itself. A custom
  * field's slug must never collide with one of these — e.g. a field named
  * "Tags" would otherwise silently overwrite Obsidian's own `tags:` key.
  */
 const RESERVED_KEYS = new Set([
 	'tags', 'cssclass', 'cssclasses', 'aliases', 'position',
-	'storygrid-type', 'storygrid-id', 'storygrid-parent', 'storygrid-schema', 'storygrid-start',
+	...PLOTVERK_INTERNAL_KEYS,
 ]);
 
 /**

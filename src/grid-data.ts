@@ -3,6 +3,7 @@
 
 // Type-only import (erased at compile time — no runtime dependency cycle).
 import type { EntityKindSpec } from './entities/entity-kinds';
+import type { TextChangeRecord } from './utils/text-changes';
 import type { CustomRelationshipType } from './utils/relations';
 import type { ModuleId, IntentId, WritingStyle, WritersPanelTab } from './modules';
 import type { SceneTree } from './utils/scene-tree';
@@ -288,6 +289,12 @@ export interface DashboardSettings {
 	 * per project root. Paths follow renames (see syncRenamedDocLinks).
 	 */
 	quietLeftOut?: Record<string, string[]>;
+	/**
+	 * Changes Plotverk made to the writer's text on her say-so (an alias renamed
+	 * on a sheet, followed into the links), per project root, so the Activity
+	 * history can undo / redo them. See utils/text-changes.ts.
+	 */
+	textChanges?: Record<string, TextChangeRecord[]>;
 }
 
 export type DashboardWidgetSlot = 'left' | 'right';

@@ -6,6 +6,7 @@ import {
 	rememberDefaultTemplate,
 	resolveDefaultTemplate,
 	savedTemplatesFor,
+	writableTemplatesFor,
 	showsTemplatePicker,
 	templateOptions,
 	asksStartMode,
@@ -138,6 +139,17 @@ describe('template picker and "make this my default"', () => {
 		expect(savedTemplatesFor({ settings }, 'deity').map((x) => x.id)).toEqual(['b']);
 		expect(savedTemplatesFor({ settings }, 'event')).toEqual([]);
 		expect(savedTemplatesFor(null, 'character')).toEqual([]);
+	});
+
+	it('"Save as template" adds to the live list in the settings, made on first use', () => {
+		const settings = mergeSettings(DEFAULT_SETTINGS, {});
+		writableTemplatesFor(settings, 'deity').push({ id: 'd', name: 'D', fields: [] });
+		writableTemplatesFor(settings, 'research').push({ id: 'r', name: 'R', fields: [] });
+		writableTemplatesFor(settings, 'character').push({ id: 'c', name: 'C', fields: [] });
+		expect(savedTemplatesFor({ settings }, 'deity').map((x) => x.id)).toEqual(['d']);
+		expect(savedTemplatesFor({ settings }, 'research').map((x) => x.id)).toEqual(['r']);
+		expect(savedTemplatesFor({ settings }, 'character').map((x) => x.id)).toEqual(['c']);
+		expect(DEFAULT_SETTINGS.characterFieldTemplates).not.toContainEqual(expect.objectContaining({ id: 'c' }));
 	});
 });
 

@@ -34,31 +34,31 @@ describe('resolveWidgetLayout — visibility', () => {
 describe('resolveWidgetLayout — column order', () => {
 	test('undefined config → registry order per slot', () => {
 		const { columnOrder } = resolveWidgetLayout(undefined);
-		expect(columnOrder('left')).toEqual(['goals', 'activity', 'balance', 'quiet']);
+		expect(columnOrder('left')).toEqual(['goals', 'activity', 'balance', 'quiet', 'setups']);
 		expect(columnOrder('right')).toEqual(['todos', 'statuses', 'habits', 'pace']);
 	});
 
 	test('saved order is respected', () => {
 		const config: DashboardWidgetConfig = { hidden: [], order: { left: ['balance', 'goals', 'activity'], right: [] } };
-		expect(resolveWidgetLayout(config).columnOrder('left')).toEqual(['balance', 'goals', 'activity', 'quiet']);
+		expect(resolveWidgetLayout(config).columnOrder('left')).toEqual(['balance', 'goals', 'activity', 'quiet', 'setups']);
 	});
 
 	test('a registry widget missing from saved order is appended (not dropped)', () => {
 		// 'activity' omitted from saved order — should reappear at the end.
 		const config: DashboardWidgetConfig = { hidden: [], order: { left: ['balance', 'goals'], right: [] } };
-		expect(resolveWidgetLayout(config).columnOrder('left')).toEqual(['balance', 'goals', 'activity', 'quiet']);
+		expect(resolveWidgetLayout(config).columnOrder('left')).toEqual(['balance', 'goals', 'activity', 'quiet', 'setups']);
 	});
 
 	test('stale/unknown ids in saved order are pruned', () => {
 		const config: DashboardWidgetConfig = { hidden: [], order: { left: ['ghost', 'balance', 'goals', 'activity'], right: [] } };
-		expect(resolveWidgetLayout(config).columnOrder('left')).toEqual(['balance', 'goals', 'activity', 'quiet']);
+		expect(resolveWidgetLayout(config).columnOrder('left')).toEqual(['balance', 'goals', 'activity', 'quiet', 'setups']);
 	});
 
 	test('a column widget can be placed in the other column (cross-column drag)', () => {
 		// 'todos' defaults to 'right' but here it is saved into 'left'.
 		const config: DashboardWidgetConfig = { hidden: [], order: { left: ['todos', 'goals', 'activity', 'balance'], right: [] } };
 		const layout = resolveWidgetLayout(config);
-		expect(layout.columnOrder('left')).toEqual(['todos', 'goals', 'activity', 'balance', 'quiet']);
+		expect(layout.columnOrder('left')).toEqual(['todos', 'goals', 'activity', 'balance', 'quiet', 'setups']);
 		// Having moved out of right, only the unplaced 'statuses' (and later widgets) remain there.
 		expect(layout.columnOrder('right')).toEqual(['statuses', 'habits', 'pace']);
 	});
@@ -73,7 +73,7 @@ describe('resolveWidgetLayout — column order', () => {
 
 	test('hidden widgets stay in column order (edit panel needs them)', () => {
 		const config: DashboardWidgetConfig = { hidden: ['goals'], order: { left: [], right: [] } };
-		expect(resolveWidgetLayout(config).columnOrder('left')).toEqual(['goals', 'activity', 'balance', 'quiet']);
+		expect(resolveWidgetLayout(config).columnOrder('left')).toEqual(['goals', 'activity', 'balance', 'quiet', 'setups']);
 	});
 });
 

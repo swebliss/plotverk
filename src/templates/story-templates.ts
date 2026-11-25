@@ -246,6 +246,20 @@ export function getTemplateById(templateId: string): StorygridTemplate | undefin
 	return STORY_TEMPLATES.find((t) => t.id === templateId);
 }
 
+/** The template the "New grid" picker recommends to writers who don't know which to pick. */
+export const RECOMMENDED_TEMPLATE = 'save-the-cat';
+
+/**
+ * The order the "New grid" picker shows templates in: the blank grid first,
+ * the recommended template right next to it, then the rest as listed.
+ */
+export function templatePickerOrder<T extends { id: string }>(templates: readonly T[]): T[] {
+	const blank = templates.filter((tpl) => tpl.id === 'clean-start');
+	const recommended = templates.filter((tpl) => tpl.id === RECOMMENDED_TEMPLATE);
+	const rest = templates.filter((tpl) => tpl.id !== 'clean-start' && tpl.id !== RECOMMENDED_TEMPLATE);
+	return [...blank, ...recommended, ...rest];
+}
+
 /**
  * Get all available templates.
  */

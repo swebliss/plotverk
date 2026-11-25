@@ -3,6 +3,16 @@ import { parseEntityDocument } from './entity-parse';
 import { retitleEntitySheet } from './entity-write';
 import { resolveCase } from './sheet-images';
 
+/**
+ * True when the name saved in the sheet editor asks for the file to follow:
+ * only when the writer changed the name there. A title and file name that
+ * already differ (a rename in Obsidian's file list, a clashing name) never
+ * send the file back to the title.
+ */
+export function asksForRename(savedName: string, nameAtOpen: string): boolean {
+	return !!sheetFileName(savedName) && savedName.trim() !== nameAtOpen.trim();
+}
+
 /** The file name a sheet title gets: the characters a file name cannot hold become `-`. */
 export function sheetFileName(name: string): string {
 	return name.trim().replace(/[\\/:*?"<>|#^[\]]/g, '-');

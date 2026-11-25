@@ -1,5 +1,5 @@
 import { App, TFile, TFolder, TAbstractFile } from 'obsidian';
-import { renameEntitySheet, sheetNameTaken, sheetPathFor } from './sheet-rename';
+import { asksForRename, renameEntitySheet, sheetNameTaken, sheetPathFor } from './sheet-rename';
 import { buildEntityDocument } from './entity-doc';
 
 /** A folder of sheets in memory, with Obsidian's rename and process. */
@@ -37,6 +37,17 @@ function vault(names: string[], opts: { renameFails?: boolean } = {}) {
 	} as unknown as App;
 	return { app, files, titleOf: (f: TFile) => /^# (.*)$/m.exec(content.get(f) ?? '')?.[1] };
 }
+
+describe('when a save in the sheet editor renames the file', () => {
+	it('only when the writer changed the name in the editor', () => {
+		expect(asksForRename('Mara Vell', 'Mara')).toBe(true);
+		expect(asksForRename('Mara', 'Mara')).toBe(false);
+		expect(asksForRename('  Mara ', 'Mara')).toBe(false);
+	});
+	it('never for a name that would make an empty file name', () => {
+		expect(asksForRename('   ', 'Mara')).toBe(false);
+	});
+});
 
 describe('renaming a sheet', () => {
 	it('renames title and file together', async () => {

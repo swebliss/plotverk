@@ -4,7 +4,7 @@ import { en } from '../i18n/locales/en';
 import { es } from '../i18n/locales/es';
 import { fr } from '../i18n/locales/fr';
 import { SAMPLE_TEXT_FILES } from '../sample/saltmarch-data';
-import { getTemplateById, guideColumnLabel, STORY_TEMPLATES } from './story-templates';
+import { getTemplateById, guideColumnLabel, RECOMMENDED_TEMPLATE, STORY_TEMPLATES, templatePickerOrder } from './story-templates';
 
 const stc = getTemplateById('save-the-cat')!;
 const hintOf = (tpl: StorygridTemplate, label: string): string | undefined =>
@@ -183,5 +183,17 @@ describe('the Saltmarch sample carries the approved Save the Cat guide', () => {
 			cards: g.cards.map((c) => (c.guide ? { ...c, title: '', synopsis: '' } : c)),
 		});
 		expect(createHash('sha256').update(masked).digest('hex')).toBe(NON_GUIDE_FINGERPRINT[p]);
+	});
+});
+
+describe('the New grid picker: Save the Cat right next to the blank grid, recommended', () => {
+	test('blank grid first, Save the Cat second, every other template after in its usual order', () => {
+		const ids = templatePickerOrder(STORY_TEMPLATES).map((tpl) => tpl.id);
+		expect(ids.slice(0, 2)).toEqual(['clean-start', 'save-the-cat']);
+		expect(ids.slice(2)).toEqual(STORY_TEMPLATES.map((tpl) => tpl.id).filter((id) => id !== 'clean-start' && id !== 'save-the-cat'));
+		expect(RECOMMENDED_TEMPLATE).toBe('save-the-cat');
+	});
+	test('the built-in list itself is unchanged (other places read it in order)', () => {
+		expect(STORY_TEMPLATES[0].id).toBe('clean-start');
 	});
 });

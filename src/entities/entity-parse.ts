@@ -1,6 +1,6 @@
 import { CharacterField, generateId } from '../grid-data';
 import { ERA_SHEET, EVENT_HOW_LONG, EntityFieldSpec, EntityKind, getKindSpec, hasKind } from './entity-kinds';
-import { FIELD_TYPES, FieldType, decodeValue, defaultValueForType, formatFieldValue, slugForLabel, splitFlowItems, unquoteYaml, yamlQuote } from './field-types';
+import { FIELD_TYPES, SETUP_FRONTMATTER_KEYS, FieldType, decodeValue, defaultValueForType, formatFieldValue, slugForLabel, splitFlowItems, unquoteYaml, yamlQuote } from './field-types';
 import { SchemaEntry } from './entity-doc';
 import { parseBody } from './entity-body';
 import { START_MODE_KEY, cleanSlateFieldSpecs, isCleanSlateValue } from './start-mode';
@@ -440,7 +440,8 @@ export function parseEntityDocument(content: string, fileBasename: string): Pars
 		// rewrite nor delete them.
 		if (
 			entry.key === 'cssclasses' || entry.key === 'tags' || entry.key === 'position' ||
-			entry.key === 'storygrid-parent' || entry.key === START_MODE_KEY
+			entry.key === 'storygrid-parent' || entry.key === START_MODE_KEY ||
+			(SETUP_FRONTMATTER_KEYS as readonly string[]).includes(entry.key)
 		) continue;
 		const reserved =
 			entry.key === 'storygrid-type' || entry.key === 'storygrid-id' ||

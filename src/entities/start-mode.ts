@@ -148,6 +148,26 @@ export function savedTemplatesFor(
 	}
 }
 
+/**
+ * The writer's saved field templates for a kind, as the live list inside the
+ * settings — made on first use — so "Save as template" can add to it and save.
+ */
+export function writableTemplatesFor(s: StorygridSettings, kind: EntityKind): CharacterFieldTemplate[] {
+	switch (kind) {
+		case 'character': return s.characterFieldTemplates;
+		case 'scene': return s.sceneFieldTemplates;
+		case 'location': return s.locationFieldTemplates;
+		case 'faction': return s.factionFieldTemplates;
+		case 'system': return s.systemFieldTemplates;
+		case 'item': return s.itemFieldTemplates;
+		case 'research': return s.researchFieldTemplates ?? (s.researchFieldTemplates = []);
+		default: {
+			const store = s.customKindFieldTemplates ?? (s.customKindFieldTemplates = {});
+			return store[kind] ?? (store[kind] = []);
+		}
+	}
+}
+
 /** The picker only appears when there is something to pick beyond the guided fields. */
 export function showsTemplatePicker(options: TemplateOption[]): boolean {
 	return options.length > 1;

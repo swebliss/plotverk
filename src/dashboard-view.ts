@@ -7,7 +7,7 @@ import { setPhosphorIcon } from './utils/icons';
 import { t } from './i18n';
 import { TaskListController } from './ui/task-list';
 import type { ModuleId } from './modules';
-import { runSafely } from './utils/report-error';
+import { reportError, runSafely } from './utils/report-error';
 import { showCoachMark } from './ui/coach-mark';
 import { isFamilyLabel } from './utils/relation-mirror';
 import {
@@ -36,6 +36,8 @@ import { buildNamePatterns, countNameMentions } from './prose/name-presence';
 import { crutchHabits, paceCurve } from './prose/pro/book';
 import { percent } from './prose/pro/pace';
 import { dismissedFor } from './prose/coach-settings';
+import { renderDashboardSetups } from './setups/dashboard-setups';
+import { SETUP_KIND } from './setups/setup-store';
 import {
 	dayKey,
 	startOfWeek,
@@ -73,6 +75,9 @@ const STATUS_LABEL_KEYS: Record<string, string> = {
 	written: 'dashboard.status.written', revised: 'dashboard.status.revised', final: 'dashboard.status.final',
 };
 
+/** Gives each "i" explanation its own id, so two Dashboard tabs never share one. */
+let hintIdSeq = 0;
+
 export class StorygridDashboardView extends ItemView {
 	private plugin: StorygridPlugin;
 	/** Which feature the big right-hand action card currently promotes — its jump tile is hidden to avoid duplicates. */
@@ -87,6 +92,8 @@ export class StorygridDashboardView extends ItemView {
 	private _taskList = new TaskListController();
 	/** "Crutch words across the book": which habits are unfolded to their per-chapter counts (not saved). */
 	private _habitOpen = new Set<string>();
+	/** Sections whose explaining sentence (behind the small "i") is open, by section icon. */
+	private _hintOpen = new Set<string>();
 	private editMode = false;
 	private _widgetDrag: { id: string; slot: DashboardWidgetSlot; el: HTMLElement } | null = null;
 	private _editToggleEl: HTMLElement | null = null;
@@ -399,6 +406,7 @@ if (projects.length > 1) {
 				case 'activity': this.renderActivity(h, dash, project, history, now); break;
 				case 'balance': this.renderBalance(h, charBalance); break;
 				case 'quiet': this.renderQuiet(h, project, dash); break;
+				case 'setups': this.renderSetups(h, project); break;
 				case 'habits': this.renderHabits(h, project, dash); break;
 				case 'pace': this.renderPace(h, project, dash); break;
 				case 'todos': if (tasksOn) this.renderTodos(h, project, dash); break;
@@ -691,8 +699,49 @@ if (projects.length > 1) {
 		const head = sec.createDiv({ cls: 'sg-dash-section-head' });
 		setPhosphorIcon(head.createSpan({ cls: 'sg-dash-section-icon' }), icon, '•');
 		head.createSpan({ cls: 'sg-dash-section-title', text: title });
-		if (hint) sec.createDiv({ cls: 'sg-dash-section-hint', text: hint });
+		if (hint) {
+			// The explaining sentence waits behind a small "i": a toggle, so it works
+			// on a phone too (no hover there). Open ones stay open across re-renders.
+			const open = this._hintOpen.has(icon);
+			const hintEl = sec.createDiv({ cls: 'sg-dash-section-hint' + (open ? ' is-open' : ''), text: hint });
+			hintEl.id = `sg-dash-hint-${++hintIdSeq}`;
+			const info = head.createEl('button', {
+				cls: 'sg-dash-info',
+				attr: {
+					type: 'button',
+					'aria-label': t('dashboard.section.infoAria', { title }),
+					'aria-expanded': String(open),
+					'aria-controls': hintEl.id,
+				},
+			});
+			setPhosphorIcon(info, 'info', 'i');
+			info.addEventListener('click', (e) => {
+				e.stopPropagation();
+				const show = !this._hintOpen.has(icon);
+				if (show) this._hintOpen.add(icon);
+				else this._hintOpen.delete(icon);
+				hintEl.toggleClass('is-open', show);
+				info.setAttribute('aria-expanded', String(show));
+			});
+		}
 		return sec;
+	}
+
+	/**
+	 * Writes `text` into a new span with the number inside it wrapped on its own,
+	 * so the number can be shown big and bold and the words around it small.
+	 * The wording itself is untouched (it still comes whole from the translation).
+	 */
+	private numberedText(parent: HTMLElement, cls: string, text: string, num: string, last = false): HTMLElement {
+		const el = parent.createSpan({ cls });
+		const at = last ? text.lastIndexOf(num) : text.indexOf(num);
+		if (at < 0 || !num) { el.setText(text); return el; }
+		let end = at + num.length;
+		if (text[end] === '%') end++;
+		if (at > 0) el.appendText(text.slice(0, at));
+		el.createSpan({ cls: 'sg-dash-num', text: text.slice(at, end) });
+		if (end < text.length) el.appendText(text.slice(end));
+		return el;
 	}
 
 	// ── Action card: one adaptive card, one slot ───────────────────────────────
@@ -802,7 +851,9 @@ if (projects.length > 1) {
 		const legacyGoals = dash.goals[project.rootPath] ?? {};
 		const dailyTarget = wordGoals.daily ?? legacyGoals.daily ?? 0;
 
-		sec.createDiv({ cls: 'sg-dash-today-eyebrow', text: t('dashboard.today.eyebrow') });
+		const todayHead = sec.createDiv({ cls: 'sg-dash-section-head sg-dash-today-head' });
+		setPhosphorIcon(todayHead.createSpan({ cls: 'sg-dash-section-icon' }), 'sun', '•');
+		todayHead.createSpan({ cls: 'sg-dash-section-title', text: t('dashboard.today.eyebrow') });
 
 		const numRow = sec.createDiv({ cls: 'sg-dash-today-nums' });
 		numRow.createSpan({ cls: 'sg-dash-today-value', text: todayWords.toLocaleString() });
@@ -862,8 +913,8 @@ if (projects.length > 1) {
 
 		const head = sec.createDiv({ cls: 'sg-dash-sprint-head' });
 		const headLabel = head.createDiv({ cls: 'sg-dash-sprint-head-label' });
-		setPhosphorIcon(headLabel.createSpan({ cls: 'sg-dash-sprint-icon' }), 'timer', '◆');
-		headLabel.createSpan({ text: t('dashboard.sprint.title') });
+		setPhosphorIcon(headLabel.createSpan({ cls: 'sg-dash-section-icon' }), 'timer', '◆');
+		headLabel.createSpan({ cls: 'sg-dash-section-title', text: t('dashboard.sprint.title') });
 
 		const stats = this.plugin.getSprintStats();
 
@@ -941,12 +992,9 @@ if (projects.length > 1) {
 			const row = sec.createDiv({ cls: 'sg-dash-sprint-goal-row' });
 			const top = row.createDiv({ cls: 'sg-dash-sprint-goal-top' });
 			top.createSpan({ cls: 'sg-dash-sprint-goal-label', text: label });
-			top.createSpan({
-				cls: 'sg-dash-sprint-goal-nums',
-				text: goal && goal > 0
-					? t('dashboard.sprint.goalNumsWithGoal', { done, goal })
-					: t('dashboard.sprint.goalNumsNoGoal', { done, s: done === 1 ? '' : 's' }),
-			});
+			this.numberedText(top, 'sg-dash-sprint-goal-nums', goal && goal > 0
+				? t('dashboard.sprint.goalNumsWithGoal', { done, goal })
+				: t('dashboard.sprint.goalNumsNoGoal', { done, s: done === 1 ? '' : 's' }), String(done));
 			if (goal && goal > 0) {
 				const bar = row.createDiv({ cls: 'sg-dash-bar sg-dash-sprint-bar-goal' });
 				const fill = bar.createDiv({ cls: 'sg-dash-bar-fill' });
@@ -1459,6 +1507,23 @@ if (projects.length > 1) {
 		});
 	}
 
+	// ── Setups (planted / reminded / paid off; the board lives in the Codex) ───
+
+	private renderSetups(parent: HTMLElement, project: StoryProject): void {
+		if (!this.plugin.isModuleOn('codex')) return;
+		const root = project.rootPath;
+		const sec = this.section(parent, 'plant', t('setups.dash.title'), t('setups.dash.why'));
+		const sheets = this.plugin.entityIndex.list(root, SETUP_KIND).map((e) => ({ file: e.file, name: e.name }));
+		renderDashboardSetups(sec, {
+			app: this.app,
+			root,
+			sheets,
+			places: this.plugin.setupPlaces,
+			openSheet: (file) => void this.plugin.openCodex(root, file.path, undefined, this.leaf),
+			openBoard: () => void this.plugin.openSetupsBoard(root),
+		}).catch(reportError);
+	}
+
 	/** The project's scenes in the Writing tab's (manuscript) order. */
 	private orderedScenePaths(project: StoryProject, dash: DashboardSettings): string[] {
 		const root = project.rootPath;
@@ -1526,7 +1591,7 @@ if (projects.length > 1) {
 					const row = body.createEl('button', { cls: 'sg-dash-habit' });
 					row.setAttribute('aria-expanded', String(open));
 					row.createSpan({ cls: 'sg-dash-habit-word', text: h.key });
-					row.createSpan({ cls: 'sg-dash-habit-count', text: t('dashboard.habits.count', { count: String(h.total) }) });
+					this.numberedText(row, 'sg-dash-habit-count', t('dashboard.habits.count', { count: String(h.total) }), String(h.total));
 					// One tick per chapter, height = uses there: where the habit bunches up, at a glance.
 					const strip = row.createSpan({ cls: 'sg-dash-habit-strip', attr: { 'aria-hidden': 'true' } });
 					for (const n of h.perScene) {
@@ -1588,7 +1653,7 @@ if (projects.length > 1) {
 				bar.createDiv({ cls: 'sg-dash-pace-talk' }).style.width = `${talk}%`;
 				bar.createDiv({ cls: 'sg-dash-pace-act' }).style.width = `${act}%`;
 				bar.createDiv({ cls: 'sg-dash-pace-told' }).style.width = `${told}%`;
-				row.createSpan({ cls: 'sg-dash-pace-pct', text: t('dashboard.pace.talkPct', { pct: String(talk) }) });
+				this.numberedText(row, 'sg-dash-pace-pct', t('dashboard.pace.talkPct', { pct: String(talk) }), String(talk));
 			}
 			if (curve.short > 0) sec.createDiv({ cls: 'sg-dash-pace-note', text: t('dashboard.pace.short', { count: String(curve.short) }) });
 			if (curve.rows.some((r) => !r.english)) sec.createDiv({ cls: 'sg-dash-pace-note', text: t('dashboard.pace.englishOnly') });
@@ -1663,7 +1728,8 @@ if (projects.length > 1) {
 			const item = legend.createDiv({ cls: 'sg-dash-status-item' });
 			const dot = item.createSpan({ cls: 'sg-dash-status-dot' });
 			dot.style.background = colors[status] ?? 'var(--sg-status-dot)';
-			item.createSpan({ text: t('dashboard.statuses.legendItem', { label: t(STATUS_LABEL_KEYS[status]), count: counts[status] }) });
+			this.numberedText(item, 'sg-dash-status-text',
+				t('dashboard.statuses.legendItem', { label: t(STATUS_LABEL_KEYS[status]), count: counts[status] }), String(counts[status]), true);
 		}
 	}
 }

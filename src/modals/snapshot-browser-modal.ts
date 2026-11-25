@@ -15,6 +15,7 @@ const REASON_LABEL: Record<SnapshotReason, string> = {
 	compile: 'Before compile',
 	manual: 'Manual snapshot',
 	'pre-restore': 'Before restore',
+	'pre-change': 'Before an alias change',
 };
 
 /** Browse and restore prior versions of a scene document. */

@@ -117,6 +117,11 @@ export function maskNonProse(text: string, opts?: { keepHeadings?: boolean; keep
 	blankAll(/\]\([^)\n]*\)/g);
 	blankAll(/\bhttps?:\/\/[^\s)>\]]+/g);
 
+	// 8. Setup tags (`^pv-k3f9a2`) at the end of a marked paragraph.
+	// The space before it is blanked too (newlines are kept); no lookbehind,
+	// which older iPhones (iOS before 16.4) cannot read at all.
+	blankAll(/\s\^pv-[a-z0-9]{6}(?![A-Za-z0-9-])/g);
+
 	return current();
 }
 

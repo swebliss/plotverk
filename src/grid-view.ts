@@ -8,7 +8,8 @@ import { showCoachMarkChain, isOnCoachMark } from './ui/coach-mark';
 import { measuredScale, toLayoutPx } from './utils/zoom-scale';
 import type StorygridPlugin from './main';
 import { onSettingsChanged } from './utils/obsidian-internals';
-import { EntityModal } from './modals/entity-modal';
+import { openSheetEditor } from './sheet-editor-view';
+import { followPathMoves, pathMoveMark } from './utils/project-move';
 import { LinkDocModal } from './modals/link-doc-modal';
 import { EntityPickerModal } from './modals/entity-picker-modal';
 import { CodexLinkModal, CodexKindPickerModal } from './modals/codex-link-modal';
@@ -19,12 +20,20 @@ import { addWebLink, cleanWebLinks, normalizeWebUrl, removeWebLink, webLinkLabel
 import { SaveLayoutModal } from './modals/save-layout-modal';
 import { ConfirmModal, TextPromptModal } from './modals/prompt-modal';
 import { SnapshotBrowserModal } from './modals/snapshot-browser-modal';
+import { BeatGuideModal } from './modals/beat-guide-modal';
+import { beatGuideFor } from './templates/beat-guide';
 import { writeGridBackup, restoreNewestValidBackup } from './utils/grid-backup';
 import { getDocPreview } from './utils/doc-preview';
 import { reportError, runSafely } from './utils/report-error';
+import { isFromNewerPlotverk, isWholeGrid } from './utils/write-guard';
 import { applyCardTagChanges, cardTagChanges, normalizeCardTag } from './utils/card-tag-sync';
 import { renameCardPaths, renameGridCardPaths } from './utils/card-paths';
 import { plotverkEvents } from './utils/plotverk-events';
+import { cardMarkerStages, linesKey, markerLabel } from './setups/card-marker';
+import type { CardSetupLine } from './setups/book-order';
+import type { SetupInfo } from './setups/setup-store';
+import type { SetupStage } from './setups/setup-marks';
+import { STAGE_ICON, STAGE_ICON_WRITTEN, planWord, stageWord } from './setups/stage';
 import { getContrastColor } from './utils/color-contrast';
 import { axisLineColor } from './utils/axis-line';
 import { markdownToHtml, htmlToMarkdown } from './utils/rich-text';
@@ -86,6 +95,10 @@ export class StorygridView extends ItemView {
 	private _selfWrite = false;
 	/** Cards followed a renamed sheet; the next save tells the Codex to recount scenes. */
 	private _linksFollowedUnsaved = false;
+	/** The open file was saved by a newer Plotverk: shown, never saved over (it may hold things this one would drop). */
+	private _newerFile = false;
+	/** "Not saved" was said once for this grid; saying it on every edit helps nobody. */
+	private _saveRefusedWarned = false;
 	/** Renames seen while loadGrid is reading the file: one list per read still running. */
 	private _renamesDuringLoad = new Set<Array<[string, string]>>();
 	private _lastBackupAt = 0;
@@ -138,6 +151,18 @@ export class StorygridView extends ItemView {
 	// Word counts of linked docs, keyed by path; invalidated by mtime
 	private _wordCountCache: Map<string, { mtime: number; words: number }> = new Map();
 
+	// What the screen was last fully drawn from (renderAll): the grid as text (without its save time,
+	// which every autosave bumps), and whether any other file in the vault changed since (card faces
+	// read linked notes, character sheets and portraits). Closing the card editor skips the full redraw
+	// only when neither changed, because then the redraw would draw exactly what is already on screen.
+	private _drawnGridJson: string | null = null;
+	private _otherFileChangedSinceDraw = false;
+
+	/** A file other than this grid changed. Plotverk's own safety copies (backups, snapshots) never show on a card. */
+	private noteOtherFileChange(path: string): void {
+		if (path !== this.filePath && !isSafetyNetPath(path)) this._otherFileChangedSinceDraw = true;
+	}
+
 	// Global keydown handler — stored so we can properly remove it
 	private _panelKeydownHandler: ((e: KeyboardEvent) => void) | null = null;
 	// The document the two panel listeners were attached to — removal must use the same one
@@ -147,6 +172,15 @@ export class StorygridView extends ItemView {
 
 	// Session-scoped open/closed state for collapsible side-panel sections
 	private _panelSectionStates: Map<string, boolean> = new Map();
+
+	// Setup steps planned on this grid's cards, by card id. Read from the setup
+	// sheets (never stored in the grid file); drawn as the small marker on a card
+	// and as the Setups part of the card editor.
+	private _setupLines: Map<string, CardSetupLine<SetupInfo>[]> = new Map();
+	private _setupLinesKey = '';
+	private _setupRefreshTimer: number | null = null;
+	/** Redraws the open card editor's Setups list (null while no editor is open). */
+	private _panelSetupsRefresh: (() => void) | null = null;
 
 	// Keyboard-selected card (click to select, arrows to move, Enter to edit)
 	private selectedCardId: string | null = null;
@@ -205,7 +239,7 @@ export class StorygridView extends ItemView {
 		// the on-disk version (from the external writer) is the intentional change and must win.
 		this.registerEvent(this.app.vault.on('modify', (file) => {
 			if (!(file instanceof TFile)) return;
-			if (file.path !== this.filePath) return;
+			if (file.path !== this.filePath) { this.noteOtherFileChange(file.path); return; }
 			if (this._selfWrite) return;
 			if (this.saveTimer !== null) {
 				window.clearTimeout(this.saveTimer);
@@ -249,6 +283,18 @@ export class StorygridView extends ItemView {
 
 		// When a vault file is renamed, update any card linked to it —
 		// both the stored path and the card's displayed title.
+		// Any other file appearing, disappearing or moving can change what a card shows.
+		this.registerEvent(this.app.vault.on('create', (file) => this.noteOtherFileChange(file.path)));
+		this.registerEvent(this.app.vault.on('delete', (file) => { this.noteOtherFileChange(file.path); this.scheduleSetupRefresh(file.path); }));
+		this.registerEvent(this.app.vault.on('rename', (file, oldPath) => {
+			this.noteOtherFileChange(file.path);
+			this.noteOtherFileChange(oldPath);
+			this.scheduleSetupRefresh(file.path);
+		}));
+		// A setup sheet changed (a step planned or taken off a card) or a scene's
+		// text was marked: the card markers and the editor's Setups list follow.
+		// Only what is on screen is touched — the grid file is never written.
+		this.registerEvent(this.app.metadataCache.on('changed', (file) => this.scheduleSetupRefresh(file.path)));
 		this.registerEvent(this.app.vault.on('rename', (file, oldPath) => {
 			// The open grid file itself moved — renamed, or carried along by a renamed
 			// parent folder. Follow it first: flushSave() resolves this.filePath at write
@@ -325,6 +371,11 @@ export class StorygridView extends ItemView {
 			this._themeObserver = null;
 		}
 		this.removePanelDocListeners();
+		if (this._setupRefreshTimer !== null) {
+			window.clearTimeout(this._setupRefreshTimer);
+			this._setupRefreshTimer = null;
+		}
+		this._panelSetupsRefresh = null;
 	// Safety: restore the body cursor in case a resize drag was interrupted
 		this.containerEl.doc.body.removeClass('sg-body-grabbing', 'sg-body-col-resize', 'sg-body-row-resize');
 		// Flush any pending panel edits before the final save
@@ -403,7 +454,11 @@ export class StorygridView extends ItemView {
 		const loaded = data;
 		for (const [from, to] of renames) data = this.renamedGrid(data, from, to);
 		this.gridData = data;
-		if (data !== loaded) {
+		this._newerFile = isFromNewerPlotverk((loaded as { version?: unknown }).version);
+		this._saveRefusedWarned = false;
+		if (this._newerFile) new Notice(i18n('safety.newerFile', { name: file.basename }), 15000);
+		// A newer Plotverk's grid is shown as it is: no catch-up save is even tried.
+		if (data !== loaded && !this._newerFile) {
 			this._linksFollowedUnsaved = true;
 			this.scheduleSave();
 		}
@@ -481,6 +536,14 @@ export class StorygridView extends ItemView {
 		if (!this.gridData || !this.filePath) return;
 		const file = this.app.vault.getAbstractFileByPath(this.filePath);
 		if (!(file instanceof TFile)) return;
+		// Never save over a newer Plotverk's file, or save a grid that came out broken.
+		if (this._newerFile || !isWholeGrid(this.gridData)) {
+			if (!this._saveRefusedWarned) {
+				this._saveRefusedWarned = true;
+				new Notice(i18n(this._newerFile ? 'safety.newerNotSaved' : 'safety.brokenNotSaved', { name: file.basename }), 15000);
+			}
+			return;
+		}
 
 		// Snapshot the on-disk version before overwriting it, throttled so
 		// continuous editing doesn't spam the backup folder.
@@ -525,11 +588,15 @@ export class StorygridView extends ItemView {
 		this.contentEl.empty();
 		this.panelEl = null;
 		this.scrollContainerEl = null;
+		this._drawnGridJson = null;
+		this._otherFileChangedSinceDraw = false;
 		if (!this.gridData) return;
+		this._drawnGridJson = gridDrawKey(this.gridData);
 
 		const wrapper = this.contentEl.createDiv({ cls: 'sg-wrapper' });
 		if (this.plugin.settings.showGridTitle !== false) {
 			wrapper.createDiv({ cls: 'sg-grid-title', text: this.gridData.name });
+			this.renderBeatGuideLine(wrapper);
 		}
 		this.renderToolbar(wrapper);
 		// A brand-new grid shows its two tips first; the Creator box joins after them (maybeStartNewGridTour).
@@ -584,11 +651,26 @@ export class StorygridView extends ItemView {
 		});
 	}
 
+	/** Template grids only: the template's name + an info icon under the grid title. Clicking it opens the
+	 *  beat guide window (what beats are, how to read the grid, every beat in order). No guide text = no line. */
+	private renderBeatGuideLine(parent: HTMLElement): void {
+		const guide = beatGuideFor(this.gridData?.templateId, this.plugin.settings.customTemplates);
+		if (!guide) return;
+		const line = parent.createEl('button', {
+			cls: 'sg-grid-template-line',
+			attr: { type: 'button', 'aria-label': i18n('grid.beatGuide.lineAria') },
+		});
+		line.createSpan({ cls: 'sg-grid-template-name', text: guide.name || i18n('grid.guide.header') });
+		setPhosphorIcon(line.createSpan({ cls: 'sg-grid-template-icon' }), 'info', 'ⓘ');
+		line.addEventListener('click', () => new BeatGuideModal(this.app, guide).open());
+	}
+
 	/** True while a brand-new grid's two tips are on screen (the Creator box waits for them). */
 	private _newGridTourRunning = false;
 
 	/**
-	 * Every newly created grid, once: tip 1 points at a column name (right-click / press and hold → add rows and
+	 * Every newly created grid, once: a grid made from a template with a beat guide first opens the beat guide
+	 * window; then tip 1 points at a column name (right-click / press and hold → add rows and
 	 * columns), tip 2 at a row name (drag to move). Then the Creator Grid View box appears, then every other
 	 * waiting tip follows (plugin.endGridTour).
 	 */
@@ -604,7 +686,7 @@ export class StorygridView extends ItemView {
 			this.plugin.endGridTour();
 		};
 		// Wait for the grid to settle (and a slide-in tab to finish) before measuring the anchors.
-		window.setTimeout(() => {
+		const startTips = (): void => { window.setTimeout(() => {
 			const root = this.contentEl.querySelector('.sg-wrapper');
 			const colHeader = root?.querySelector('th.sg-col-header') as HTMLElement | null;
 			const rowHeader = root?.querySelector('td.sg-row-header') as HTMLElement | null;
@@ -613,7 +695,12 @@ export class StorygridView extends ItemView {
 			if (rowHeader) steps.push({ anchor: rowHeader, text: i18n('grid.coach.newGrid.drag'), placement: 'right' as const });
 			if (!steps.length) { finish(); return; }
 			showCoachMarkChain(steps, finish, finish);
-		}, 500);
+		}, 500); };
+		// A grid made from a template with a beat guide explains its beats first; the two tips follow
+		// once that window is closed.
+		const guide = beatGuideFor(this.gridData?.templateId, this.plugin.settings.customTemplates);
+		if (guide) new BeatGuideModal(this.app, guide, startTips).open();
+		else startTips();
 	}
 
 	private renderGridOnly(): void {
@@ -773,6 +860,8 @@ export class StorygridView extends ItemView {
 
 	private renderGrid(parent: HTMLElement): void {
 		if (!this.gridData) return;
+		// Which setup steps are planned on which card (for the card markers).
+		this.readSetupLines();
 
 		const rows = sortByOrder(this.gridData.rows);
 		const cols = sortByOrder(this.gridData.columns);
@@ -1068,6 +1157,9 @@ export class StorygridView extends ItemView {
 		// Title
 		const titleEl = headerEl.createDiv({ cls: 'sg-card-title' });
 		titleEl.textContent = (card.title && card.title.trim()) ? card.title : '';
+
+		// Setups planned on this card: a small view-only marker beside the title
+		this.drawSetupMarker(cardEl, headerEl, card.id);
 
 		// Controls: edit button — top-right
 		const controlsEl = headerEl.createDiv({ cls: 'sg-card-controls' });
@@ -1396,6 +1488,22 @@ export class StorygridView extends ItemView {
 					}));
 			}
 		}
+
+		// A card can carry setup PLANS before its scene is written: plant,
+		// remind or pay off here. The board moves only once the text says so.
+		const setupOnCard = (stage: 'planted' | 'reminded' | 'paid-off') => {
+			const gridFile = this.app.vault.getAbstractFileByPath(this.filePath);
+			if (!(gridFile instanceof TFile) || !this.gridData) return;
+			// From the card editor's ⋯ button: open by that button, over the editor
+			// (on a phone the editor is a bottom sheet lying over the grid).
+			const fromPanel = fromEditor ? this.containerEl.querySelector('.sg-side-panel .sg-panel-more') : null;
+			const anchor = fromPanel ?? this.contentEl.querySelector(`[data-card-id="${card.id}"]`) ?? this.contentEl;
+			if (stage === 'planted') this.plugin.setupActions.plantFromCard(this.containerEl, anchor, gridFile, this.gridData.id, card);
+			else this.plugin.setupActions.pickFromCard(this.containerEl, anchor, gridFile, this.gridData.id, card, stage);
+		};
+		menu.addItem((item) => item.setTitle(i18n('setups.menu.plant')).setIcon('sprout').onClick(() => setupOnCard('planted')));
+		menu.addItem((item) => item.setTitle(i18n('setups.menu.remind')).setIcon('bell').onClick(() => setupOnCard('reminded')));
+		menu.addItem((item) => item.setTitle(i18n('setups.menu.payOff')).setIcon('badge-check').onClick(() => setupOnCard('paid-off')));
 
 		menu.addItem((item) => item
 			.setTitle(i18n('grid.menu.changeColor'))
@@ -3320,14 +3428,18 @@ export class StorygridView extends ItemView {
 	}
 
 	private async createSceneDocument(card?: SceneCard): Promise<void> {
-		const scenesFolder = this.resolveScenesPath();
+		const scenesFolderAtOpen = this.resolveScenesPath();
+		const moveMark = pathMoveMark();
+		// The editor is a tab: by Save this view may show another grid, or be closed.
+		const originGridId = this.gridData?.id ?? '';
 
-		new EntityModal(
+		openSheetEditor(
 			this.app,
 			'scene',
 			card?.title ?? '',
 			[],
 			async (name: string, fields, aliases, start) => {
+				const scenesFolder = followPathMoves(scenesFolderAtOpen, moveMark);
 				const safeName = name.trim().replace(/[\\/:*?"<>|]/g, '-') || localizedDefaultName('scene');
 				const filePath = `${scenesFolder}/${safeName}.md`;
 
@@ -3344,8 +3456,8 @@ export class StorygridView extends ItemView {
 				}
 				// The sheet exists. From here a hiccup is reported, never a reason to save again.
 				try {
-					if (card && this.gridData) {
-						// Re-checked against the live card: it may have been linked while the modal was open.
+					if (card && this.gridData && this._viewOpen && this.gridData.id === originGridId) {
+						// Re-checked against the live card: it may have been linked while the editor was open.
 						const priorLink = this.gridData.cards.find((c) => c.id === card.id)?.linkedDocPath;
 						const linked = linkNewDocIfUnlinked(this.gridData, card.id, file.path);
 						if (linked !== this.gridData) {
@@ -3371,18 +3483,22 @@ export class StorygridView extends ItemView {
 					new Notice(i18n('grid.notice.fieldTemplateSaved', { name: tpl.name }));
 				})()); },
 			}
-		).open();
+		);
 	}
 
 	private async createCharacterDocument(card?: SceneCard): Promise<void> {
-		const charactersPath = this.resolveCharactersPath();
+		const charactersPathAtOpen = this.resolveCharactersPath();
+		const moveMark = pathMoveMark();
+		// The editor is a tab: by Save this view may show another grid, or be closed.
+		const originGridId = this.gridData?.id ?? '';
 
-		new EntityModal(
+		openSheetEditor(
 			this.app,
 			'character',
 			card?.title ?? '',
 			[],
 			async (name: string, fields, aliases, start) => {
+				const charactersPath = followPathMoves(charactersPathAtOpen, moveMark);
 				const safeName = name.trim().replace(/[\\/:*?"<>|]/g, '-') || localizedDefaultName('character');
 				const filePath = `${charactersPath}/${safeName}.md`;
 
@@ -3399,7 +3515,7 @@ export class StorygridView extends ItemView {
 				}
 				// The sheet exists. From here a hiccup is reported, never a reason to save again.
 				try {
-					if (card && this.gridData) {
+					if (card && this.gridData && this._viewOpen && this.gridData.id === originGridId) {
 						// A character sheet made from a card must not replace the card's scene page:
 						// it only becomes the card's link when the card had none. It is always added
 						// to the card's characters, so the card shows who it was made for.
@@ -3429,18 +3545,20 @@ export class StorygridView extends ItemView {
 				})()); },
 				projectRoot: this.resolveProjectRoot(),
 			}
-		).open();
+		);
 	}
 
 	private async createLocationDocument(targetFolder?: string): Promise<void> {
-		const locationsPath = targetFolder ?? this.resolveLocationsPath();
+		const locationsPathAtOpen = targetFolder ?? this.resolveLocationsPath();
+		const moveMark = pathMoveMark();
 
-		new EntityModal(
+		openSheetEditor(
 			this.app,
 			'location',
 			'',
 			[],
 			async (name: string, fields, aliases, start) => {
+				const locationsPath = followPathMoves(locationsPathAtOpen, moveMark);
 				const safeName = name.trim().replace(/[\\/:*?"<>|]/g, '-') || localizedDefaultName('location');
 				const filePath = `${locationsPath}/${safeName}.md`;
 
@@ -3472,7 +3590,7 @@ export class StorygridView extends ItemView {
 					new Notice(i18n('grid.notice.fieldTemplateSaved', { name: tpl.name }));
 				})()); },
 			}
-		).open();
+		);
 	}
 
 	private resolveProjectRoot(): string {
@@ -3567,6 +3685,7 @@ export class StorygridView extends ItemView {
 
 		const panel = this.panelEl;
 		panel.empty();
+		this._panelSetupsRefresh = null;
 		panel.addClass('sg-side-panel--open');
 		this.scrollContainerEl?.addClass('sg-scroll-container--panel-open');
 
@@ -3907,6 +4026,7 @@ export class StorygridView extends ItemView {
 				const addBtn = eventChips.createEl('button', { cls: 'sg-panel-btn-small sg-panel-add-btn', text: i18n('grid.panel.addEvent') });
 				addBtn.addEventListener('click', () => {
 					const projectRoot = this.resolveProjectRoot();
+					const moveMark = pathMoveMark();
 					new EntityPickerModal(
 						this.app, projectRoot, 'event',
 						(file: TFile) => {
@@ -3919,10 +4039,10 @@ export class StorygridView extends ItemView {
 							renderEvents();
 						},
 						(k) => {
-							new EntityModal(this.app, k, '', [], async (name, fields, aliases, start) => {
+							openSheetEditor(this.app, k, '', [], async (name, fields, aliases, start) => {
 								let file: TFile;
 								try {
-									file = await createEntityFile(this.app, projectRoot, k, name, fields, aliases, start?.cleanSlate);
+									file = await createEntityFile(this.app, followPathMoves(projectRoot, moveMark), k, name, fields, aliases, start?.cleanSlate);
 								} catch (err) {
 									// Nothing back: the sheet editor stays open with the writer's work.
 									new Notice(i18n('grid.notice.createSheetFailed', { msg: err instanceof Error ? err.message : '' }));
@@ -3930,7 +4050,7 @@ export class StorygridView extends ItemView {
 								}
 								// The sheet exists. From here a hiccup is reported, never a reason to save again (a second copy).
 								try {
-									if (this._panelDraft !== draft) {
+									if (!this._viewOpen || this._panelDraft !== draft) {
 										this.addLinkToLiveCard(draft.id, 'event', file.path);
 									} else if (!(draft.linkedEntityPaths?.['event'] ?? []).includes(file.path)) {
 										if (!draft.linkedEntityPaths) draft.linkedEntityPaths = {};
@@ -3944,7 +4064,7 @@ export class StorygridView extends ItemView {
 									reportError(err);
 								}
 								return file;
-							}, { projectRoot }).open();
+							}, { projectRoot });
 						}
 					).open();
 				});
@@ -3979,6 +4099,7 @@ export class StorygridView extends ItemView {
 				const addBtn = charContainer.createEl('button', { cls: 'sg-panel-btn-small sg-panel-add-btn', text: i18n('grid.panel.addCharacter') });
 				addBtn.addEventListener('click', () => {
 					const projectRoot = this.resolveProjectRoot();
+					const moveMark = pathMoveMark();
 					new EntityPickerModal(
 						this.app, projectRoot, 'character',
 						(file: TFile) => {
@@ -3989,10 +4110,10 @@ export class StorygridView extends ItemView {
 							renderChars();
 						},
 						(kind) => {
-							new EntityModal(this.app, kind, '', [], async (name, fields, aliases, start) => {
+							openSheetEditor(this.app, kind, '', [], async (name, fields, aliases, start) => {
 								let file: TFile;
 								try {
-									file = await createEntityFile(this.app, projectRoot, kind, name, fields, aliases, start?.cleanSlate);
+									file = await createEntityFile(this.app, followPathMoves(projectRoot, moveMark), kind, name, fields, aliases, start?.cleanSlate);
 								} catch (err) {
 									// Nothing back: the sheet editor stays open with the writer's work.
 									new Notice(i18n('grid.notice.createSheetFailed', { msg: err instanceof Error ? err.message : '' }));
@@ -4003,7 +4124,7 @@ export class StorygridView extends ItemView {
 									// The editor may have been rebuilt while the sheet was being created (saving a field template
 									// redraws the grid), so `draft` can be an old copy nobody sees any more. Then the sheet goes
 									// onto the card itself, not onto that dead draft.
-									if (this._panelDraft !== draft) {
+									if (!this._viewOpen || this._panelDraft !== draft) {
 										this.addLinkToLiveCard(draft.id, 'character', file.path);
 									} else if (!(draft.characterPaths ?? []).includes(file.path)) {
 										draft.characterPaths = [...(draft.characterPaths ?? []), file.path];
@@ -4021,7 +4142,7 @@ export class StorygridView extends ItemView {
 									this.plugin.settings.characterFieldTemplates.push(tpl);
 									await this.plugin.saveSettings();
 								})()); },
-							}).open();
+							});
 						}
 					).open();
 				});
@@ -4121,6 +4242,7 @@ export class StorygridView extends ItemView {
 				});
 				linkBtn.addEventListener('click', () => {
 					const projectRoot = this.resolveProjectRoot();
+					const moveMark = pathMoveMark();
 					new CodexLinkModal(
 						this.app,
 						projectRoot,
@@ -4128,7 +4250,7 @@ export class StorygridView extends ItemView {
 						(entry) => toggleLink(entry.kind, entry.file.path),
 						() => {
 							new CodexKindPickerModal(this.app, (k) => {
-								new EntityModal(
+								openSheetEditor(
 									this.app,
 									k,
 									'',
@@ -4136,7 +4258,7 @@ export class StorygridView extends ItemView {
 									async (name, fields, aliases, start) => {
 										let file: TFile;
 										try {
-											file = await createEntityFile(this.app, projectRoot, k, name, fields, aliases, start?.cleanSlate);
+											file = await createEntityFile(this.app, followPathMoves(projectRoot, moveMark), k, name, fields, aliases, start?.cleanSlate);
 										} catch (err) {
 											// Nothing back: the sheet editor stays open with the writer's work.
 											new Notice(i18n('grid.notice.createSheetFailed', { msg: err instanceof Error ? err.message : '' }));
@@ -4144,7 +4266,7 @@ export class StorygridView extends ItemView {
 										}
 										// The sheet exists. From here a hiccup is reported, never a reason to save again (a second copy).
 										try {
-											if (this._panelDraft !== draft) {
+											if (!this._viewOpen || this._panelDraft !== draft) {
 												this.addLinkToLiveCard(draft.id, k, file.path);
 											} else if (!isCodexLinked(draft.linkedEntityPaths, file.path)) {
 												draft.linkedEntityPaths = addCodexLink(draft.linkedEntityPaths, k, file.path);
@@ -4157,7 +4279,7 @@ export class StorygridView extends ItemView {
 										return file;
 									},
 									{ projectRoot }
-								).open();
+								);
 							}).open();
 						}
 					).open();
@@ -4165,6 +4287,11 @@ export class StorygridView extends ItemView {
 			};
 			renderCodexLinks();
 		}, i18n('grid.panel.help.linkedEntities'));
+
+		// ── SECTION: Setups (open when this card carries a plan) ─────────────
+		this.panelSection(body, 'setups', i18n('setups.dash.title'), (this._setupLines.get(draft.id) ?? []).length > 0, (sec) => {
+			this.renderPanelSetups(sec, draft);
+		}, i18n('setups.card.help'));
 
 		// ── SECTION: Appearance (default closed) ─────────────────────────────
 		const appearanceSummaryEl = this.panelSection(body, 'appearance', i18n('grid.panel.appearance'), false, (sec) => {
@@ -4280,7 +4407,8 @@ export class StorygridView extends ItemView {
 	 * card editor, which await a modal and a file write.
 	 */
 	private addLinkToLiveCard(cardId: string, kind: string, path: string): void {
-		if (!this.gridData) return;
+		// A closed view's grid is an old copy: never write it back.
+		if (!this._viewOpen || !this.gridData) return;
 		const card = this.gridData.cards.find((c) => c.id === cardId);
 		if (!card) return;
 		if (kind === 'character') {
@@ -4319,6 +4447,161 @@ export class StorygridView extends ItemView {
 		this.gridData = updateCard(this.gridData, cardId, { webLinks: next(cleanWebLinks(card.webLinks)) });
 		this.renderAll();
 		this.scheduleSave();
+	}
+
+	// ─── Setups planned on cards (marker + card editor) ───────────────────────
+
+	/**
+	 * Read which setup steps are planned on this grid's cards (metadata cache
+	 * only). True when anything changed since the last read.
+	 */
+	private readSetupLines(): boolean {
+		const gridFile = this.app.vault.getAbstractFileByPath(this.filePath);
+		let lines = new Map<string, CardSetupLine<SetupInfo>[]>();
+		try {
+			if (gridFile instanceof TFile && this.gridData) lines = this.plugin.setupActions.setupsOnGrid(gridFile, this.gridData.id, this.gridData.cards);
+		} catch (err) {
+			// A marker is a nicety: the grid itself must always draw.
+			console.warn('Plotverk: could not read setups planned on this grid', err);
+		}
+		const key = linesKey(lines, (setup) => setup.file.path);
+		this._setupLines = lines;
+		if (key === this._setupLinesKey) return false;
+		this._setupLinesKey = key;
+		return true;
+	}
+
+	/** Something that can change a plan happened: look again shortly, once. */
+	private scheduleSetupRefresh(path: string): void {
+		if (!this.gridData || !path.endsWith('.md') || isSafetyNetPath(path)) return;
+		if (this._setupRefreshTimer !== null) window.clearTimeout(this._setupRefreshTimer);
+		this._setupRefreshTimer = window.setTimeout(() => {
+			this._setupRefreshTimer = null;
+			this.refreshSetups();
+		}, 250);
+	}
+
+	/** Redraw only the markers and the editor's Setups list, and only when a plan really changed. */
+	private refreshSetups(): void {
+		if (!this._viewOpen || !this.gridData || !this.readSetupLines()) return;
+		this.contentEl.querySelectorAll<HTMLElement>('.sg-card[data-card-id]').forEach((cardEl) => {
+			const header = cardEl.querySelector<HTMLElement>(':scope > .sg-card-header');
+			const cardId = cardEl.getAttribute('data-card-id');
+			if (header && cardId) this.drawSetupMarker(cardEl, header, cardId);
+		});
+		this._panelSetupsRefresh?.();
+	}
+
+	/**
+	 * The marker on a card that carries setup plans: one small icon per stage,
+	 * outlined while only planned, filled once written in the card's scene.
+	 * View-only — it has no handlers of its own, so a click, double-click, drag
+	 * or touch on it behaves exactly like one on the card's title. Never saved:
+	 * it is drawn from the setup sheets, not from the grid file.
+	 */
+	private drawSetupMarker(cardEl: HTMLElement, headerEl: HTMLElement, cardId: string): void {
+		headerEl.querySelector(':scope > .sg-card-setups')?.remove();
+		const stages = cardMarkerStages(this._setupLines.get(cardId) ?? []);
+		cardEl.toggleClass('sg-card--has-setups', stages.length > 0);
+		if (stages.length === 0) {
+			cardEl.style.removeProperty('--sg-card-setup-count');
+			return;
+		}
+		cardEl.style.setProperty('--sg-card-setup-count', String(stages.length));
+		const label = markerLabel(stages, {
+			planned: { planted: planWord('planted'), reminded: planWord('reminded'), 'paid-off': planWord('paid-off') },
+			written: { planted: stageWord('planted'), reminded: stageWord('reminded'), 'paid-off': stageWord('paid-off') },
+		});
+		const marker = headerEl.createSpan({ cls: 'sg-card-setups', attr: { role: 'img', 'aria-label': label } });
+		for (const s of stages) {
+			const icon = marker.createSpan({ cls: s.written ? 'sg-card-setup-mark is-written' : 'sg-card-setup-mark' });
+			setPhosphorIcon(icon, s.written ? STAGE_ICON_WRITTEN[s.stage] : STAGE_ICON[s.stage], '•');
+		}
+		// A plain browser tooltip, like the card's other small parts (edit button, word-goal strip).
+		marker.title = label;
+		// Between the title and the edit button (on the first draw the button comes after it anyway).
+		const controls = headerEl.querySelector(':scope > .sg-card-controls');
+		if (controls) headerEl.insertBefore(marker, controls);
+	}
+
+	/**
+	 * The Setups part of the card editor: this card's planned steps (stage icon,
+	 * setup name, quiet state, × to take the plan off) and the three actions.
+	 * The actions open the same small anchored windows as the right-click menu —
+	 * nothing is locked behind them.
+	 */
+	private renderPanelSetups(sec: HTMLElement, draft: SceneCard): void {
+		const actions = this.plugin.setupActions;
+		const wrap = sec.createDiv({ cls: 'sg-panel-setups' });
+		const list = wrap.createDiv({ cls: 'sg-panel-setup-list', attr: { role: 'list', 'aria-label': i18n('setups.card.listAria') } });
+		const empty = wrap.createDiv({ cls: 'sg-panel-setup-empty', text: i18n('setups.card.empty') });
+
+		const renderList = () => {
+			list.empty();
+			const lines = this._setupLines.get(draft.id) ?? [];
+			list.toggle(lines.length > 0);
+			empty.toggle(lines.length === 0);
+			for (const line of lines) {
+				const row = list.createDiv({ cls: line.written ? 'sg-panel-setup-row is-written' : 'sg-panel-setup-row', attr: { role: 'listitem' } });
+				const state = line.written ? stageWord(line.stage) : planWord(line.stage);
+				const open = row.createEl('button', {
+					cls: 'sg-panel-setup-open',
+					attr: { type: 'button', 'aria-label': `${line.setup.name} — ${state}. ${i18n('setups.notice.openSheet')}` },
+				});
+				setPhosphorIcon(
+					open.createSpan({ cls: 'sg-panel-setup-icon' }),
+					line.written ? STAGE_ICON_WRITTEN[line.stage] : STAGE_ICON[line.stage], '•',
+				);
+				open.createSpan({ cls: 'sg-panel-setup-name', text: line.setup.name });
+				open.createSpan({ cls: 'sg-panel-setup-state', text: state });
+				setTooltip(open, i18n('setups.notice.openSheet'), { placement: 'top', delay: 400, classes: ['sg-tooltip'] });
+				open.addEventListener('click', () => actions.openSheet(line.setup.file));
+
+				const removeLabel = i18n('setups.card.removePlan', { name: line.setup.name });
+				const x = row.createEl('button', { cls: 'sg-panel-setup-x', attr: { type: 'button', 'aria-label': removeLabel } });
+				setPhosphorIcon(x, 'x', '×');
+				setTooltip(x, removeLabel, { placement: 'top', delay: 400, classes: ['sg-tooltip'] });
+				x.addEventListener('click', () => {
+					// Only the plan goes (a line in the setup's own sheet); the scene's text is never touched.
+					x.disabled = true;
+					row.addClass('is-leaving');
+					runSafely(actions.removePlan(line.setup.file, line.mark).then(
+						() => this.scheduleSetupRefresh(line.setup.file.path),
+						(err) => {
+							// Nothing was removed: the line comes back as it was.
+							x.disabled = false;
+							row.removeClass('is-leaving');
+							throw err;
+						},
+					));
+				});
+			}
+		};
+		renderList();
+		this._panelSetupsRefresh = () => {
+			if (list.isConnected) renderList();
+		};
+
+		const bar = wrap.createDiv({ cls: 'sg-panel-setup-actions' });
+		// Short words on the buttons (the same ones the small windows confirm with);
+		// the full menu wording ("Plant a setup") is the tooltip and what a screen reader says.
+		const action = (stage: SetupStage, label: string, full: string) => {
+			const btn = bar.createEl('button', { cls: 'sg-panel-btn-small sg-panel-setup-btn', attr: { type: 'button', 'aria-label': full } });
+			setTooltip(btn, full, { placement: 'top', delay: 400, classes: ['sg-tooltip'] });
+			setPhosphorIcon(btn.createSpan({ cls: 'sg-panel-setup-btn-icon' }), STAGE_ICON[stage], '+');
+			btn.createSpan({ text: label });
+			btn.addEventListener('click', () => {
+				const gridFile = this.app.vault.getAbstractFileByPath(this.filePath);
+				if (!(gridFile instanceof TFile) || !this.gridData) return;
+				// The card as typed so far (its title names the plan).
+				const card = { id: draft.id, title: draft.title ?? '', linkedDocPath: draft.linkedDocPath };
+				if (stage === 'planted') actions.plantFromCard(this.containerEl, btn, gridFile, this.gridData.id, card);
+				else actions.pickFromCard(this.containerEl, btn, gridFile, this.gridData.id, card, stage);
+			});
+		};
+		action('planted', i18n('setups.plant.go'), i18n('setups.menu.plant'));
+		action('reminded', i18n('setups.pick.remindGo'), i18n('setups.menu.remind'));
+		action('paid-off', i18n('setups.pick.payGo'), i18n('setups.menu.payOff'));
 	}
 
 	private cancelDraftTimer(): void {
@@ -4385,6 +4668,8 @@ export class StorygridView extends ItemView {
 			cell.empty();
 			const updated = this.gridData.cards.find((c) => c.id === draft.id);
 			if (updated) {
+				// A newly linked scene can turn a plan into "written": read the plans again first.
+				if (this.readSetupLines()) this._panelSetupsRefresh?.();
 				this.renderCard(cell, updated);
 				// Re-apply editing highlight — renderCard creates a fresh element
 				if (this.panelCardId === draft.id) {
@@ -4626,13 +4911,29 @@ export class StorygridView extends ItemView {
 				?.classList.remove('sg-card--editing');
 		}
 		this.panelCardId = null;
+		this._panelSetupsRefresh = null;
 		this.clearCardSelection();
 		this.panelEl.removeClass('sg-side-panel--open');
 		this.scrollContainerEl?.removeClass('sg-scroll-container--panel-open');
-		// Small delay then re-render so the slide-out animation plays before content changes
-		window.setTimeout(() => this.renderAll(), 350);
+		// Small delay then re-render so the slide-out animation plays before content changes.
+		// Decided when the timer fires (deleting a card closes the editor first, then changes the grid):
+		// when neither the grid nor a linked note changed since the last full draw, the redraw would draw
+		// exactly what is on screen, so only the closed editor is emptied.
+		window.setTimeout(() => {
+			const unchanged = !!this.gridData
+				&& this._drawnGridJson !== null
+				&& !this._otherFileChangedSinceDraw
+				&& gridDrawKey(this.gridData) === this._drawnGridJson;
+			if (!unchanged) { this.renderAll(); return; }
+			if (!this.panelCardId) this.panelEl?.empty();
+		}, 350);
 	}
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/** The grid as text for "did anything on screen change?": everything except its save time. */
+function gridDrawKey(grid: GridData): string {
+	return JSON.stringify({ ...grid, updatedAt: undefined });
+}
 

@@ -39,6 +39,8 @@ export { snapshotFolderFor, snapshotFileName, parseSnapshotFileName, formatSnaps
 export type { SnapshotReason } from './scene-snapshots-paths';
 
 const MAX_SNAPSHOTS_PER_SCENE = 20;
+/** Snapshots taken before an alias change (and its undo / redo) keep their own small budget, so going back and forth never pushes out daily or manual ones. */
+const MAX_PRE_CHANGE_PER_SCENE = 5;
 
 export interface SceneSnapshot {
 	/** Vault path of the snapshot file. */
@@ -85,7 +87,9 @@ export async function readSceneSnapshot(app: App, snapshot: SceneSnapshot): Prom
 
 async function pruneOldSnapshots(app: App, scenePath: string): Promise<void> {
 	const current = (await listSceneSnapshots(app, scenePath)).filter((s) => !s.legacy);
-	for (const s of current.slice(MAX_SNAPSHOTS_PER_SCENE)) {
+	const changes = current.filter((s) => s.reason === 'pre-change');
+	const others = current.filter((s) => s.reason !== 'pre-change');
+	for (const s of [...others.slice(MAX_SNAPSHOTS_PER_SCENE), ...changes.slice(MAX_PRE_CHANGE_PER_SCENE)]) {
 		try {
 			// Permanent on purpose: rolling snapshots Plotverk made itself, newer ones exist.
 			// Removed through the adapter, which the vault index follows like any other delete.
@@ -109,11 +113,25 @@ export async function writeSceneSnapshot(
 	content: string,
 	reason: SnapshotReason
 ): Promise<boolean> {
+	return (await snapshotScene(app, scenePath, content, reason)) === 'written';
+}
+
+/**
+ * The same as `writeSceneSnapshot`, saying what happened: 'written', 'same'
+ * (the newest snapshot already holds exactly this text) or 'failed'. For
+ * callers that must not go on without a safety copy. Never throws.
+ */
+export async function snapshotScene(
+	app: App,
+	scenePath: string,
+	content: string,
+	reason: SnapshotReason
+): Promise<'written' | 'same' | 'failed'> {
 	try {
 		const existing = await listSceneSnapshots(app, scenePath);
 		if (existing.length > 0) {
 			try {
-				if ((await readSceneSnapshot(app, existing[0])) === content) return false;
+				if ((await readSceneSnapshot(app, existing[0])) === content) return 'same';
 			} catch {
 				// Newest copy unreadable — take a fresh one.
 			}
@@ -123,10 +141,10 @@ export async function writeSceneSnapshot(
 		await ensureFolderPath(app, folder);
 		await app.vault.create(`${folder}/${snapshotFileName(reason)}`, content);
 		await pruneOldSnapshots(app, scenePath);
-		return true;
+		return 'written';
 	} catch {
 		// Snapshotting is best-effort; never block the caller's real operation.
-		return false;
+		return 'failed';
 	}
 }
 

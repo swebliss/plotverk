@@ -1,5 +1,5 @@
 import { plotverkEvents } from './utils/plotverk-events';
-import { movedPath, onPathMove } from './utils/project-move';
+import { followPathMoves, movedPath, onPathMove, pathMoveMark } from './utils/project-move';
 import { ItemView, WorkspaceLeaf, TFile, TFolder, TAbstractFile, Notice, Menu, Platform, MarkdownView, ViewStateResult } from 'obsidian';
 import type StorygridPlugin from './main';
 import { onSettingsChanged } from './utils/obsidian-internals';
@@ -45,7 +45,7 @@ import { saveExport } from './utils/save-file';
 import { projectRootFromGridPath, createEntityFile } from './entities/entity-manager';
 import { openSprintSetup } from './modals/sprint-modal';
 import { getCodexGroups, EntityKind, CodexGroupSpec, getKindSpec } from './entities/entity-kinds';
-import { EntityModal } from './modals/entity-modal';
+import { openSheetEditor } from './sheet-editor-view';
 import { ConfirmModal, TextPromptModal } from './modals/prompt-modal';
 import { CompilePreviewModal } from './modals/compile-preview-modal';
 import { ImagePickerModal } from './modals/image-picker-modal';
@@ -1991,6 +1991,75 @@ export class StorygridOutlineView extends ItemView {
 
 	// ─── World tab (Codex entities, minus scenes) ──────────────────────────────
 
+	/**
+	 * The right-hand end of every World-tab heading: one fixed-width place that
+	 * shows the count and, on hover/focus, the "+" in that same spot (phones
+	 * show both, each in its own fixed column) — so every heading lines up.
+	 */
+	private renderWorldHeadEnd(head: HTMLElement, count: number, addLabel: string, onAdd: (btn: HTMLElement) => void): void {
+		const end = head.createSpan({ cls: 'sg-outline-world-end' });
+		end.createSpan({ cls: 'sg-outline-world-count', text: String(count) });
+		const addBtn = end.createEl('button', { cls: 'sg-outline-world-add' });
+		setPhosphorIcon(addBtn, 'plus', '+');
+		addBtn.setAttribute('aria-label', addLabel);
+		addBtn.addEventListener('click', (e) => {
+			e.stopPropagation();
+			onAdd(addBtn);
+		});
+		// Enter/Space on the "+" must press the "+", not fold the heading under it.
+		addBtn.addEventListener('keydown', (e) => e.stopPropagation());
+	}
+
+	/** A World-tab category heading (folds its lists). Returns where its lists go, or null while folded. */
+	private renderWorldGroupHead(list: HTMLElement, projectRoot: string, group: CodexGroupSpec, groupTotal: number): HTMLElement | null {
+		const groupCollapseKey = `world-group::${projectRoot}::${group.id}`;
+		// Empty categories start folded, same rule as the kind level below —
+		// an explicit user toggle (stored true OR false) always wins.
+		const storedGroup = this.plugin.settings.outlineCollapsedGroups?.[groupCollapseKey];
+		const isGroupCollapsed = storedGroup !== undefined ? storedGroup : groupTotal === 0;
+
+		const groupHead = list.createDiv({ cls: 'sg-outline-act sg-outline-world-group-head' + (isGroupCollapsed ? ' is-collapsed' : '') });
+		groupHead.setAttribute('role', 'button');
+		groupHead.setAttribute('tabindex', '0');
+		groupHead.setAttribute('aria-expanded', String(!isGroupCollapsed));
+		groupHead.setAttribute('title', group.info);
+
+		const groupChev = groupHead.createSpan({ cls: 'sg-outline-act-chevron' });
+		setPhosphorIcon(groupChev, 'caret-down', '▾');
+		const groupIcon = groupHead.createSpan({ cls: 'sg-outline-tab-icon' });
+		setPhosphorIcon(groupIcon, group.icon, group.fallbackIcon);
+		groupHead.createSpan({ cls: 'sg-outline-act-label', text: group.label });
+		this.renderWorldHeadEnd(groupHead, groupTotal, i18n('outline.world.newInGroupAria', { group: group.label }), (btn) => {
+			const menu = new Menu();
+			for (const kind of group.kinds) {
+				const singular = getKindSpec(kind).singular.toLowerCase();
+				menu.addItem((i) =>
+					i.setTitle(i18n('outline.world.newEntityAria', { kind: singular }))
+						.onClick(() => this.createEntity(projectRoot, kind))
+				);
+			}
+			const r = btn.getBoundingClientRect();
+			menu.showAtPosition({ x: r.left, y: r.bottom + 2 });
+		});
+
+		const toggleGroupCollapse = () => {
+			const map = (this.plugin.settings.outlineCollapsedGroups ??= {});
+			map[groupCollapseKey] = !isGroupCollapsed;
+			void this.plugin.saveData(this.plugin.settings);
+			void this.renderAll();
+		};
+		groupHead.addEventListener('click', (e) => {
+			if ((e.target as HTMLElement).closest('.sg-outline-world-add')) return;
+			toggleGroupCollapse();
+		});
+		groupHead.addEventListener('keydown', (e) => {
+			if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleGroupCollapse(); }
+		});
+
+		if (isGroupCollapsed) return null;
+		return list.createDiv({ cls: 'sg-outline-world-group-body' });
+	}
+
 	private renderWorldTab(body: HTMLElement, gridFile: TFile): void {
 		// Series mode: world tab queries the series root (shared entities).
 		// Standalone: queries the project root as before.
@@ -2036,39 +2105,11 @@ const list = body.createDiv({ cls: 'sg-outline-list' });
 			}));
 			const groupTotal = kindsInGroup.reduce((sum, k) => sum + k.entities.length, 0);
 
-			const groupCollapseKey = `world-group::${projectRoot}::${group.id}`;
-			// Empty categories start folded, same rule as the kind level below —
-			// an explicit user toggle (stored true OR false) always wins.
-			const storedGroup = this.plugin.settings.outlineCollapsedGroups?.[groupCollapseKey];
-			const isGroupCollapsed = storedGroup !== undefined ? storedGroup : groupTotal === 0;
-
-			const groupHead = list.createDiv({ cls: 'sg-outline-act sg-outline-world-group-head' + (isGroupCollapsed ? ' is-collapsed' : '') });
-			groupHead.setAttribute('role', 'button');
-			groupHead.setAttribute('tabindex', '0');
-			groupHead.setAttribute('aria-expanded', String(!isGroupCollapsed));
-			groupHead.setAttribute('title', group.info);
-
-			const groupChev = groupHead.createSpan({ cls: 'sg-outline-act-chevron' });
-			setPhosphorIcon(groupChev, 'caret-down', '▾');
-			const groupIcon = groupHead.createSpan({ cls: 'sg-outline-tab-icon' });
-			setPhosphorIcon(groupIcon, group.icon, group.fallbackIcon);
-			groupHead.createSpan({ cls: 'sg-outline-act-label', text: group.label });
-			groupHead.createSpan({ cls: 'sg-outline-world-count', text: String(groupTotal) });
-
-			const toggleGroupCollapse = () => {
-				const map = (this.plugin.settings.outlineCollapsedGroups ??= {});
-				map[groupCollapseKey] = !isGroupCollapsed;
-				void this.plugin.saveData(this.plugin.settings);
-				void this.renderAll();
-			};
-			groupHead.addEventListener('click', () => toggleGroupCollapse());
-			groupHead.addEventListener('keydown', (e) => {
-				if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleGroupCollapse(); }
-			});
-
-			if (isGroupCollapsed) continue;
-
-			const groupBody = list.createDiv({ cls: 'sg-outline-world-group-body' });
+			// A category holding only one list (Setups, Characters, Items & Gear)
+			// shows just that list's heading — never a heading over a heading.
+			const single = kindsInGroup.length === 1;
+			const groupBody = single ? list : this.renderWorldGroupHead(list, projectRoot, group, groupTotal);
+			if (!groupBody) continue;
 
 			for (const { kind, spec, entities } of kindsInGroup) {
 				const collapseKey = `world::${projectRoot}::${kind}`;
@@ -2077,7 +2118,7 @@ const list = body.createDiv({ cls: 'sg-outline-list' });
 				const stored = this.plugin.settings.outlineCollapsedGroups?.[collapseKey];
 				const isCollapsed = stored !== undefined ? stored : entities.length === 0;
 
-				const head = groupBody.createDiv({ cls: 'sg-outline-act sg-outline-world-head' + (isCollapsed ? ' is-collapsed' : '') });
+				const head = groupBody.createDiv({ cls: 'sg-outline-act sg-outline-world-head' + (single ? ' sg-outline-world-head--solo' : '') + (isCollapsed ? ' is-collapsed' : '') });
 				head.setAttribute('role', 'button');
 				head.setAttribute('tabindex', '0');
 				head.setAttribute('aria-expanded', String(!isCollapsed));
@@ -2087,13 +2128,7 @@ const list = body.createDiv({ cls: 'sg-outline-list' });
 				const ic = head.createSpan({ cls: 'sg-outline-tab-icon' });
 				setPhosphorIcon(ic, spec.icon, spec.fallbackIcon);
 				head.createSpan({ cls: 'sg-outline-act-label', text: spec.plural });
-				head.createSpan({ cls: 'sg-outline-world-count', text: String(entities.length) });
-
-				const addBtn = head.createEl('button', { cls: 'sg-outline-scene-linkbtn' });
-				setPhosphorIcon(addBtn, 'plus', '+');
-				addBtn.setAttribute('aria-label', i18n('outline.world.newEntityAria', { kind: spec.singular.toLowerCase() }));
-				addBtn.addEventListener('click', (e) => {
-					e.stopPropagation();
+				this.renderWorldHeadEnd(head, entities.length, i18n('outline.world.newEntityAria', { kind: spec.singular.toLowerCase() }), () => {
 					this.createEntity(projectRoot, kind);
 				});
 
@@ -2106,7 +2141,7 @@ const list = body.createDiv({ cls: 'sg-outline-list' });
 					void this.renderAll();
 				};
 				head.addEventListener('click', (e) => {
-					if ((e.target as HTMLElement).closest('.sg-outline-scene-linkbtn')) return;
+					if ((e.target as HTMLElement).closest('.sg-outline-world-add')) return;
 					toggleCollapse();
 				});
 				head.addEventListener('keydown', (e) => {
@@ -2191,10 +2226,12 @@ const list = body.createDiv({ cls: 'sg-outline-list' });
 	}
 
 	private createEntity(projectRoot: string, kind: EntityKind): void {
-		new EntityModal(this.app, kind, '', [], async (name, fields, aliases, start) => {
+		// The editor is a tab: if the project folder is renamed meanwhile, the sheet goes where it is now.
+		const moveMark = pathMoveMark();
+		openSheetEditor(this.app, kind, '', [], async (name, fields, aliases, start) => {
 			let file: TFile;
 			try {
-				file = await createEntityFile(this.app, projectRoot, kind, name, fields, aliases, start?.cleanSlate);
+				file = await createEntityFile(this.app, followPathMoves(projectRoot, moveMark), kind, name, fields, aliases, start?.cleanSlate);
 			} catch (err) {
 				// Nothing back: the sheet editor stays open with the writer's work.
 				new Notice(i18n('outline.notice.entityCreateError', { kind, error: err instanceof Error ? err.message : '' }));
@@ -2203,12 +2240,12 @@ const list = body.createDiv({ cls: 'sg-outline-list' });
 			// The sheet exists. From here a hiccup is reported, never a reason to save again (a second copy).
 			try {
 				new Notice(i18n('outline.notice.entityCreated', { kind: getKindSpec(kind).singular, name: file.basename }));
-				await this.plugin.openCodex(projectRoot, file.path);
+				await this.plugin.openCodex(followPathMoves(projectRoot, moveMark), file.path);
 			} catch (err) {
 				reportError(err);
 			}
 			return file;
-		}, { projectRoot }).open();
+		}, { projectRoot });
 	}
 
 	// ─── Compile tab ───────────────────────────────────────────────────────────

@@ -1,5 +1,6 @@
 import { CompileStepConfig, CompileWorkflowSettings, generateId } from '../grid-data';
 import { stripSheetPlanning } from '../entities/entity-parse';
+import { stripAnchors } from '../setups/anchors';
 
 /**
  * Longform-style compile: turn the Writers Panel outline tree into a single
@@ -34,9 +35,12 @@ export function stripFrontmatter(content: string): string {
 	return content.trim();
 }
 
+/** A setup tag (`^pv-k3f9a2`) is not a word. */
+const SETUP_TAG_WORD = /(^|\s)\^pv-[a-z0-9]{6}(?![A-Za-z0-9-])/g;
+
 /** Rough prose word count — markdown punctuation doesn't inflate the number. */
 export function countWords(text: string): number {
-	const cleaned = text.replace(/[#*_>`[\]|]+/g, ' ');
+	const cleaned = text.replace(SETUP_TAG_WORD, ' ').replace(/[#*_>`[\]|]+/g, ' ');
 	return cleaned.split(/\s+/).filter((w) => /[^\s\-—–.,!?:;'"()]/.test(w)).length;
 }
 
@@ -273,7 +277,10 @@ export function applyCompileSteps(
 			}
 		}
 	}
-	return out.trim();
+	// Block ids are bookkeeping, never part of the book: Plotverk's setup tags
+	// (`^pv-…`) and the writer's own (`^my-note`, Emma 2026-11-24) are stripped on
+	// every export, whatever steps the writer has chosen. Footnotes stay.
+	return stripAnchors(out, { all: true }).trim();
 }
 
 // ─── Headings inside a scene ─────────────────────────────────────────────────

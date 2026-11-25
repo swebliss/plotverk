@@ -16,6 +16,7 @@ import {
 	sheetImageFolder,
 	uniqueChildPath,
 } from './sheet-images-path';
+import { processKeepingText } from '../utils/safe-process';
 
 /**
  * Obsidian half of "one image folder per Codex sheet". The path rules live in
@@ -348,7 +349,7 @@ async function moveWithLinks(app: App, item: TAbstractFile, to: string, sheet: T
 	// With Obsidian's link updating switched off, at least the sheet's own
 	// picture lines keep working.
 	if (!linksAutoUpdate(app)) {
-		await app.vault.process(sheet, (c) => c.split(`[[${from}/`).join(`[[${to}/`).split(`[[${from}]]`).join(`[[${to}]]`).split(`[[${from}|`).join(`[[${to}|`));
+		await processKeepingText(app, sheet, (c) => c.split(`[[${from}/`).join(`[[${to}/`).split(`[[${from}]]`).join(`[[${to}]]`).split(`[[${from}|`).join(`[[${to}|`));
 	}
 }
 
@@ -448,7 +449,7 @@ export async function trashSheet(app: App, sheet: TFile, withImages: boolean): P
 /** Make `image` the sheet's portrait (its first picture). Nothing else on the sheet changes. */
 export async function useAsPortrait(app: App, sheet: TFile, image: TFile): Promise<void> {
 	const folder = imageFolderForSheet(app, sheet);
-	await app.vault.process(sheet, (content) => {
+	await processKeepingText(app, sheet, (content) => {
 		const parsed = parseEntityDocument(content, sheet.basename);
 		const kind = parsed.kind ?? kindAtPath(app, sheet, sheet.path) ?? 'character';
 		const raws = parsed.fields.filter((f) => f.type === 'image').map((f) => f.value);
@@ -477,7 +478,7 @@ export async function useAsPortrait(app: App, sheet: TFile, image: TFile): Promi
  * would otherwise not know belongs to this sheet.
  */
 export async function appendSheetImage(app: App, sheet: TFile, image: TFile): Promise<void> {
-	await app.vault.process(sheet, (content) => {
+	await processKeepingText(app, sheet, (content) => {
 		const parsed = parseEntityDocument(content, sheet.basename);
 		const kind = parsed.kind ?? kindAtPath(app, sheet, sheet.path) ?? 'character';
 		const raws = parsed.fields.filter((f) => f.type === 'image').map((f) => f.value);
@@ -501,7 +502,7 @@ export async function removalFor(app: App, sheet: TFile, image: TFile): Promise<
 
 /** Carry out {@link removalFor}'s answer. */
 export async function removeSheetImage(app: App, sheet: TFile, image: TFile, how: 'trash' | 'unlink'): Promise<void> {
-	await app.vault.process(sheet, (content) => {
+	const kept = await processKeepingText(app, sheet, (content) => {
 		const parsed = parseEntityDocument(content, sheet.basename);
 		const kind = parsed.kind ?? kindAtPath(app, sheet, sheet.path) ?? 'character';
 		const raws = parsed.fields.filter((f) => f.type === 'image').map((f) => f.value);
@@ -511,7 +512,8 @@ export async function removeSheetImage(app: App, sheet: TFile, image: TFile, how
 		});
 		return next.some((v, i) => v !== raws[i]) ? writeSheetImages(content, kind, next) : content;
 	});
-	if (how === 'trash') await app.fileManager.trashFile(image);
+	// The sheet kept its text (the picture line is still there): keep the picture too.
+	if (how === 'trash' && !kept) await app.fileManager.trashFile(image);
 }
 
 // ─── The Images folder name setting ──────────────────────────────────────────

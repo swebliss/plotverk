@@ -1,6 +1,6 @@
 import { plotverkEvents } from './utils/plotverk-events';
-import { movedPath, movedRoot, onPathMove } from './utils/project-move';
-import { ItemView, WorkspaceLeaf, TFile, Notice, Menu, FuzzySuggestModal, App, MarkdownRenderer, Platform, ViewStateResult } from 'obsidian';
+import { followPathMoves, movedPath, movedRoot, onPathMove, pathMoveMark } from './utils/project-move';
+import { ItemView, WorkspaceLeaf, TFile, Notice, Menu, FuzzySuggestModal, App, MarkdownRenderer, Platform, ViewStateResult, Keymap, PaneType } from 'obsidian';
 import type StorygridPlugin from './main';
 import type { SocialMapsTab } from './social-maps-view';
 import { setPhosphorIcon, GRID_VIEW_ICON } from './utils/icons';
@@ -17,13 +17,20 @@ import {
 	kindForFile,
 } from './entities/entity-manager';
 import { parseEntityDocument, mergeWithSpecDefaults } from './entities/entity-parse';
-import { updateEntitySheet } from './entities/entity-write';
-import { renameEntitySheet, sheetFileName, sheetNameTaken, sheetPathFor } from './entities/sheet-rename';
+import { renameEntitySheet } from './entities/sheet-rename';
 import { buildEntityTree, descendantNames, EntityTreeNode } from './entities/entity-tree';
-import { EntityModal } from './modals/entity-modal';
+import { findSheetEditorLeaf, isSheetOpenInEditor, openSheetEditor } from './sheet-editor-view';
+import { prepareSheetEdit } from './entities/sheet-edit';
+import { writableTemplatesFor } from './entities/start-mode';
 import { TextPromptModal, ConfirmModal } from './modals/prompt-modal';
 import { openOrReveal } from './utils/workspace';
 import { isSafetyNetPath } from './utils/safety-paths';
+import { renderSetupSheet } from './setups/setup-sheet';
+import { SETUP_KIND, readSetup, setupDescription } from './setups/setup-store';
+import { renderSetupBoard, renderSetupsExplainer } from './setups/setup-board';
+import { renderSheetLines } from './setups/sheet-lines';
+import { summarizeSetup } from './setups/book-order';
+import { scopeToBook } from './refs/project-scope';
 import { VirtualScroller } from './ui/virtual-scroller';
 import { renderFieldWidget } from './ui/field-widgets';
 import {
@@ -84,11 +91,10 @@ interface Appearance {
 	order: number;
 }
 
-/** The Social Maps tab an entry page was opened from, and which of its two tabs. */
-export interface CodexOrigin {
-	leaf: WorkspaceLeaf;
-	tab: SocialMapsTab;
-}
+/** Where an entry page was opened from: a Social Maps tab (and which of its two tabs), or the Dashboard. */
+export type CodexOrigin =
+	| { leaf: WorkspaceLeaf; tab: SocialMapsTab }
+	| { leaf: WorkspaceLeaf; dashboard: true };
 
 /**
  * The Codex — a per-project worldbuilding hub.
@@ -273,6 +279,31 @@ export class StorygridCodexView extends ItemView {
 		void this.renderAll();
 	}
 
+	/** Open an entry in a new Codex tab (or split / window), leaving this tab as it is. */
+	private openEntryInNewTab(entity: EntityInfo, where: PaneType | boolean = 'tab'): void {
+		const root = this.currentProject()?.rootPath ?? this.projectRoot ?? '';
+		runSafely(this.plugin.openCodexInNewTab(root, entity.file.path, where));
+	}
+
+	/**
+	 * A click opens the entry here; Ctrl/Cmd-click or a middle-click opens it
+	 * in a new tab (Obsidian's own convention for links and files).
+	 */
+	private wireEntryOpen(card: HTMLElement, entity: EntityInfo): void {
+		card.addEventListener('click', (e) => {
+			const where = Keymap.isModEvent(e);
+			if (where) this.openEntryInNewTab(entity, where);
+			else this.showDetail(entity);
+		});
+		// Stop the middle button's scroll-anywhere cursor, then open on release.
+		card.addEventListener('mousedown', (e) => { if (e.button === 1) e.preventDefault(); });
+		card.addEventListener('auxclick', (e) => {
+			if (e.button !== 1) return;
+			e.preventDefault();
+			this.openEntryInNewTab(entity);
+		});
+	}
+
 	/** Used by the plugin to point an existing codex tab at a project. */
 	/**
 	 * Open the sidebar group that owns `kind`, so a programmatic jump doesn't
@@ -303,6 +334,13 @@ export class StorygridCodexView extends ItemView {
 		this.origin = null;
 		this.cameFrom = [];
 		void this.renderAll();
+	}
+
+	/** Show one category's page (e.g. the Setups board), no sheet open. */
+	showKind(kind: EntityKind): void {
+		this.activeKind = kind;
+		this.viewMode = this.defaultViewModeForKind(kind);
+		this.goHome();
 	}
 
 	/**
@@ -377,12 +415,26 @@ export class StorygridCodexView extends ItemView {
 
 	// ─── Appearance index (character → scene cards across grids) ──────────────
 
+	/** Grids already read, per grid file. A grid is read again as soon as it changes
+	 *  (modified time or size differs), so the index is never older than the files. */
+	private gridReadCache = new WeakMap<TFile, { mtime: number; size: number; grid: GridData }>();
+
+	/** The grid in `gridFile`, read from disk only when it changed since the last read. */
+	private async readGridForIndex(gridFile: TFile): Promise<GridData> {
+		const { mtime, size } = gridFile.stat;
+		const hit = this.gridReadCache.get(gridFile);
+		if (hit && hit.mtime === mtime && hit.size === size) return hit.grid;
+		const grid = JSON.parse(await this.app.vault.read(gridFile)) as GridData;
+		this.gridReadCache.set(gridFile, { mtime, size, grid });
+		return grid;
+	}
+
 	private async buildAppearanceIndex(project: StoryProject): Promise<void> {
 		this.appearanceIndex = new Map();
 		for (const gridFile of project.gridFiles) {
 			let grid: GridData;
 			try {
-				grid = JSON.parse(await this.app.vault.read(gridFile)) as GridData;
+				grid = await this.readGridForIndex(gridFile);
 			} catch {
 				continue;
 			}
@@ -542,13 +594,22 @@ export class StorygridCodexView extends ItemView {
 
 		// Came from Social Maps? Offer the way back — unless that tab has been closed since.
 		const origin = this.origin;
-		if (origin && this.plugin.isSocialMapsLeafOpen(origin.leaf)) {
+		if (origin && 'tab' in origin && this.plugin.isSocialMapsLeafOpen(origin.leaf)) {
 			const label = t(origin.tab === 'tree' ? 'codex.detail.backToStoryTree' : 'codex.detail.backToConnectionsMap');
 			band.addClass('sg-detail-band--has-origin');
 			const backToMaps = band.createEl('button', { cls: 'sg-detail-back sg-detail-back--origin', title: label });
 			setPhosphorIcon(backToMaps.createSpan(), 'arrow-left', '‹');
 			backToMaps.createSpan({ text: label });
 			backToMaps.addEventListener('click', () => this.plugin.returnToSocialMaps(origin.leaf, origin.tab));
+		}
+		// Came from the Dashboard (a Setups line)? Offer the way back while it is open.
+		if (origin && 'dashboard' in origin && this.plugin.isDashboardLeafOpen(origin.leaf)) {
+			const label = t('codex.detail.backToDashboard');
+			band.addClass('sg-detail-band--has-origin');
+			const backToDash = band.createEl('button', { cls: 'sg-detail-back sg-detail-back--origin', title: label });
+			setPhosphorIcon(backToDash.createSpan(), 'arrow-left', '‹');
+			backToDash.createSpan({ text: label });
+			backToDash.addEventListener('click', () => void this.app.workspace.revealLeaf(origin.leaf));
 		}
 
 		// Arrived by clicking a relationship chip: back to the entry it was on.
@@ -618,6 +679,29 @@ export class StorygridCodexView extends ItemView {
 		const moreBtn = band.createEl('button', { cls: 'sg-detail-action', title: t('codex.detail.more'), attr: { 'aria-label': t('codex.detail.more') } });
 		setPhosphorIcon(moreBtn, 'dots-three', '⋯');
 		moreBtn.addEventListener('click', (e) => this.showDetailMenu(e, entity));
+
+		// A setup is a text page of its own parts (stage, notes, links, places).
+		if (kind === SETUP_KIND) {
+			page.addClass('sg-detail--setup-page');
+			const setupRoot = this.plugin.entityIndex.rootFor(file.path);
+			const lookups = setupRoot !== null ? await this.plugin.setupPlaces.lookups(setupRoot) : undefined;
+			if (gen !== this._renderGen) return;
+			await renderSetupSheet(page, {
+				lookups,
+				app: this.app,
+				component: this,
+				setupIndex: this.plugin.setupIndex,
+				entities: () => this.plugin.entityIndex.getAllEntities(),
+				openEntity: (target) => {
+					this.cameFrom.push(file.path);
+					this.detailPath = target.path;
+					void this.renderAll();
+				},
+				edit: () => { runSafely(this.editEntity(entity)); },
+				openCard: (gridPath, cardId) => { runSafely(this.plugin.revealGridCard(gridPath, cardId)); },
+			}, file, parsed.name, fields);
+			return;
+		}
 
 		const quoteField = fields.find(
 			(f) => (f.type === 'text') && f.value.trim() &&
@@ -862,6 +946,34 @@ export class StorygridCodexView extends ItemView {
 				renderFieldWidget(bodyEl, f, 'read', { app: this.app, onChange: () => {} });
 			}
 		}
+
+		// The setups this entry is part of, and the scenes it is mentioned in.
+		await this.renderSheetSetupLines(main, file, parsed.name);
+	}
+
+	private async renderSheetSetupLines(main: HTMLElement, file: TFile, name: string): Promise<void> {
+		const gen = this._renderGen;
+		const id: unknown = this.app.metadataCache.getFileCache(file)?.frontmatter?.['storygrid-id'];
+		const root = this.plugin.entityIndex.rootFor(file.path);
+		if (typeof id !== 'string' || !id || root === null) return;
+		const lookups = await this.plugin.setupPlaces.lookups(root);
+		if (gen !== this._renderGen || !main.isConnected) return;
+		renderSheetLines(main, {
+			app: this.app,
+			file,
+			name,
+			entityId: id,
+			root,
+			bookEntities: scopeToBook(this.plugin.entityIndex.getAllEntities(), file.path, (e) => ({ path: e.file.path, kind: e.kind })),
+			lookups,
+			scenes: this.plugin.referenceIndex.getEntityScenes(id),
+			openSetup: (sheet) => {
+				this.cameFrom.push(file.path);
+				this.detailPath = sheet.path;
+				void this.renderAll();
+			},
+			openNote: (path) => void this.app.workspace.openLinkText(path, '', false),
+		});
 	}
 
 	// ─── Images — one folded section on the sheet page ──────────────────────────
@@ -897,6 +1009,13 @@ export class StorygridCodexView extends ItemView {
 			setPhosphorIcon(addBtn.createSpan(), 'image', '+');
 			addBtn.createSpan({ text: t('codex.images.add') });
 			addBtn.addEventListener('click', () => {
+				// Open in its editor tab: add the pictures there (bring it forward
+				// before any file is picked, so none is chosen for nothing).
+				const editing = findSheetEditorLeaf(this.app, sheet.path);
+				if (editing) {
+					void this.app.workspace.revealLeaf(editing);
+					return;
+				}
 				const picker = createEl('input');
 				picker.type = 'file';
 				picker.accept = 'image/*';
@@ -936,7 +1055,7 @@ export class StorygridCodexView extends ItemView {
 				const btns = tile.createDiv({ cls: 'sg-detail-image-btns' });
 				if (!isPortrait) {
 					const use = btns.createEl('button', { cls: 'sg-detail-image-btn', text: t('codex.images.usePortrait'), attr: { type: 'button' } });
-					use.addEventListener('click', () => void this.runImageAction(() => useAsPortrait(this.app, sheet, img)));
+					use.addEventListener('click', () => void this.runImageAction(sheet, () => useAsPortrait(this.app, sheet, img)));
 				}
 				const how = removals[images.indexOf(img)];
 				if (!how) continue; // only used inside the sheet's writing: edit the text to remove it
@@ -946,14 +1065,21 @@ export class StorygridCodexView extends ItemView {
 						this.app,
 						t(how === 'trash' ? 'codex.images.confirm.trash' : 'codex.images.confirm.unlink', { name: img.name }),
 						how === 'trash' ? t('codex.images.remove') : t('codex.images.confirm.unlinkButton'),
-						() => void this.runImageAction(() => removeSheetImage(this.app, sheet, img, how)),
+						() => void this.runImageAction(sheet, () => removeSheetImage(this.app, sheet, img, how)),
 					).open();
 				});
 			}
 		});
 	}
 
-	private async runImageAction(action: () => Promise<void>): Promise<void> {
+	private async runImageAction(sheet: TFile, action: () => Promise<void>): Promise<void> {
+		// The sheet is open in its editor tab, whose Save would write over this:
+		// bring that tab forward instead (pictures can be added there too).
+		const editing = findSheetEditorLeaf(this.app, sheet.path);
+		if (editing) {
+			await this.app.workspace.revealLeaf(editing);
+			return;
+		}
 		try {
 			await action();
 		} catch (err) {
@@ -969,7 +1095,7 @@ export class StorygridCodexView extends ItemView {
 	 * is put on the sheet so the gallery still finds it.
 	 */
 	private async addImagesToSheet(sheet: TFile, files: File[]): Promise<void> {
-		await this.runImageAction(async () => {
+		await this.runImageAction(sheet, async () => {
 			const target = targetForSheet(this.app, sheet);
 			let { portrait } = await listSheetImages(this.app, sheet);
 			for (const f of files) {
@@ -988,9 +1114,11 @@ export class StorygridCodexView extends ItemView {
 	/** A paste of pictures while this view shows a sheet adds them to it. Typing fields keep their own paste. */
 	private handleImagePaste(e: ClipboardEvent): void {
 		if (!this.detailPath || this.app.workspace.getActiveViewOfType(StorygridCodexView) !== this) return;
-		// Never while a dialog is open (the sheet editor would then save over it),
-		// and only from inside this view or with nothing focused at all.
+		// Never while a dialog is open or this sheet's editor tab is (the sheet
+		// editor would then save over it), and only from inside this view or with
+		// nothing focused at all.
 		if (this.containerEl.doc.querySelector('.modal-container')) return;
+		if (isSheetOpenInEditor(this.app, this.detailPath)) return;
 		const rawTarget = e.target as Node | null;
 		const target = rawTarget?.instanceOf(HTMLElement) ? rawTarget : null;
 		if (target && target !== this.containerEl.doc.body && !this.containerEl.contains(target)) return;
@@ -1034,6 +1162,8 @@ export class StorygridCodexView extends ItemView {
 		const menu = new Menu();
 		menu.addItem((item) => item.setTitle(t('codex.menu.editSheet')).setIcon('pencil')
 			.onClick(() => this.editEntity(entity)));
+		menu.addItem((item) => item.setTitle(t('codex.menu.openInNewTab')).setIcon('file-plus')
+			.onClick(() => this.openEntryInNewTab(entity)));
 		menu.addItem((item) => item.setTitle(t('codex.menu.openAsNote')).setIcon('file-text')
 			.onClick(() => openOrReveal(this.app, entity.file, { state: { mode: 'preview' } })));
 		menu.addItem((item) => item.setTitle(t('codex.menu.rename')).setIcon('pencil')
@@ -1093,14 +1223,19 @@ export class StorygridCodexView extends ItemView {
 
 	private renderHeader(el: HTMLElement, project: StoryProject): void {
 		const header = el.createDiv({ cls: 'sg-codex-header' });
+		// Phones: two lines — title (project name small beneath it) + plain shortcut
+		// icons, then a full-width search field. Desktop/tablet keep the single row.
+		const phone = Platform.isPhone;
+		if (phone) header.addClass('sg-codex-header--phone');
 
 		const titleWrap = header.createDiv({ cls: 'sg-codex-title-wrap' });
 		const titleIcon = titleWrap.createSpan({ cls: 'sg-codex-title-icon' });
 		setPhosphorIcon(titleIcon, 'books', '◆');
-		titleWrap.createEl('h2', { cls: 'sg-codex-title', text: t('codex.title') });
+		const titleText = phone ? titleWrap.createDiv({ cls: 'sg-codex-title-text' }) : titleWrap;
+		titleText.createEl('h2', { cls: 'sg-codex-title', text: t('codex.title') });
 
 		// Project name — read-only; active project is set from the Dashboard only
-		header.createSpan({ cls: 'sg-codex-project-name', text: project.name });
+		(phone ? titleText : header).createSpan({ cls: 'sg-codex-project-name', text: project.name });
 
 		// Search
 		const searchWrap = header.createDiv({ cls: 'sg-codex-search' });
@@ -1127,8 +1262,9 @@ export class StorygridCodexView extends ItemView {
 
 		// Standard quick-launch row — identical to the one in the Writers Panel and
 		// Dashboard headers; per-link visibility + placement come from Settings → Quick-links.
+		// "Open Codex" is left out here: it would open the page you are already on.
 		const quickLaunch = header.createDiv({ cls: 'sg-quicklaunch-row' });
-		this.plugin.renderQuickLaunchRow(quickLaunch, 'panel', project.gridFiles[0]);
+		this.plugin.renderQuickLaunchRow(quickLaunch, 'panel', project.gridFiles[0], ['codex']);
 	}
 
 	private renderSidebar(body: HTMLElement, project: StoryProject): void {
@@ -1146,6 +1282,8 @@ export class StorygridCodexView extends ItemView {
 
 			const groupEl = sidebar.createDiv({ cls: 'sg-codex-nav-group' });
 			if (!open) groupEl.addClass('is-collapsed');
+			// Setups sits apart from the world categories below it.
+			if (group.id === 'setups') groupEl.addClass('sg-codex-nav-group--apart');
 
 			const head = groupEl.createDiv({ cls: 'sg-codex-nav-group-head' });
 			head.setAttribute('role', 'button');
@@ -1196,6 +1334,31 @@ export class StorygridCodexView extends ItemView {
 		}
 	}
 
+	/** Phone section head: the gear (card / list view) and the filled + (new sheet). */
+	private renderPhoneHeadButtons(sectionHead: HTMLElement, project: StoryProject, spec: ReturnType<typeof getKindSpec>): void {
+		const cog = sectionHead.createEl('button', {
+			cls: 'sg-codex-phone-box',
+			attr: { type: 'button', 'aria-haspopup': 'menu', 'aria-label': t('codex.gallery.viewOptions') },
+		});
+		setPhosphorIcon(cog, 'gear', '⚙');
+		cog.addEventListener('click', () => {
+			const menu = new Menu();
+			menu.addItem((item) => item.setTitle(t('codex.gallery.cardView')).setIcon('layout-grid').setChecked(this.viewMode === 'tiles')
+				.onClick(() => { this.viewMode = 'tiles'; void this.renderAll(); }));
+			menu.addItem((item) => item.setTitle(t('codex.gallery.listView')).setIcon('list').setChecked(this.viewMode === 'list')
+				.onClick(() => { this.viewMode = 'list'; void this.renderAll(); }));
+			const r = cog.getBoundingClientRect();
+			menu.showAtPosition({ x: r.right, y: r.bottom + 4 });
+		});
+
+		const plus = sectionHead.createEl('button', {
+			cls: 'sg-codex-phone-box sg-codex-phone-box--primary',
+			attr: { type: 'button', 'aria-label': t('codex.gallery.newEntity', { singular: spec.singular }) },
+		});
+		setPhosphorIcon(plus, 'plus', '+');
+		plus.addEventListener('click', () => this.createEntity(project, this.activeKind));
+	}
+
 	private renderGallery(body: HTMLElement, project: StoryProject): void {
 		const spec = getKindSpec(this.activeKind);
 		// A previous render's scroller (if any) is now detached — tear it down.
@@ -1218,27 +1381,9 @@ export class StorygridCodexView extends ItemView {
 			const count = this.plugin.entityIndex.list(project.rootPath, this.activeKind).length;
 			if (count > 0) h3.createSpan({ cls: 'sg-codex-section-count', text: String(count) });
 
-			const cog = sectionHead.createEl('button', {
-				cls: 'sg-codex-phone-box',
-				attr: { type: 'button', 'aria-haspopup': 'menu', 'aria-label': t('codex.gallery.viewOptions') },
-			});
-			setPhosphorIcon(cog, 'gear', '⚙');
-			cog.addEventListener('click', () => {
-				const menu = new Menu();
-				menu.addItem((item) => item.setTitle(t('codex.gallery.cardView')).setIcon('layout-grid').setChecked(this.viewMode === 'tiles')
-					.onClick(() => { this.viewMode = 'tiles'; void this.renderAll(); }));
-				menu.addItem((item) => item.setTitle(t('codex.gallery.listView')).setIcon('list').setChecked(this.viewMode === 'list')
-					.onClick(() => { this.viewMode = 'list'; void this.renderAll(); }));
-				const r = cog.getBoundingClientRect();
-				menu.showAtPosition({ x: r.right, y: r.bottom + 4 });
-			});
-
-			const plus = sectionHead.createEl('button', {
-				cls: 'sg-codex-phone-box sg-codex-phone-box--primary',
-				attr: { type: 'button', 'aria-label': t('codex.gallery.newEntity', { singular: spec.singular }) },
-			});
-			setPhosphorIcon(plus, 'plus', '+');
-			plus.addEventListener('click', () => this.createEntity(project, this.activeKind));
+			// The Setups board has no card/list choice and one way to add (the add line
+			// below), so it shows neither the gear nor the +.
+			if (this.activeKind !== SETUP_KIND) this.renderPhoneHeadButtons(sectionHead, project, spec);
 
 			gallery.createEl('p', { cls: 'sg-codex-section-tagline sg-codex-section-tagline--phone', text: spec.tagline });
 		}
@@ -1271,6 +1416,16 @@ export class StorygridCodexView extends ItemView {
 		setPhosphorIcon(ni, 'plus', '+');
 		newBtn.createSpan({ text: t('codex.gallery.newEntity', { singular: spec.singular }) });
 		newBtn.addEventListener('click', () => this.createEntity(project, this.activeKind));
+
+		// Setups: the board (three stages) instead of a gallery.
+		if (this.activeKind === SETUP_KIND) {
+			viewToggle.hide();
+			const title = sectionHead.querySelector('h3');
+			if (title) renderSetupsExplainer(title, gallery);
+			this.renderQuickAdd(gallery, project);
+			void this.renderSetupsBoard(gallery.createDiv({ cls: 'sg-setup-board-host' }), project).catch(reportError);
+			return;
+		}
 
 		// Entities (filtered by search)
 		let entities = this.plugin.entityIndex.list(project.rootPath, this.activeKind);
@@ -1683,7 +1838,7 @@ export class StorygridCodexView extends ItemView {
 				e.stopPropagation();
 				runSafely(this.editEntity(entity));
 			});
-			card.addEventListener('click', () => this.showDetail(entity));
+			this.wireEntryOpen(card, entity);
 			card.addEventListener('contextmenu', (e) => {
 				e.preventDefault();
 				this.showEntityMenu(e, entity);
@@ -1724,7 +1879,7 @@ export class StorygridCodexView extends ItemView {
 			e.stopPropagation();
 			runSafely(this.editEntity(entity));
 		});
-		card.addEventListener('click', () => this.showDetail(entity));
+		this.wireEntryOpen(card, entity);
 		card.addEventListener('contextmenu', (e) => {
 			e.preventDefault();
 			this.showEntityMenu(e, entity);
@@ -1795,7 +1950,7 @@ export class StorygridCodexView extends ItemView {
 		});
 
 		// Interactions — open the rendered detail page inside the Codex
-		card.addEventListener('click', () => this.showDetail(entity));
+		this.wireEntryOpen(card, entity);
 		card.addEventListener('contextmenu', (e) => {
 			e.preventDefault();
 			this.showEntityMenu(e, entity);
@@ -1808,6 +1963,10 @@ export class StorygridCodexView extends ItemView {
 			.setTitle(t('codex.menu.open'))
 			.setIcon('file-text')
 			.onClick(() => this.showDetail(entity)));
+		menu.addItem((item) => item
+			.setTitle(t('codex.menu.openInNewTab'))
+			.setIcon('file-plus')
+			.onClick(() => this.openEntryInNewTab(entity)));
 		menu.addItem((item) => item
 			.setTitle(t('codex.menu.editSheet'))
 			.setIcon('pencil')
@@ -1887,20 +2046,7 @@ export class StorygridCodexView extends ItemView {
 	// ─── Entity creation ───────────────────────────────────────────────────────
 
 	private templatesForKind(kind: EntityKind): CharacterFieldTemplate[] {
-		const s = this.plugin.settings;
-		switch (kind) {
-			case 'character': return s.characterFieldTemplates;
-			case 'scene': return s.sceneFieldTemplates;
-			case 'location': return s.locationFieldTemplates;
-			case 'faction': return s.factionFieldTemplates;
-			case 'system': return s.systemFieldTemplates;
-			case 'item': return s.itemFieldTemplates;
-			case 'research': return s.researchFieldTemplates ?? (s.researchFieldTemplates = []);
-			default: {
-				const store = s.customKindFieldTemplates ?? (s.customKindFieldTemplates = {});
-				return store[kind] ?? (store[kind] = []);
-			}
-		}
+		return writableTemplatesFor(this.plugin.settings, kind);
 	}
 
 	/**
@@ -1909,94 +2055,55 @@ export class StorygridCodexView extends ItemView {
 	 * file is rewritten (and renamed, if the name changed) on save.
 	 */
 	private async editEntity(entity: EntityInfo): Promise<void> {
-		let content: string;
-		try {
-			content = await this.app.vault.read(entity.file);
-		} catch (err) {
-			new Notice(t('codex.notice.readFailed', { name: entity.name, msg: err instanceof Error ? err.message : '' }));
-			return;
-		}
-
-		const parsed = parseEntityDocument(content, entity.file.basename);
-		const kind = parsed.kind ?? entity.kind;
-		const merged = mergeWithSpecDefaults(kind, parsed.fields, parsed.cleanSlate);
-		// The modal edits these field objects in place (labels included), so what
-		// was on disk has to be remembered now — the save diffs against it to know
-		// which fields the writer deleted or relabeled.
-		const before = merged.map((f) => ({ id: f.id, label: f.label, type: f.type }));
-		// The file is renamed only when the writer changes the name here. A title
-		// and file name that already differ (a rename in Obsidian's file list, a
-		// clashing name) must never send the file back to the title.
-		const startName = parsed.name;
-
-		new EntityModal(
-			this.app,
-			kind,
-			startName,
-			merged,
-			async (name, fields, aliases) => {
-				const renamed = !!sheetFileName(name) && name.trim() !== startName.trim();
-				// Another sheet already has the new name: nothing is written, and the
-				// editor stays open with the writer's work so they can pick another.
-				if (renamed && sheetNameTaken(this.app, entity.file, name)) {
-					new Notice(t('codex.notice.nameTaken', { name: name.trim() }));
-					return;
-				}
-				try {
-					await updateEntitySheet(this.app, entity.file, {
-						kind,
-						name,
-						fields,
-						before,
-						entityId: parsed.entityId ?? undefined,
-						aliases,
-						staleKeys: parsed.ownedKeys,
-					});
-				} catch (err) {
-					// Nothing back: the sheet editor stays open with the writer's work.
-					new Notice(t('codex.notice.saveFailed', { kind, msg: err instanceof Error ? err.message : '' }));
-					return;
-				}
-				// The sheet is saved. From here a hiccup is reported, never a reason to save again.
-				try {
-					// The writer renamed the sheet in the editor: the file follows.
-					const newPath = sheetPathFor(entity.file, name);
-					if (renamed && newPath !== entity.file.path) {
-						if (!sheetNameTaken(this.app, entity.file, name)) {
-							const wasInDetail = this.detailPath === entity.file.path;
-							try {
-								await this.app.fileManager.renameFile(entity.file, newPath);
-							} catch (err) {
-								// The sheet is saved under its new title; only the file kept its
-								// old name. Say so plainly (the menu's Rename can try again).
-								new Notice(t('codex.notice.renameFailed', { msg: err instanceof Error ? err.message : '' }));
-							}
-							if (wasInDetail) this.detailPath = entity.file.path;
-						}
-					}
-					new Notice(t('codex.notice.entityUpdated', { singular: getKindSpec(kind).singular, name }));
-					void this.renderAll();
-				} catch (err) {
-					reportError(err);
-				}
-				// Renamed in place above, so this is the sheet as it is on disk now.
-				return entity.file;
+		// Reading the sheet, remembering it as it is on disk and writing it back
+		// are shared with every other place that edits a sheet (entities/sheet-edit).
+		const edit = await prepareSheetEdit(this.plugin, entity.file, {
+			fallbackKind: entity.kind,
+			displayName: entity.name,
+			projectRoot: this.projectRoot ?? undefined,
+			onSaved: (file, oldPath) => {
+				// Still showing this sheet after a rename: keep showing it at its new place.
+				if (this.detailPath === oldPath) this.detailPath = file.path;
+				void this.renderAll();
 			},
-			{
-				savedTemplates: this.templatesForKind(kind),
-				onSaveTemplate: (tpl) => {
-					this.templatesForKind(kind).push(tpl);
-					runSafely(this.plugin.saveSettings().then(() => { new Notice(t('codex.notice.templateSaved', { name: tpl.name })); }));
-				},
-				projectRoot: this.projectRoot ?? undefined,
-				initialAliases: parsed.aliases,
-				relationChoices: relationChoices(this.plugin.settings.customRelationshipTypes),
-				plugin: this.plugin,
-				fileBasename: entity.file.basename,
-				sheetPath: entity.file.path,
-				cleanSlate: parsed.cleanSlate,
-			}
-		).open();
+		});
+		if (!edit) return;
+		openSheetEditor(this.app, edit.kind, edit.startName, edit.fields, edit.save, edit.options);
+	}
+
+	/** The Setups board: every setup of the book, by stage, with chapters. */
+	private async renderSetupsBoard(host: HTMLElement, project: StoryProject): Promise<void> {
+		const gen = this._renderGen;
+		const lookups = await this.plugin.setupPlaces.lookups(project.rootPath);
+		if (gen !== this._renderGen || !host.isConnected) return;
+		const q = this.searchQuery.trim().toLowerCase();
+		const actions = this.plugin.setupActions;
+		const setups = this.plugin.entityIndex.list(project.rootPath, SETUP_KIND)
+			.filter((e) => !q || e.name.toLowerCase().includes(q))
+			.map((e) => {
+				const info = readSetup(this.app, e.file, e.name);
+				return {
+					file: e.file,
+					name: e.name,
+					description: setupDescription(this.app, e.file),
+					state: info.state,
+					later: info.later,
+					summary: summarizeSetup(info.marks, info.state, lookups),
+					movedFrom: actions.movedFrom(e.file.path, info.state),
+					arriving: actions.takeArrival(e.file.path, info.state),
+				};
+			});
+		renderSetupBoard(host, {
+			setups,
+			isPhone: Platform.isPhone,
+			noMatchText: q
+				? t('codex.gallery.emptySearch', { plural: getKindSpec(SETUP_KIND).plural.toLowerCase(), query: this.searchQuery.trim() })
+				: undefined,
+			openSheet: (sheet) => {
+				this.detailPath = sheet.path;
+				void this.renderAll();
+			},
+		});
 	}
 
 	/** Inline name-only quick-add row for dense `displayShape: 'row'` kinds. */
@@ -2004,6 +2111,9 @@ export class StorygridCodexView extends ItemView {
 		const kind = this.activeKind;
 		const spec = getKindSpec(kind);
 		const row = container.createDiv({ cls: 'sg-codex-quickadd' });
+		// On the Setups board the add line is the only way to add, so on a phone its
+		// button is the one filled button; elsewhere the + above stays the filled one.
+		if (kind === SETUP_KIND) row.addClass('is-only-add');
 		const input = row.createEl('input', {
 			cls: 'sg-codex-quickadd-input',
 			attr: { type: 'text', placeholder: t('codex.quickAdd.placeholder', { singular: spec.singular.toLowerCase() }) },
@@ -2034,7 +2144,9 @@ export class StorygridCodexView extends ItemView {
 	}
 
 	private createEntity(project: StoryProject, kind: EntityKind, parentName?: string): void {
-		new EntityModal(
+		// The editor is a tab: if the project folder is renamed meanwhile, the sheet goes where it is now.
+		const moveMark = pathMoveMark();
+		openSheetEditor(
 			this.app,
 			kind,
 			'',
@@ -2042,7 +2154,7 @@ export class StorygridCodexView extends ItemView {
 			async (name, fields, aliases, start) => {
 				let file: TFile;
 				try {
-					file = await createEntityFile(this.app, project.rootPath, kind, name, fields, aliases, start?.cleanSlate);
+					file = await createEntityFile(this.app, followPathMoves(project.rootPath, moveMark), kind, name, fields, aliases, start?.cleanSlate);
 				} catch (err) {
 					// Nothing back: the sheet editor stays open with the writer's work.
 					new Notice(t('codex.notice.createFailed', { kind, msg: err instanceof Error ? err.message : '' }));
@@ -2080,7 +2192,7 @@ export class StorygridCodexView extends ItemView {
 				relationChoices: relationChoices(this.plugin.settings.customRelationshipTypes),
 				plugin: this.plugin,
 			}
-		).open();
+		);
 	}
 }
 

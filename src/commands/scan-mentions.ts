@@ -6,6 +6,7 @@ import { getKindSpec } from '../entities/entity-kinds';
 import type { EntityKind } from '../entities/entity-kinds';
 import type StorygridPlugin from '../main';
 import { t } from '../i18n';
+import { processKeepingText } from '../utils/safe-process';
 
 // ── Context snippet ───────────────────────────────────────────────────────────
 
@@ -199,7 +200,7 @@ export class ScanMentionsModal extends Modal {
             // Spans were computed against originalText — if the note changed since
             // the scan (another tab, sync), applying them would corrupt it. Bail.
             let stale = false;
-            await this.app.vault.process(this.file, (current) => {
+            await processKeepingText(this.app, this.file, (current) => {
                 if (current !== this.originalText) {
                     stale = true;
                     return current;

@@ -9,6 +9,7 @@ import { App, TAbstractFile, TFile, TFolder } from 'obsidian';
 import type { MatchableEntity } from './references';
 import type { EntityIndex } from '../entities/entity-index-store';
 import { scopeToBook } from './project-scope';
+import { SETUP_KIND } from '../setups/setup-store';
 
 export class ReferenceIndex {
     /** Entity file path → stable storygrid-id */
@@ -89,6 +90,8 @@ export class ReferenceIndex {
         for (const entity of this.entityIndex.getAllEntities()) {
             if (!entity.entityId) continue;
             this.pathToId.set(entity.file.path, entity.entityId);
+            // A setup's name is a sentence, not a name to find in the prose.
+            if (entity.kind === SETUP_KIND) continue;
             this.matchable.set(
                 entity.entityId,
                 this.makeMatchable(entity.file, entity.entityId, entity.name),
@@ -132,7 +135,8 @@ export class ReferenceIndex {
                 this.entityScenes.delete(existingId);
             }
             this.pathToId.set(file.path, stampedId);
-            this.matchable.set(stampedId, this.makeMatchable(file, stampedId, file.basename));
+            if (fm?.['storygrid-type'] === SETUP_KIND) this.matchable.delete(stampedId);
+            else this.matchable.set(stampedId, this.makeMatchable(file, stampedId, file.basename));
         } else if (existingId) {
             // Was an entity, storygrid-id removed or file no longer an entity
             this.pathToId.delete(file.path);

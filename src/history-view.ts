@@ -9,9 +9,12 @@ import { getCodexKindOrder, getKindSpec } from './entities/entity-kinds';
 import { ensureDashboard } from './dashboard-view';
 import {
 	buildHistory, formatDayHeading, isoToLocalDay,
-	DayBucket, TaskDoneEvent, WordsEvent, SprintEvent, EntityCreatedEvent,
+	DayBucket, TaskDoneEvent, WordsEvent, SprintEvent, EntityCreatedEvent, TextChangeEvent,
 	EntityCreationRecord,
 } from './utils/history';
+import { cleanTextChanges, placesIn, TextChangeRecord } from './utils/text-changes';
+import { notesWord, placesWord, TEXT_CHANGES_EVENT } from './refs/alias-follow-service';
+import { reportError } from './utils/report-error';
 import { getLocale, hasKey, t } from './i18n';
 
 export const VIEW_TYPE_HISTORY = 'storygrid-history-view';
@@ -61,6 +64,11 @@ export class StorygridHistoryView extends ItemView {
 		plotverkEvents.addEventListener('storygrid:tasks-changed', taskHandler);
 		this.register(() => plotverkEvents.removeEventListener('storygrid:tasks-changed', taskHandler));
 
+		// A change to the text was recorded, undone or redone: its row and button follow.
+		const textHandler = () => void this.render();
+		plotverkEvents.addEventListener(TEXT_CHANGES_EVENT, textHandler);
+		this.register(() => plotverkEvents.removeEventListener(TEXT_CHANGES_EVENT, textHandler));
+
 		// Follow the globally active project
 		const projectHandler = () => void this.render();
 		plotverkEvents.addEventListener('storygrid:project-changed', projectHandler);
@@ -92,6 +100,23 @@ export class StorygridHistoryView extends ItemView {
 	}
 
 	// ── Data ─────────────────────────────────────────────────────────────────
+
+	/**
+	 * Text changes kept for this project, for a series it sits in (a series
+	 * Codex sheet) and for books inside it (a series showing its books'). The
+	 * vault-root key ('') matches only the vault-root project.
+	 */
+	private collectTextChanges(root: string): TextChangeRecord[] {
+		const out: TextChangeRecord[] = [];
+		const map = this.plugin.settings.dashboard?.textChanges ?? {};
+		for (const [key, list] of Object.entries(map)) {
+			const related = key === root
+				|| (root !== '' && key.startsWith(`${root}/`))
+				|| (key !== '' && root.startsWith(`${key}/`));
+			if (related) out.push(...cleanTextChanges(list));
+		}
+		return out;
+	}
 
 	private collectEntityCreations(root: string): EntityCreationRecord[] {
 		const records: EntityCreationRecord[] = [];
@@ -155,7 +180,9 @@ export class StorygridHistoryView extends ItemView {
 			.filter((s) => !s.projectRoot || s.projectRoot === project.rootPath);
 		const entityCreations = this.collectEntityCreations(project.rootPath);
 
-		const buckets = buildHistory({ todos, typedWords, sprints, entityCreations });
+		const textChanges = this.collectTextChanges(project.rootPath);
+
+		const buckets = buildHistory({ todos, typedWords, sprints, entityCreations, textChanges });
 
 		if (buckets.length === 0) {
 			const empty = body.createDiv({ cls: 'sg-history-empty' });
@@ -182,6 +209,7 @@ export class StorygridHistoryView extends ItemView {
 		const wordsEvents  = bucket.events.filter((e): e is WordsEvent         => e.type === 'words');
 		const entityEvents = bucket.events.filter((e): e is EntityCreatedEvent => e.type === 'entity-created');
 		const sprintEvents = bucket.events.filter((e): e is SprintEvent        => e.type === 'sprint');
+		const textEvents   = bucket.events.filter((e): e is TextChangeEvent    => e.type === 'text-change');
 
 		// Tasks
 		if (taskEvents.length === 1) {
@@ -231,12 +259,40 @@ export class StorygridHistoryView extends ItemView {
 			const totalMins  = sprintEvents.reduce((n, s) => n + s.minutes, 0);
 			this.renderEvent(events, 'timer', '⏱', t('history.event.sprintsMultiple', { count: sprintEvents.length, words: totalWords.toLocaleString(getLocale()), minutes: totalMins }));
 		}
+
+		// Changes to the text (newest first), each with its own Undo / Redo
+		for (const e of [...textEvents].reverse()) this.renderTextChange(events, e.record);
 	}
 
-	private renderEvent(parent: HTMLElement, icon: string, fallback: string, text: string): void {
+	private renderEvent(parent: HTMLElement, icon: string, fallback: string, text: string): HTMLElement {
 		const row = parent.createDiv({ cls: 'sg-history-event' });
 		const iconEl = row.createDiv({ cls: 'sg-history-event-icon' });
 		setPhosphorIcon(iconEl, icon, fallback);
 		row.createDiv({ cls: 'sg-history-event-text', text });
+		return row;
+	}
+
+	/** "Dad" → "Papa" in the text (14 places in 6 notes) · Undo — or, once undone, · Redo. */
+	private renderTextChange(parent: HTMLElement, record: TextChangeRecord): void {
+		const applied = record.state === 'applied';
+		const vars = {
+			from: record.from, to: record.to, name: record.sheetName,
+			places: placesWord(placesIn(record)), notes: notesWord(record.files.length),
+		};
+		const row = this.renderEvent(parent, 'pencil', '✎',
+			applied ? t('history.event.aliasChange', vars) : t('history.event.aliasChange.undone', vars));
+		row.addClass('sg-history-event--text-change');
+		if (!applied) row.addClass('is-undone');
+		const btn = row.createEl('button', {
+			cls: 'sg-history-event-action',
+			text: applied ? t('aliasFollow.undo') : t('aliasFollow.redo'),
+		});
+		btn.setAttr('aria-label', applied ? t('history.event.aliasChange.undoAria', vars) : t('history.event.aliasChange.redoAria', vars));
+		btn.addEventListener('click', () => {
+			btn.disabled = true;
+			this.plugin.aliasFollow.replay(record.id, applied ? 'undo' : 'redo')
+				.catch(reportError)
+				.finally(() => { btn.disabled = false; });
+		});
 	}
 }

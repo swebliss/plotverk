@@ -1,5 +1,5 @@
 import { plotverkEvents } from './utils/plotverk-events';
-import { Plugin, WorkspaceLeaf, TFile, TFolder, TAbstractFile, Notice, setIcon, addIcon, Menu, FuzzySuggestModal, FuzzyMatch, MarkdownView, App, Platform, editorInfoField } from 'obsidian';
+import { Plugin, WorkspaceLeaf, PaneType, TFile, TFolder, TAbstractFile, Notice, setIcon, addIcon, Menu, FuzzySuggestModal, FuzzyMatch, MarkdownView, App, Platform, editorInfoField } from 'obsidian';
 import { EditorView } from '@codemirror/view';
 import { openOrReveal } from './utils/workspace';
 import { reportError, runSafely } from './utils/report-error';
@@ -18,14 +18,14 @@ import { buildIgnoreSet } from './prose/tokenize';
 import { ProseFinding } from './prose/types';
 import { canUse } from './entitlements/entitlements';
 import { StorygridView, VIEW_TYPE_STORYGRID } from './grid-view';
-import { StorygridCodexView, VIEW_TYPE_CODEX } from './codex-view';
+import { CodexOrigin, StorygridCodexView, VIEW_TYPE_CODEX } from './codex-view';
 import { StorygridOutlineView, VIEW_TYPE_OUTLINE } from './outline-view';
 import { WelcomeView, VIEW_TYPE_WELCOME } from './welcome-view';
 import { IntentView, VIEW_TYPE_INTENT } from './intent-view';
 import { StorygridDashboardView, VIEW_TYPE_DASHBOARD, ensureDashboard } from './dashboard-view';
 import { liveViews, loadedView, leafStateString } from './utils/live-views';
 import { writeProjectMirror, syncProjectMirrors, scheduleProjectMirror, flushProjectMirrors, rekeyScheduledMirrors, holdProjectMirrors, releaseProjectMirrors } from './utils/project-data-store';
-import { announcePathMove, applyPathMove, gridRootMove, movedRoot, rebasePath, widenUnseenMove, type PathMove } from './utils/project-move';
+import { announcePathMove, applyPathMove, onPathMove, gridRootMove, movedRoot, rebasePath, widenUnseenMove, type PathMove } from './utils/project-move';
 import { loadSampleStory } from './sample/load-sample';
 import { isSafetyNetPath, wasSafetyNetPath } from './utils/safety-paths';
 import { migrateSafetyFolders } from './utils/safety-folder';
@@ -56,6 +56,7 @@ import { isModuleEnabled, migrateEnabledModules, LEGACY_INTENT_MAP, type ModuleI
 import { StorygridSettingsTab } from './settings/settings-tab';
 import { NewGridModal } from './modals/new-grid-modal';
 import { registerEntityModalPlugin } from './modals/entity-modal';
+import { SheetEditorView, VIEW_TYPE_SHEET_EDITOR, closeLeftoverSheetTabs, followMoveInUnopenedSheetTabs, setSheetEditorUnloading } from './sheet-editor-view';
 import { GridScopeModal, wizardText } from './modals/grid-scope-modal';
 import { GridPickerModal } from './modals/grid-picker-modal';
 import { getTemplateById, guideColumnLabel } from './templates/story-templates';
@@ -78,11 +79,27 @@ import { DEFAULT_SETTINGS } from './default-settings';
 import { mergeSettings } from './utils/settings-merge';
 import { RelationSync } from './relation-sync';
 import { resetFirstTimeTips } from './utils/first-time-tips';
+import { processKeepingText } from './utils/safe-process';
+import { isFromNewerPlotverk } from './utils/write-guard';
+import { SetupIndex } from './setups/setup-index';
+import { AliasFollow } from './refs/alias-follow-service';
+import { hiddenSetupTags } from './setups/hide-tags';
+import { SetupActions } from './setups/setup-actions';
+import { SetupPlaces } from './setups/setup-places';
+import { SETUP_KIND } from './setups/setup-store';
 
 export default class StorygridPlugin extends Plugin {
 	settings: StorygridSettings = mergeSettings(DEFAULT_SETTINGS, null);
 	/** Shared in-memory entity index (built off metadataCache, patched on events). */
 	entityIndex!: EntityIndex;
+	/** Where every setup tag (`^pv-…`) sits — see setups/setup-index.ts. */
+	setupIndex!: SetupIndex;
+	/** An alias renamed on a sheet → offer to change it in the linked text (with Undo / Redo in Activity). */
+	aliasFollow!: AliasFollow;
+	/** Plant / Remind / Pay off — see setups/setup-actions.ts. */
+	setupActions!: SetupActions;
+	/** Chapters for setup marks — see setups/setup-places.ts. */
+	setupPlaces!: SetupPlaces;
 	/** Reference index: entity MatchableEntity list + bidirectional wikilink map. */
 	referenceIndex!: ReferenceIndex;
 	/** Keeps relationship lines two-sided when sheets change outside the sheet editor. */
@@ -132,11 +149,19 @@ export default class StorygridPlugin extends Plugin {
 	private sprintCompletionData: { wordsWritten: number; elapsedMs: number } | null = null;
 	private sprintInterval: number | null = null;
 	private _activeFilePath: string | null = null;
+	/** The Codex tab the writer used last — the Codex button brings this one back. */
+	private _lastCodexLeaf: WorkspaceLeaf | null = null;
+	/** Set while openCodex is making a brand-new Codex tab, so a double-click doesn't make two. */
+	private _codexOpening: Promise<WorkspaceLeaf> | null = null;
 	/** Last applied extension state — skip the expensive editor reconfigure when unchanged */
 	private _twLastKey: string | null = null;
 	/** filePath → last seen word count, for typed-word delta tracking */
 	private wordBaselines: Map<string, number> = new Map();
 	private typedWordsTimer: number | null = null;
+	/** Word counts reach disk a few seconds after typing stops — see scheduleTypedWordsSave. */
+	private typedWordsSaveTimer: number | null = null;
+	/** When the oldest unsaved word count started waiting (caps the wait at 30 seconds). */
+	private typedWordsWaitingSince = 0;
 	private wordCountTimer: number | null = null;
 	private pendingTypedFile: { path: string; root: string; text: string } | null = null;
 	/** `${scenePath}|${localDay}` keys already checked for a daily snapshot this session. */
@@ -179,10 +204,11 @@ export default class StorygridPlugin extends Plugin {
 	 * the Codex, Writers Panel, and Dashboard headers so no view can drift out of sync with the
 	 * others or with Settings → Quick-links. Pass `gridFile` when the caller already knows which
 	 * grid belongs to the current project; omitted, it falls back to resolving the active book
-	 * (or the picker).
+	 * (or the picker). `omit` leaves out shortcuts that would open the view the row
+	 * already sits in (the Codex leaves out "Open Codex").
 	 */
-	renderQuickLaunchRow(container: HTMLElement, where: 'top' | 'panel', gridFile?: TFile): void {
-		const show = (key: QuickLinkKey) => this.quickLinkVisible(key, where);
+	renderQuickLaunchRow(container: HTMLElement, where: 'top' | 'panel', gridFile?: TFile, omit: readonly QuickLinkKey[] = []): void {
+		const show = (key: QuickLinkKey) => !omit.includes(key) && this.quickLinkVisible(key, where);
 		const defs: Array<{ key: QuickLinkKey; icon: string; fallback: string; label: string; onClick: () => void }> = [
 			{ key: 'connectionsMap', icon: CONNECTIONS_MAP_ICON, fallback: '⬡', label: 'Open Social Maps', onClick: () => void this.openSocialMaps() },
 			{ key: 'dashboard', icon: DASHBOARD_ICON, fallback: '▦', label: 'Open Dashboard', onClick: () => void this.openDashboard() },
@@ -287,7 +313,7 @@ export default class StorygridPlugin extends Plugin {
 		// Every sheet pop-up remembers "template or clean slate" through this.
 		registerEntityModalPlugin(this);
 		this.sprintLastMinutes = this.getDefaultSprintMinutes();
-		this.applyCodexSheetClasses();
+		this.startStep(t('safety.part.sheetStyle'), () => this.applyCodexSheetClasses());
 		this.mainBody.addClass('sg-plugin-active');
 		// The language as a class, for the few places where longer Spanish/French words need more room.
 		this.mainBody.addClass(`sg-lang-${getLocale()}`);
@@ -316,6 +342,14 @@ export default class StorygridPlugin extends Plugin {
 			rootFor: (path) => this.entityIndex.rootFor(path),
 		});
 		this.referenceIndex = new ReferenceIndex(this.app, this.entityIndex);
+		this.setupIndex = new SetupIndex(this.app, isSafetyNetPath);
+		this.aliasFollow = new AliasFollow(this);
+		this.register(() => this.aliasFollow.dispose());
+		// Setup tags are invisible while writing and cannot be cut up by typing.
+		this.registerEditorExtension(hiddenSetupTags());
+		this.setupPlaces = new SetupPlaces(this.app, () => this.settings, this.setupIndex, this.referenceIndex);
+		this.setupActions = new SetupActions(this);
+		this.setupActions.register();
 		this.relationSync = new RelationSync(this);
 		this.app.workspace.onLayoutReady(() => {
 			// Data copies first: a series moved while Obsidian was closed gets its
@@ -330,13 +364,24 @@ export default class StorygridPlugin extends Plugin {
 					await this.pruneDeadSeries();
 				}
 			})());
-			this.entityIndex.rebuild();
+			// Each part starts on its own: one failing never stops the others.
+			this.startStep(t('safety.part.codexIndex'), () => this.entityIndex.rebuild());
 			// Codex names are known now: re-read open editors so names are never marked.
-			this.refreshCoachMode();
-			this.relationSync.start();
-			this.referenceIndex.rebuild();
+			this.startStep(t('safety.part.writingCoach'), () => this.refreshCoachMode());
+			this.startStep(t('safety.part.relationships'), () => this.relationSync.start());
+			this.startStep(t('safety.part.mentions'), () => this.referenceIndex.rebuild());
+			this.startStep(t('safety.part.mentions'), () => this.aliasFollow.seed());
 			void this.buildManuscriptWordCache();
 			void this.stampMissingEntityIds();
+		});
+		// Waiting word counts are written before Obsidian quits or the phone app goes to the background.
+		// Obsidian waits for the quit save only when it is handed over as a task.
+		this.registerEvent(this.app.workspace.on('quit', (tasks) => {
+			tasks.addPromise(this.flushTypedWordsSave().catch(reportError));
+		}));
+		const mainDoc = this.app.workspace.containerEl.doc;
+		this.registerDomEvent(mainDoc, 'visibilitychange', () => {
+			if (mainDoc.visibilityState === 'hidden') runSafely(this.flushTypedWordsSave());
 		});
 		// Safety-folder writes (backups, snapshots, the data copy) are Plotverk's own
 		// bookkeeping: none of them is an entity, a scene or a grid, so skip the indexes.
@@ -350,6 +395,8 @@ export default class StorygridPlugin extends Plugin {
 			if (isSafetyNetPath(f.path)) return;
 			this.entityIndex.handleDelete(f);
 			this.referenceIndex.handleDelete(f);
+			this.setupIndex.handleDelete(f);
+			this.aliasFollow.forget(f.path);
 			this._coachIgnore = null;
 			this._coachNames = null;
 			if (this.settings.proseCoach && forgetDismissedPath(this.settings.proseCoach, f.path)) void this.saveSettingsQuiet();
@@ -363,6 +410,8 @@ export default class StorygridPlugin extends Plugin {
 			this._coachIgnore = null;
 			this._coachNames = null;
 			this.referenceIndex.handleRename(f, oldPath);
+			this.setupIndex.handleRename(f, oldPath);
+			if (f instanceof TFile) this.aliasFollow.handleRename(f, oldPath);
 			const prev = this.manuscriptWordCache.get(oldPath);
 			this.manuscriptWordCache.delete(oldPath);
 			if (prev !== undefined && this.isSceneFile(f.path)) {
@@ -377,7 +426,7 @@ export default class StorygridPlugin extends Plugin {
 					// Read first: nothing is written when the title stays as it is.
 					runSafely((async () => {
 						if (retitleAfterFileRename(await this.app.vault.cachedRead(f), oldBasename, f.basename) === null) return;
-						await this.app.vault.process(f, (content) =>
+						await processKeepingText(this.app, f, (content) =>
 							retitleAfterFileRename(content, oldBasename, f.basename) ?? content);
 					})());
 				}
@@ -388,6 +437,8 @@ export default class StorygridPlugin extends Plugin {
 			this.entityIndex.handleChange(f);
 			this.coachOnMetadataChanged(f);
 			this.referenceIndex.handleChange(f);
+			this.setupIndex.handleChange(f);
+			this.aliasFollow.handleChange(f);
 			if (this.isSceneFile(f.path)) {
 				void this.app.vault.cachedRead(f).then((text) => {
 					this.manuscriptWordCache.set(f.path, countWords(text));
@@ -444,6 +495,11 @@ export default class StorygridPlugin extends Plugin {
 		// Register the Story Timeline (plotline lanes, calendar-aware) and the .timeline file extension
 		this.registerView(VIEW_TYPE_TIMELINE, (leaf) => new TimelineView(leaf, this));
 		this.registerExtensions(['timeline'], VIEW_TYPE_TIMELINE);
+
+		// The sheet editor as its own tab on desktop (phones keep the pop-up)
+		this.registerView(VIEW_TYPE_SHEET_EDITOR, (leaf) => new SheetEditorView(leaf, this));
+		this.app.workspace.onLayoutReady(() => closeLeftoverSheetTabs(this.app));
+		this.register(onPathMove((move) => followMoveInUnopenedSheetTabs(this.app, move)));
 
 		// One ribbon button for the whole plugin — everything else lives in
 		// this hub menu (and in commands) so Plotverk doesn't sprawl across
@@ -503,88 +559,13 @@ export default class StorygridPlugin extends Plugin {
 		// Typewriter mode is toggled from the hub menu, the status bar switch,
 		// or the command — no dedicated ribbon icon anymore.
 
-		// Typewriter mode — editor extension container, status bar switch, command
-		this.registerEditorExtension(this.typewriterExtensions);
-		this.coachCard = new CoachCard({
-			isPro: () => canUse('prose-coach'),
-			notHere: (view, f) => {
-				const file = view.state.field(editorInfoField, false)?.file;
-				if (file) void this.coachNotHere(file.path, f);
-			},
-			never: (f) => { void this.coachNever(f); },
-		});
-		this.coachExtensions.push(
-			coachHighlights({
-				contextFor: (view) => {
-					const file = view.state.field(editorInfoField, false)?.file ?? null;
-					if (!this.coachMarksOn(file, () => view.state.doc.toString())) return null;
-					return file instanceof TFile ? this.coachScanOptions(file.path) : null;
-				},
-				showCard: (view, f, group, rect, viaTap) => this.coachCard?.show(view, f, group, rect, viaTap),
-				leaveMark: () => this.coachCard?.leaveMark(),
-				isMobile: () => Platform.isMobile,
-			}),
-			coachChangeNotifier()
-		);
-		this.registerEditorExtension(this.coachExtensions);
-		if (!Platform.isMobile) {
-			this.coachStatusEl = this.addStatusBarItem();
-			this.coachStatusEl.addClass('mod-clickable', 'sg-status-coach');
-			this.coachStatusEl.setAttribute('aria-label', t('coach.statusChipAria'));
-			this.registerDomEvent(this.coachStatusEl, 'click', (e) => this.showCoachModeMenu(e));
-			this.updateCoachChip();
-		}
-		// A sprint switches marks off while it runs, and back on after.
-		const onSprintChanged = () => this.refreshCoachMode();
-		plotverkEvents.addEventListener('storygrid:sprint-changed', onSprintChanged);
-		this.register(() => plotverkEvents.removeEventListener('storygrid:sprint-changed', onSprintChanged));
-		this.typewriterStatusEl = this.addStatusBarItem();
-		this.typewriterStatusEl.addClass('sg-status-typewriter', 'mod-clickable');
-		setIcon(this.typewriterStatusEl, 'keyboard');
-		this.typewriterStatusEl.addEventListener('click', () => {
-			if (this.typewriterStatusEl) showTypewriterPopover(this.typewriterStatusEl, this);
-		});
+		// The writing tools (typewriter, Writing Coach, status bar chips) start on their own:
+		// if they fail, the views, commands and settings below still load.
+		this.startStep(t('safety.part.writingTools'), () => this.startWritingTools());
 
-		// Write-mode chip — sits next to the typewriter chip in the status bar.
-		// A plain on/off toggle exactly like the typewriter chip's command, not
-		// a menu (Plan/Review modes were removed — Write is the only one left).
-		this.modeStatusEl = this.addStatusBarItem();
-		this.modeStatusEl.addClass('sg-status-mode', 'mod-clickable');
-		this.modeStatusEl.addEventListener('click', () => void toggleWriteMode(this));
-		// Word count status bar chip — shows live word count of the open scene
-		this.wordCountStatusEl = this.addStatusBarItem();
-		this.wordCountStatusEl.addClass('sg-status-wordcount');
-		this.wordCountStatusEl.hide();
-
-		// Sprint countdown chip — visible only during an active sprint
-		this.sprintEl = this.addStatusBarItem();
-		this.sprintEl.addClass('sg-status-sprint', 'mod-clickable');
-		this.sprintEl.hide();
-		this.sprintEl.setAttribute('aria-label', 'Writing sprint — click for options');
-		this.sprintEl.addEventListener('click', (e) => {
-			const menu = new Menu();
-			if (this.sprintStartAt !== null) {
-				const words = Math.max(0, this.getTodayTypedWords() - this.sprintStartWords);
-				menu.addItem((it) =>
-					it.setTitle(`Stop sprint (${words.toLocaleString()} words so far)`)
-						.setIcon('square')
-						.onClick(() => this.endSprint(true))
-				);
-				menu.addItem((it) =>
-					it.setTitle('Cancel (no summary)')
-						.setIcon('x')
-						.onClick(() => this.endSprint(false))
-				);
-			} else {
-				const def = this.getDefaultSprintMinutes();
-				menu.addItem((it) => it.setTitle(`Start ${def}-min sprint`).onClick(() => this.startSprint(def)));
-			}
-			menu.showAtMouseEvent(e);
-		});
-
-		this.refreshModeChip();
-		this.registerEvent(this.app.workspace.on('active-leaf-change', () => {
+		this.registerEvent(this.app.workspace.on('active-leaf-change', (leaf) => {
 			this._activeFilePath = this.app.workspace.getActiveFile()?.path ?? null;
+			if (leaf?.view.getViewType() === VIEW_TYPE_CODEX) this._lastCodexLeaf = leaf;
 			// Clicking a Plot Grid tab makes its story the current one, so the
 			// Codex (and every other "open" button) follows the grid in front of
 			// the writer, not the grid that happened to be opened last.
@@ -788,7 +769,7 @@ export default class StorygridPlugin extends Plugin {
 			// Re-apply any persisted writing mode body class (no nav side-effects on restart)
 			if (this.settings.writingMode) {
 				this.mainBody.classList.add(`sg-mode-${this.settings.writingMode}`);
-				this.refreshModeChip();
+				this.startStep(t('safety.part.writingTools'), () => this.refreshModeChip());
 			}
 			// The Writers Panel is ALWAYS present when the plugin is on: it is
 			// the plugin's home base, not an optional
@@ -797,13 +778,109 @@ export default class StorygridPlugin extends Plugin {
 			// vault — one where the intent chooser had not been answered yet —
 			// opened with no panel at all and no obvious way to find one. A new
 			// user's first impression must not be an empty sidebar.
-			this.dedupeWritersPanels();
-			if (this.isModuleOn('writersPanel') && !this.app.workspace.getLeavesOfType(VIEW_TYPE_OUTLINE).length) {
-				void this.openOutline().then(() => this._injectSidebarTabButtons());
-			} else {
-				this._injectSidebarTabButtons();
-			}
+			this.startStep(t('safety.part.writersPanel'), () => {
+				this.dedupeWritersPanels();
+				if (this.isModuleOn('writersPanel') && !this.app.workspace.getLeavesOfType(VIEW_TYPE_OUTLINE).length) {
+					runSafely(this.openOutline().then(() => this._injectSidebarTabButtons()));
+				} else {
+					this._injectSidebarTabButtons();
+				}
+			});
 		});
+	}
+
+	/** Typewriter mode, the Writing Coach and the status bar chips. Started on its own (see startStep). */
+	private startWritingTools(): void {
+		this.registerEditorExtension(this.typewriterExtensions);
+		this.coachCard = new CoachCard({
+			isPro: () => canUse('prose-coach'),
+			notHere: (view, f) => {
+				const file = view.state.field(editorInfoField, false)?.file;
+				if (file) void this.coachNotHere(file.path, f);
+			},
+			never: (f) => { void this.coachNever(f); },
+		});
+		this.coachExtensions.push(
+			coachHighlights({
+				contextFor: (view) => {
+					const file = view.state.field(editorInfoField, false)?.file ?? null;
+					if (!this.coachMarksOn(file, () => view.state.doc.toString())) return null;
+					return file instanceof TFile ? this.coachScanOptions(file.path) : null;
+				},
+				showCard: (view, f, group, rect, viaTap) => this.coachCard?.show(view, f, group, rect, viaTap),
+				leaveMark: () => this.coachCard?.leaveMark(),
+				isMobile: () => Platform.isMobile,
+			}),
+			coachChangeNotifier()
+		);
+		this.registerEditorExtension(this.coachExtensions);
+		if (!Platform.isMobile) {
+			this.coachStatusEl = this.addStatusBarItem();
+			this.coachStatusEl.addClass('mod-clickable', 'sg-status-coach');
+			this.coachStatusEl.setAttribute('aria-label', t('coach.statusChipAria'));
+			this.registerDomEvent(this.coachStatusEl, 'click', (e) => this.showCoachModeMenu(e));
+			this.updateCoachChip();
+		}
+		// A sprint switches marks off while it runs, and back on after.
+		const onSprintChanged = () => this.refreshCoachMode();
+		plotverkEvents.addEventListener('storygrid:sprint-changed', onSprintChanged);
+		this.register(() => plotverkEvents.removeEventListener('storygrid:sprint-changed', onSprintChanged));
+		this.typewriterStatusEl = this.addStatusBarItem();
+		this.typewriterStatusEl.addClass('sg-status-typewriter', 'mod-clickable');
+		setIcon(this.typewriterStatusEl, 'keyboard');
+		this.typewriterStatusEl.addEventListener('click', () => {
+			if (this.typewriterStatusEl) showTypewriterPopover(this.typewriterStatusEl, this);
+		});
+
+		// Write-mode chip — sits next to the typewriter chip in the status bar.
+		// A plain on/off toggle exactly like the typewriter chip's command, not
+		// a menu (Plan/Review modes were removed — Write is the only one left).
+		this.modeStatusEl = this.addStatusBarItem();
+		this.modeStatusEl.addClass('sg-status-mode', 'mod-clickable');
+		this.modeStatusEl.addEventListener('click', () => void toggleWriteMode(this));
+		// Word count status bar chip — shows live word count of the open scene
+		this.wordCountStatusEl = this.addStatusBarItem();
+		this.wordCountStatusEl.addClass('sg-status-wordcount');
+		this.wordCountStatusEl.hide();
+
+		// Sprint countdown chip — visible only during an active sprint
+		this.sprintEl = this.addStatusBarItem();
+		this.sprintEl.addClass('sg-status-sprint', 'mod-clickable');
+		this.sprintEl.hide();
+		this.sprintEl.setAttribute('aria-label', 'Writing sprint — click for options');
+		this.sprintEl.addEventListener('click', (e) => {
+			const menu = new Menu();
+			if (this.sprintStartAt !== null) {
+				const words = Math.max(0, this.getTodayTypedWords() - this.sprintStartWords);
+				menu.addItem((it) =>
+					it.setTitle(`Stop sprint (${words.toLocaleString()} words so far)`)
+						.setIcon('square')
+						.onClick(() => this.endSprint(true))
+				);
+				menu.addItem((it) =>
+					it.setTitle('Cancel (no summary)')
+						.setIcon('x')
+						.onClick(() => this.endSprint(false))
+				);
+			} else {
+				const def = this.getDefaultSprintMinutes();
+				menu.addItem((it) => it.setTitle(`Start ${def}-min sprint`).onClick(() => this.startSprint(def)));
+			}
+			menu.showAtMouseEvent(e);
+		});
+
+		this.refreshModeChip();
+	}
+
+	/** Startup: one part failing never stops the rest of Plotverk from starting, and the writer is told which part. */
+	private startStep(part: string, step: () => void): void {
+		try {
+			step();
+		} catch (err) {
+			console.error(`Plotverk: ${part} did not start`, err);
+			const msg = err instanceof Error ? err.message : String(err);
+			new Notice(t('safety.startupPartFailed', { part, msg }), 15000);
+		}
 	}
 
 	/** Flip typewriter mode, persist quietly, and apply to all editors. */
@@ -963,12 +1040,13 @@ export default class StorygridPlugin extends Plugin {
 		if (prev !== status && resolveCoachMode(this.settings.proseCoach) === 'revising') this.scheduleCoachRefresh();
 	}
 
-	/** Codex names + aliases (scenes excluded) + the "never" list, as normalizeWord keys. */
+	/** Codex names + aliases (scenes and setups excluded) + the "never" list, as normalizeWord keys. */
 	coachIgnoreSet(): Set<string> {
 		if (this._coachIgnore) return this._coachIgnore;
 		const names: string[] = [];
 		for (const e of this.entityIndex?.getAllEntities() ?? []) {
-			if (e.kind === 'scene') continue;
+			// Setup names are sentences ("She was really just tired"), not names.
+			if (e.kind === 'scene' || e.kind === SETUP_KIND) continue;
 			names.push(...this.codexNamesOf(e));
 		}
 		// Multi-word entries ("in order to") are Pro phrases, not words: splitting
@@ -983,10 +1061,10 @@ export default class StorygridPlugin extends Plugin {
 	 * name-spelling check — another book's names are not this book's slips.
 	 * The book = the deepest folder above the scene that holds Codex entries
 	 * (a series Codex further up counts when the book has none of its own).
-	 * Not scenes, events or research notes: their titles are sentences, not names.
+	 * Not scenes, events, research notes or setups: their titles are sentences, not names.
 	 */
 	coachCodexNames(scenePath: string): string[] {
-		const skip = new Set(['scene', 'event', 'research']);
+		const skip = new Set(['scene', 'event', 'research', SETUP_KIND]);
 		if (!this._coachNames) {
 			this._coachNames = (this.entityIndex?.getAllEntities() ?? [])
 				.filter((e) => !skip.has(e.kind))
@@ -1433,6 +1511,8 @@ export default class StorygridPlugin extends Plugin {
 	}
 
 	onunload(): void {
+		// Sheet editor tabs close with the plugin: no rescue pop-ups on the way out.
+		setSheetEditorUnloading(true);
 		this.coachCard?.hide();
 		if (this._coachRefreshTimer !== null) window.clearTimeout(this._coachRefreshTimer);
 		this._coachRefreshTimer = null;
@@ -1442,7 +1522,7 @@ export default class StorygridPlugin extends Plugin {
 		this.mainBody.style.removeProperty('--sg-tw-line-pos');
 		this._leafHeaderBtn?.remove();
 		this._removeFocusHUD();
-		if (this.typedWordsTimer !== null) window.clearTimeout(this.typedWordsTimer);
+		runSafely(this.flushTypedWordsSave());
 		if (this.wordCountTimer !== null) window.clearTimeout(this.wordCountTimer);
 		if (this.sprintInterval !== null) window.clearInterval(this.sprintInterval);
 		flushProjectMirrors();
@@ -1867,51 +1947,88 @@ export default class StorygridPlugin extends Plugin {
 		this.pendingTypedFile = { path: file.path, root, text };
 		if (this.typedWordsTimer !== null) window.clearTimeout(this.typedWordsTimer);
 		this.typedWordsTimer = window.setTimeout(() => { // 300ms: responsive but not per-keystroke
-			const pending = this.pendingTypedFile;
-			this.pendingTypedFile = null;
-			if (!pending) return;
-			void ensureDailySnapshot(this.app, pending.path, pending.text, this.seenDailySnapshots);
-			const count = countWords(pending.text);
-			const baseline = this.wordBaselines.get(pending.path);
-			this.wordBaselines.set(pending.path, count);
-			if (baseline === undefined) return; // first sample only sets the baseline
-			const delta = count - baseline;
-			const dash = ensureDashboard(this.settings);
-			const today = dayKey(new Date());
-			// Ignore large jumps in either direction — these are pastes or bulk cuts (moving text).
-			// Normal typing/deleting (within the threshold) counts fully: additions add, deletions subtract.
-			const pasteThreshold = this.settings.pasteWordThreshold ?? 80;
-			if (Math.abs(delta) > pasteThreshold) {
-				if (delta > 0) {
-					const skipped = (dash.skippedWords ??= {});
-					const skippedHistory = (skipped[pending.root] ??= {});
-					skippedHistory[today] = (skippedHistory[today] ?? 0) + delta;
-					void this.saveData(this.settings);
-					scheduleProjectMirror(this.app, pending.root, dash);
-				}
-				return;
-			}
-			if (delta === 0) return;
-			const history = (dash.typedWords[pending.root] ??= {});
-			// Floor at 0 so the daily total never goes negative
-			history[today] = Math.max(0, (history[today] ?? 0) + delta);
-			plotverkEvents.dispatchEvent(new CustomEvent('storygrid:words-changed'));
-
-			// Update streak for this project
-			const streaks = (dash.streaks ??= {});
-			const s = (streaks[pending.root] ??= { current: 0, longest: 0, lastDate: '' });
-			if (s.lastDate !== today) {
-				// Local-calendar subtraction: `now - 24h` lands on the wrong day across a DST change.
-				const now = new Date();
-				const yesterday = dayKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1));
-				s.current = s.lastDate === yesterday ? s.current + 1 : 1;
-				s.longest = Math.max(s.longest, s.current);
-				s.lastDate = today;
-			}
-
-			void this.saveData(this.settings); // quiet save — no settings-changed event
-			scheduleProjectMirror(this.app, pending.root, dash);
+			this.typedWordsTimer = null;
+			this.countTypedWords();
 		}, 300);
+	}
+
+	/** Turn the waiting typing into today's word count (runs after a short pause, or right away before a flush). */
+	private countTypedWords(): void {
+		const pending = this.pendingTypedFile;
+		this.pendingTypedFile = null;
+		if (!pending) return;
+		void ensureDailySnapshot(this.app, pending.path, pending.text, this.seenDailySnapshots);
+		const count = countWords(pending.text);
+		const baseline = this.wordBaselines.get(pending.path);
+		this.wordBaselines.set(pending.path, count);
+		if (baseline === undefined) return; // first sample only sets the baseline
+		const delta = count - baseline;
+		const dash = ensureDashboard(this.settings);
+		const today = dayKey(new Date());
+		// Ignore large jumps in either direction — these are pastes or bulk cuts (moving text).
+		// Normal typing/deleting (within the threshold) counts fully: additions add, deletions subtract.
+		const pasteThreshold = this.settings.pasteWordThreshold ?? 80;
+		if (Math.abs(delta) > pasteThreshold) {
+			if (delta > 0) {
+				const skipped = (dash.skippedWords ??= {});
+				const skippedHistory = (skipped[pending.root] ??= {});
+				skippedHistory[today] = (skippedHistory[today] ?? 0) + delta;
+				this.scheduleTypedWordsSave();
+				scheduleProjectMirror(this.app, pending.root, dash);
+			}
+			return;
+		}
+		if (delta === 0) return;
+		const history = (dash.typedWords[pending.root] ??= {});
+		// Floor at 0 so the daily total never goes negative
+		history[today] = Math.max(0, (history[today] ?? 0) + delta);
+		plotverkEvents.dispatchEvent(new CustomEvent('storygrid:words-changed'));
+
+		// Update streak for this project
+		const streaks = (dash.streaks ??= {});
+		const s = (streaks[pending.root] ??= { current: 0, longest: 0, lastDate: '' });
+		if (s.lastDate !== today) {
+			// Local-calendar subtraction: `now - 24h` lands on the wrong day across a DST change.
+			const now = new Date();
+			const yesterday = dayKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1));
+			s.current = s.lastDate === yesterday ? s.current + 1 : 1;
+			s.longest = Math.max(s.longest, s.current);
+			s.lastDate = today;
+		}
+
+		this.scheduleTypedWordsSave(); // quiet save — no settings-changed event
+		scheduleProjectMirror(this.app, pending.root, dash);
+	}
+
+	/**
+	 * Counts update on screen after every short pause, but reach disk only once
+	 * typing has stopped for a few seconds: saving on every pause could slow typing
+	 * and gave Sync a new settings file every few keystrokes.
+	 */
+	private scheduleTypedWordsSave(): void {
+		const now = Date.now();
+		if (this.typedWordsSaveTimer === null) this.typedWordsWaitingSince = now;
+		else window.clearTimeout(this.typedWordsSaveTimer);
+		// Never wait more than 30 seconds, even while typing never pauses for 4: a crash loses at most that.
+		const wait = Math.max(0, Math.min(4000, this.typedWordsWaitingSince + 30000 - now));
+		this.typedWordsSaveTimer = window.setTimeout(() => {
+			this.typedWordsSaveTimer = null;
+			runSafely(this.saveData(this.settings));
+		}, wait);
+	}
+
+	/** Write waiting word counts now: Obsidian quitting, going to the background, or Plotverk switching off. */
+	private flushTypedWordsSave(): Promise<void> {
+		// Typing still waiting on the short pause is counted first, so the last words are saved too.
+		if (this.typedWordsTimer !== null) {
+			window.clearTimeout(this.typedWordsTimer);
+			this.typedWordsTimer = null;
+			this.countTypedWords();
+		}
+		if (this.typedWordsSaveTimer === null) return Promise.resolve();
+		window.clearTimeout(this.typedWordsSaveTimer);
+		this.typedWordsSaveTimer = null;
+		return this.saveData(this.settings);
 	}
 
 	/** Add/remove sheet styling classes on every markdown view, by frontmatter. */
@@ -2280,23 +2397,34 @@ export default class StorygridPlugin extends Plugin {
 		})(this.app).open();
 	}
 
-	async openCodex(projectRoot?: string, detailPath?: string, fromTab?: SocialMapsTab): Promise<void> {
+	async openCodex(projectRoot?: string, detailPath?: string, fromTab?: SocialMapsTab, fromDashboard?: WorkspaceLeaf): Promise<void> {
 		// Resolve the authoritative project once, up front, so the Codex never
 		// flashes a stale/wrong project (e.g. the alphabetically-first one) before
 		// correcting itself. Priority: explicit arg → the one active root every
 		// view shares (resolveActiveRoot).
 		const root = projectRoot || this.resolveActiveRoot();
 
-		let targetLeaf = this.app.workspace.getLeavesOfType(VIEW_TYPE_CODEX)[0];
+		// Writers may keep several Codex tabs open side by side: reuse the one
+		// used last (or any), never close the others.
+		const codexLeaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_CODEX);
+		let targetLeaf: WorkspaceLeaf | undefined = this._lastCodexLeaf && codexLeaves.includes(this._lastCodexLeaf)
+			? this._lastCodexLeaf
+			: codexLeaves[0];
 		if (!targetLeaf) {
-			targetLeaf = this.app.workspace.getLeaf('tab');
-			await targetLeaf.setViewState({ type: VIEW_TYPE_CODEX, state: { projectRoot: root } });
+			// A second click while the first is still making the tab waits for that tab.
+			if (!this._codexOpening) {
+				const opening = (async () => {
+					const leaf = this.app.workspace.getLeaf('tab');
+					await leaf.setViewState({ type: VIEW_TYPE_CODEX, state: { projectRoot: root } });
+					return leaf;
+				})();
+				this._codexOpening = opening;
+				const clear = () => { if (this._codexOpening === opening) this._codexOpening = null; };
+				opening.then(clear, clear);
+			}
+			targetLeaf = await this._codexOpening;
 		}
-
-		// Close any duplicate codex leaves that may have opened (e.g. rapid double-click)
-		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_CODEX)) {
-			if (leaf !== targetLeaf) leaf.detach();
-		}
+		this._lastCodexLeaf = targetLeaf;
 
 		// A Codex tab Obsidian hasn't loaded since startup holds a placeholder:
 		// load it first (one load, then the reveal — never both at once).
@@ -2314,10 +2442,32 @@ export default class StorygridPlugin extends Plugin {
 			// Remember which Social Maps leaf (and tab) the writer came from, so the
 			// entry page can offer a way back. Only when that leaf is open right now.
 			const socialLeaf = fromTab ? this.app.workspace.getLeavesOfType(VIEW_TYPE_SOCIAL_MAPS)[0] : undefined;
-			await view.openEntityDetail(detailPath, fromTab && socialLeaf ? { leaf: socialLeaf, tab: fromTab } : undefined);
+			const origin: CodexOrigin | undefined = fromTab && socialLeaf
+				? { leaf: socialLeaf, tab: fromTab }
+				: fromDashboard ? { leaf: fromDashboard, dashboard: true } : undefined;
+			await view.openEntityDetail(detailPath, origin);
 		} else {
 			view.goHome();
 		}
+	}
+
+	/** Open the Codex on the Setups board (Dashboard "Open the board"). */
+	async openSetupsBoard(projectRoot: string): Promise<void> {
+		await this.openCodex(projectRoot);
+		const view = this._lastCodexLeaf?.view;
+		if (view instanceof StorygridCodexView) view.showKind(SETUP_KIND);
+	}
+
+	/**
+	 * Open a Codex entry in a NEW Codex tab (or split / window), leaving every
+	 * other Codex tab as it is: right-click "Open in new tab", Ctrl/Cmd-click,
+	 * middle-click.
+	 */
+	async openCodexInNewTab(projectRoot: string, detailPath: string, where: PaneType | boolean = 'tab'): Promise<void> {
+		const leaf = this.app.workspace.getLeaf(where);
+		await leaf.setViewState({ type: VIEW_TYPE_CODEX, active: true, state: { projectRoot, detailPath } });
+		this._lastCodexLeaf = leaf;
+		await this.app.workspace.revealLeaf(leaf);
 	}
 
 	/**
@@ -2334,6 +2484,11 @@ export default class StorygridPlugin extends Plugin {
 		} else {
 			await openOrReveal(this.app, file);
 		}
+	}
+
+	/** True while `leaf` is still an open Dashboard tab (it may have been closed since). */
+	isDashboardLeafOpen(leaf: WorkspaceLeaf): boolean {
+		return this.app.workspace.getLeavesOfType(VIEW_TYPE_DASHBOARD).includes(leaf);
 	}
 
 	/** True while `leaf` is still an open Social Maps tab (it may have been closed since). */
@@ -2459,6 +2614,8 @@ export default class StorygridPlugin extends Plugin {
 
 		const follow = (text: string): string | null => {
 			const grid = JSON.parse(text) as GridData;
+			// A newer Plotverk's grid is never saved over (it may hold things this one would drop).
+			if (isFromNewerPlotverk((grid as { version?: unknown }).version)) return null;
 			const next = renameGridCardPaths(grid, oldPath, newPath);
 			return next === grid ? null : JSON.stringify({ ...next, updatedAt: new Date().toISOString() }, null, 2);
 		};
@@ -2612,6 +2769,8 @@ export default class StorygridPlugin extends Plugin {
 		};
 		const follow = (text: string): string | null => {
 			const data = JSON.parse(text) as TimelineData;
+			// A newer Plotverk's timeline is never saved over.
+			if (isFromNewerPlotverk((data as { version?: unknown }).version)) return null;
 			const before = JSON.stringify(data);
 			const next = remapTimelinePath(data, oldPath, newPath);
 			return JSON.stringify(next) === before ? null : JSON.stringify(next, null, 2);
@@ -2980,6 +3139,29 @@ export default class StorygridPlugin extends Plugin {
 			(file: TFile) => { runSafely(this.openGridFile(file)); },
 			() => { runSafely(this.createNewGrid()); }
 		).open();
+	}
+
+	/** Open a grid and bring one card into view, briefly highlighted (a setup planned on it). */
+	async revealGridCard(gridPath: string, cardId: string): Promise<void> {
+		const file = this.app.vault.getAbstractFileByPath(gridPath);
+		if (!(file instanceof TFile)) return;
+		await this.openGridFile(file);
+		// The grid may still be drawing its cards: look for the card a few times.
+		const win = activeWindow;
+		const look = (tries: number) => {
+			const leaf = this.app.workspace.getLeavesOfType(VIEW_TYPE_STORYGRID).find(
+				(l) => (leafStateString(l, 'filePath') ?? leafStateString(l, 'file')) === gridPath
+			);
+			const el = leaf?.view.containerEl.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(cardId)}"]`);
+			if (!el) {
+				if (tries > 0) win.setTimeout(() => look(tries - 1), 100);
+				return;
+			}
+			el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' });
+			el.addClass('sg-card-revealed');
+			win.setTimeout(() => el.removeClass('sg-card-revealed'), 1600);
+		};
+		look(15);
 	}
 
 	async openGridFile(file: TFile): Promise<void> {

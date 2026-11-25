@@ -8,6 +8,9 @@ import {
 	rebasePath,
 	rebaseSlicePaths,
 	widenUnseenMove,
+	followPathMoves,
+	pathMoveMark,
+	recordPathMove,
 } from './project-move';
 
 function todo(id: string, text: string, linkPath?: string): TodoItem {
@@ -458,5 +461,34 @@ describe('applyPathMove — damaged settings never stop a move or lose data', ()
 		// "not a list" can't take the to-dos: both stay where they were.
 		expect(d.todos['Saltmarch']).toBe('not a list');
 		expect((d.todos['Novel'] as TodoItem[])[2].link!.path).toBe('Saltmarch/S.md');
+	});
+});
+
+describe('followPathMoves — a path remembered earlier catches up with renames since', () => {
+	test('a project folder renamed after the mark: the remembered path follows it', () => {
+		const mark = pathMoveMark();
+		recordPathMove({ oldPath: 'Old Book', newPath: 'New Book', isFolder: true });
+		expect(followPathMoves('Old Book', mark)).toBe('New Book');
+		expect(followPathMoves('Old Book/Scenes', mark)).toBe('New Book/Scenes');
+		// Moves before the mark don't count.
+		expect(followPathMoves('Old Book', pathMoveMark())).toBe('Old Book');
+	});
+	test('several moves in a row, and the vault root, which never moves', () => {
+		const mark = pathMoveMark();
+		recordPathMove({ oldPath: 'A', newPath: 'B', isFolder: true });
+		recordPathMove({ oldPath: 'B', newPath: 'Series/B', isFolder: true });
+		expect(followPathMoves('A/Codex', mark)).toBe('Series/B/Codex');
+		expect(followPathMoves('', mark)).toBe('');
+		expect(followPathMoves('Elsewhere', mark)).toBe('Elsewhere');
+	});
+});
+
+describe('the move log keeps a big folder rename as one entry', () => {
+	test('the events for every file inside a renamed folder add nothing, so the folder’s own move is never pushed out', () => {
+		const mark = pathMoveMark();
+		recordPathMove({ oldPath: 'Saga', newPath: 'Saga II', isFolder: true });
+		for (let i = 0; i < 800; i++) recordPathMove({ oldPath: `Saga/Images/${i}.png`, newPath: `Saga II/Images/${i}.png`, isFolder: false });
+		expect(pathMoveMark()).toBe(mark + 1);
+		expect(followPathMoves('Saga/Codex', mark)).toBe('Saga II/Codex');
 	});
 });

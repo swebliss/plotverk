@@ -1,4 +1,5 @@
 import { TodoItem, SprintRecord } from '../grid-data';
+import type { TextChangeRecord } from './text-changes';
 
 // ── Event types ───────────────────────────────────────────────────────────────
 
@@ -28,7 +29,13 @@ export interface EntityCreatedEvent {
 	createdAt: string;
 }
 
-export type HistoryEvent = TaskDoneEvent | WordsEvent | SprintEvent | EntityCreatedEvent;
+/** A change Plotverk made to the text (an alias followed into the links); the row offers Undo / Redo. */
+export interface TextChangeEvent {
+	type: 'text-change';
+	record: TextChangeRecord;
+}
+
+export type HistoryEvent = TaskDoneEvent | WordsEvent | SprintEvent | EntityCreatedEvent | TextChangeEvent;
 
 // ── Input / output shapes ─────────────────────────────────────────────────────
 
@@ -53,6 +60,8 @@ export interface BuildHistoryOpts {
 	typedWords: Record<string, number>;
 	sprints: SprintRecord[];
 	entityCreations: EntityCreationRecord[];
+	/** Text changes for this project (alias renames followed into the links). */
+	textChanges?: TextChangeRecord[];
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -104,6 +113,10 @@ export function buildHistory(opts: BuildHistoryOpts): DayBucket[] {
 	for (const sprint of opts.sprints) {
 		const day = isoToLocalDay(sprint.endedAt);
 		add(day, { type: 'sprint', words: sprint.words, minutes: sprint.minutes, completed: sprint.completed, endedAt: sprint.endedAt });
+	}
+
+	for (const record of opts.textChanges ?? []) {
+		if (record && typeof record.at === 'string') add(isoToLocalDay(record.at), { type: 'text-change', record });
 	}
 
 	const days = [...map.keys()].sort((a, b) => b.localeCompare(a));

@@ -3,7 +3,8 @@ import type StorygridPlugin from './main';
 import { getCodexKindOrder, getKindSpec } from './entities/entity-kinds';
 import { createEntityFile, findCodexScopes, StoryProject } from './entities/entity-manager';
 import { parseEntityDocument } from './entities/entity-parse';
-import { EntityModal } from './modals/entity-modal';
+import { openSheetEditor } from './sheet-editor-view';
+import { followPathMoves, pathMoveMark } from './utils/project-move';
 import { GROUP_KINDS, RelEntity, RelationshipType, buildCustomRegistry, buildRelationGraph, fieldsToRelationSections, groupRoleOf, parseRelationLines, relationChoices } from './utils/relations';
 import { buildTreeData, layoutTreeBlocks, restrictTreeData, computeUnions, coupleStatus, CoupleStatus, initialsOf, isFamilyGroup, lifeFactsFromFields, wrapName, LifeFacts, TreeBlock, TreeMode, TreeData, TreeEdge, TreeNode, TreeNote, TreePosition } from './utils/story-tree';
 import { t } from './i18n';
@@ -531,10 +532,12 @@ export class StoryTreeController {
 		// '' is a real project (a grid at the vault root), so only "no projects at all" stops here.
 		if (this.scopes.length === 0) return;
 		const projectRoot = this.scopeRoot;
+		// The editor is a tab: if the project folder is renamed meanwhile, the sheet goes where it is now.
+		const moveMark = pathMoveMark();
 		// Using the button counts as having seen its tip; never leave it floating over the pop-up.
 		this.closeAddCharacterTip?.();
 		this.plugin.markCoachMarkSeen(ADD_CHARACTER_TIP);
-		new EntityModal(
+		openSheetEditor(
 			this.app,
 			'character',
 			'',
@@ -542,7 +545,7 @@ export class StoryTreeController {
 			async (name, fields, aliases, start) => {
 				let file: TFile;
 				try {
-					file = await createEntityFile(this.app, projectRoot, 'character', name, fields, aliases, start?.cleanSlate);
+					file = await createEntityFile(this.app, followPathMoves(projectRoot, moveMark), 'character', name, fields, aliases, start?.cleanSlate);
 				} catch (err) {
 					// Nothing back: the sheet editor stays open with the writer's work.
 					new Notice(t('codex.notice.createFailed', { kind: 'character', msg: err instanceof Error ? err.message : '' }));
@@ -578,7 +581,7 @@ export class StoryTreeController {
 				relationChoices: relationChoices(this.plugin.settings.customRelationshipTypes),
 				plugin: this.plugin,
 			}
-		).open();
+		);
 	}
 
 	private renderAll(): void {
