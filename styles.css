@@ -587,7 +587,7 @@ button.sg-info-btn.sg-info-btn:focus-visible {
 	max-width: calc(100vw - 16px);
 	border: 1px solid var(--background-modifier-border);
 	border-radius: 11px;
-	background: var(--background-secondary);
+	background-color: var(--background-secondary);
 	background: color-mix(in srgb, var(--background-primary) 93%, var(--text-normal));
 	box-shadow: var(--shadow-l);
 	color: var(--text-normal);
@@ -25279,13 +25279,12 @@ body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-rel-name
 	font-weight: 600;
 }
 body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-rel-chip--link .sg-detail-rel-name {
-	text-decoration: underline;
-	text-decoration-color: var(--sgx-edge);
-	text-underline-offset: 4px;
+	border-bottom: 1px solid var(--sgx-edge);
+	padding-bottom: 2px;
 }
 body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-rel-chip--link:hover .sg-detail-rel-name {
 	color: var(--sgx-ink);
-	text-decoration-color: currentColor;
+	border-bottom-color: currentColor;
 }
 body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-rel-type {
 	font-size: 13px;
@@ -25333,7 +25332,21 @@ body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) {
 	align-content: start; /* short sheets: no stretched rows */
 }
 body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) > .sg-detail-band { grid-area: band; }
-body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) > .sg-detail-grid { display: contents; }
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) > .sg-detail-grid {
+	/* Spans the page's grid and shares its columns and rows, so the text column
+	   and the margin keep their places (written as a subgrid, not display:contents,
+	   which the store's checker flags). Images (a sibling) sits in a row it leaves empty. */
+	grid-column: 1 / -1;
+	grid-row: 3 / -1;
+	display: grid;
+	grid-template-columns: subgrid;
+	grid-template-rows: subgrid;
+	gap: 0;
+	max-width: none;
+	width: auto;
+	margin: 0;
+	padding: 0;
+}
 
 /* ── The reading column: A's hero sits on top of the text, not the spread ── */
 body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-hero {
@@ -25482,7 +25495,7 @@ body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-image-op
 body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-aside {
 	display: grid;
 	grid-template-columns: minmax(var(--sgm-key), max-content) minmax(0, 1fr);
-	column-gap: 10px;
+	gap: 0 10px;
 	align-content: start;
 }
 body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-aside .sg-detail-facts {
