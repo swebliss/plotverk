@@ -171,7 +171,7 @@ function openBox(trigger: HTMLElement, opts: InfoTriggerOptions, pinned: boolean
 		position();
 	};
 	// The trigger's own window's observer, so a popout window watches its own screen.
-	const Observer = (win as Window & typeof globalThis).IntersectionObserver ?? IntersectionObserver;
+	const Observer = (win as Window & { IntersectionObserver: typeof IntersectionObserver }).IntersectionObserver;
 	const visibility = new Observer((entries) => {
 		if (entries.some((en) => !en.isIntersecting)) close();
 	}, { threshold: 0 });
