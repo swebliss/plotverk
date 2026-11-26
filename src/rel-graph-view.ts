@@ -8,7 +8,7 @@ import { buildCustomRegistry, fieldsToRelationSections, findHierarchyLoops, Line
 import { edgeGeometry, dashArrayFor, needsRoundCap, intensityStops } from './utils/edge-style';
 import { GraphSimulation, SimLinkInput, ForceSettings, DEFAULT_FORCE_SETTINGS } from './utils/force-sim';
 import { setPhosphorIcon } from './utils/icons';
-import { KIND_COLORS, makeSvg, truncate, pointerDist, isTap } from './utils/graph-shared';
+import { makeSvg, truncate, pointerDist, isTap, nodeFamily, nodeShapeOutline, NODE_FAMILIES, NODE_FAMILY_COLOR, NODE_HOVER_R, NodeFamily } from './utils/graph-shared';
 import { renderSearchableSelect, SearchableOption, SearchableSelectHandle } from './ui/searchable-select';
 import { StorygridOutlineView } from './outline-view';
 import { pickScopeRoot } from './utils/scope-pick';
@@ -35,6 +35,37 @@ const MAX_REL_WEIGHT = 3;
 
 /** Two taps on the same node within this window count as a double-click. */
 const DOUBLE_TAP_MS = 350;
+
+/**
+ * Appends the visible shape of a non-character node (triangle, hexagon,
+ * diamond or rounded square), filled and softly outlined in its family's theme
+ * colour. Never takes pointer events: clicks land on the node's round hit
+ * area, exactly as they did on the old dot.
+ */
+function appendNodeShape(parent: Element, family: Exclude<NodeFamily, 'character'>, r: number, cls: string): SVGElement {
+	const outline = nodeShapeOutline(family, r);
+	const color = NODE_FAMILY_COLOR[family];
+	const common: Record<string, string> = {
+		class: cls, fill: color, stroke: color, 'stroke-linejoin': 'round', 'pointer-events': 'none',
+	};
+	const shape = outline.tag === 'polygon'
+		? makeSvg('polygon', { ...common, points: outline.points })
+		: makeSvg('rect', {
+			...common,
+			x: String(outline.x), y: String(outline.y),
+			width: String(outline.size), height: String(outline.size), rx: String(outline.rx),
+		});
+	parent.appendChild(shape);
+	return shape as SVGElement;
+}
+
+/** A small picture of a family's map shape, for the key, the filter buttons and the group list. */
+function appendFamilyIcon(parent: HTMLElement, family: NodeFamily): void {
+	const svg = makeSvg('svg', { class: 'sg-rg-shape-icon', viewBox: '-7 -7 14 14', 'aria-hidden': 'true' });
+	if (family === 'character') svg.appendChild(makeSvg('circle', { r: '6', fill: NODE_FAMILY_COLOR.character }));
+	else appendNodeShape(svg, family, 6, 'sg-rg-shape-icon-mark');
+	parent.appendChild(svg);
+}
 
 function ordinalDegree(n: number): string {
 	const suffix = n === 1 ? 'st' : n === 2 ? 'nd' : n === 3 ? 'rd' : 'th';
@@ -674,8 +705,7 @@ export class RelGraphController {
 				const row = popover.createEl('label', { cls: 'sg-rg-group-popover-row' });
 				const checkbox = row.createEl('input', { attr: { type: 'checkbox' } });
 				checkbox.checked = this.selectedGroups.has(node.path);
-				const dot = row.createSpan({ cls: 'sg-rg-pill-dot' });
-				dot.style.background = KIND_COLORS[node.kind] ?? '#6b7280';
+				appendFamilyIcon(row, nodeFamily(node.kind));
 				row.createSpan({ text: node.name });
 				checkbox.addEventListener('change', () => {
 					if (checkbox.checked) this.selectedGroups.add(node.path);
@@ -821,7 +851,7 @@ export class RelGraphController {
 			if (colorA) common['data-color-a'] = colorA; // hovering A shows A's outgoing color
 			if (colorB) common['data-color-b'] = colorB; // hovering B shows B's outgoing color
 
-			const addSeg = (role: EdgeRole, color: string, weight: number, style: LineStyle, arrowColor?: string, opts?: { skipHoverColor?: boolean }) => {
+			const addSeg = (role: EdgeRole, color: string, weight: number, style: LineStyle, arrowColor?: string, opts?: { skipHoverColor?: boolean; bare?: boolean }) => {
 				const attrs: Record<string, string> = {
 					...common,
 					'data-role': role,
@@ -836,6 +866,10 @@ export class RelGraphController {
 					delete attrs['data-color-a'];
 					delete attrs['data-color-b'];
 				}
+				// A link with no relationship named: marked so the light theme can draw it
+				// strong enough to see on white (styles.css, .sg-rg-edge--bare). Dark has no
+				// rule for this class, so it draws exactly as before.
+				if (opts?.bare) attrs.class = 'sg-rg-edge sg-rg-edge--bare';
 				const dasharray = dashArrayFor(style, weight);
 				if (dasharray) attrs['stroke-dasharray'] = dasharray;
 				if (needsRoundCap(style)) attrs['stroke-linecap'] = 'round';
@@ -846,6 +880,9 @@ export class RelGraphController {
 
 				const makeSeg = (twin: boolean) => {
 					const path = makeSvg('path', twin ? { ...attrs, 'data-twin': '1' } : attrs);
+					// The set thickness as a CSS value too, so the light theme can draw the line
+					// thinner (styles.css, [sg-lt-rules]). Dark has no rule that reads it.
+					(path as SVGElement).setCssProps({ '--sg-rg-w': String(weight) });
 					if (twin) path.removeAttribute('marker-end'); // one arrowhead per pair, not two
 					const t = createSvg('title');
 					t.textContent = tip;
@@ -920,7 +957,7 @@ export class RelGraphController {
 				addLabel(pair.bToA.label || rt.displayLabel);
 			} else {
 				// Bare connection only — thin gray line, no arrow.
-				addSeg('full-ab', 'var(--text-faint)', 0.5, 'solid');
+				addSeg('full-ab', 'var(--text-faint)', 0.5, 'solid', undefined, { bare: true });
 			}
 		}
 	}
@@ -962,7 +999,8 @@ export class RelGraphController {
 			const p = this.sim.getNode(node.path);
 			if (!p) continue;
 
-			const color = KIND_COLORS[node.kind] ?? '#6b7280';
+			const family = nodeFamily(node.kind);
+			const color = NODE_FAMILY_COLOR[family];
 			const connections = degree.get(node.path) ?? 1;
 			const r = scaleBySize ? Math.min(NODE_R + Math.sqrt(connections - 1) * 1.5, 9) : NODE_R;
 
@@ -975,7 +1013,8 @@ export class RelGraphController {
 				'aria-label': node.name,
 			}) as SVGGElement;
 
-			const imgFile = showPortraits && node.imagePath
+			// Photos are for characters only; every other kind shows its shape.
+			const imgFile = showPortraits && family === 'character' && node.imagePath
 				? this.app.vault.getAbstractFileByPath(node.imagePath)
 				: null;
 
@@ -1012,12 +1051,27 @@ export class RelGraphController {
 				label.textContent = truncate(node.name, 26);
 				g.appendChild(label);
 			} else {
-				const circle = makeSvg('circle', {
-					r: String(Math.round(r)),
-					fill: color,
-					class: 'sg-rg-node-circle',
-				});
-				g.appendChild(circle);
+				if (family === 'character') {
+					const circle = makeSvg('circle', {
+						r: String(Math.round(r)),
+						fill: color,
+						class: 'sg-rg-node-circle',
+					});
+					g.appendChild(circle);
+				} else {
+					// Every other kind: an invisible round hit area of exactly the old
+					// dot's size (it grows to 10px on hover/drag like the dot did), so
+					// clicking, dragging and hovering feel the same; the visible shape
+					// on top never takes the pointer.
+					g.appendChild(makeSvg('circle', {
+						r: String(Math.round(r)),
+						fill: 'none',
+						class: 'sg-rg-node-hit',
+					}));
+					const shape = appendNodeShape(g, family, r, `sg-rg-node-shape sg-rg-node-shape--${family}`);
+					// Hover/drag scale that brings the shape to the dot's 10px hover size.
+					shape.setCssProps({ '--sg-rg-grow': String(+(NODE_HOVER_R / r).toFixed(4)) });
+				}
 
 				const label = makeSvg('text', {
 					'text-anchor': 'middle',
@@ -1489,13 +1543,11 @@ export class RelGraphController {
 			group.createSpan({ cls: 'sg-rg-filter-label', text: 'Show:' });
 			for (const kind of presentKinds) {
 				const isHidden = this.hiddenKinds.has(kind);
-				const color = KIND_COLORS[kind] ?? '#6b7280';
 				const pill = group.createEl('button', {
 					cls: `sg-rg-filter-pill${isHidden ? ' is-hidden' : ''}`,
 					title: isHidden ? `Show ${kind}s` : `Hide ${kind}s`,
 				});
-				const dot = pill.createSpan({ cls: 'sg-rg-pill-dot' });
-				dot.style.background = color;
+				appendFamilyIcon(pill, nodeFamily(kind));
 				pill.createSpan({ text: kind.charAt(0).toUpperCase() + kind.slice(1) });
 				pill.addEventListener('click', () => {
 					if (this.hiddenKinds.has(kind)) this.hiddenKinds.delete(kind);
@@ -1775,9 +1827,18 @@ export class RelGraphController {
 		if (!this.graphData) return;
 		const entries = legendEntries(this.graphData);
 		const bare = bareEdgeCount(this.graphData);
-		if (entries.length === 0 && bare === 0) return;
+		// Node shapes in the key: only the families on the map, and only when
+		// there are two or more (a map of characters alone needs no key for it).
+		const present = new Set(this.graphData.nodes.map((n) => nodeFamily(n.kind)));
+		const families = present.size > 1 ? NODE_FAMILIES.filter((f) => present.has(f)) : [];
+		if (entries.length === 0 && bare === 0 && families.length === 0) return;
 
 		const legend = parent.createDiv({ cls: 'sg-rg-legend' });
+		for (const family of families) {
+			const item = legend.createDiv({ cls: 'sg-rg-legend-item sg-rg-legend-item--shape' });
+			appendFamilyIcon(item, family);
+			item.createSpan({ cls: 'sg-rg-legend-label', text: t(`socialMaps.key.${family}`) });
+		}
 		for (const rt of entries) {
 			const item = legend.createDiv({ cls: 'sg-rg-legend-item' });
 			const swatch = item.createDiv({ cls: 'sg-rg-legend-swatch' });

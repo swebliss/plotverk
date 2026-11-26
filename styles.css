@@ -8,6 +8,156 @@
 
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   APP-WIDE READABILITY (light theme)
+   Set on body so every part of the plugin gets them: views, windows, the
+   Codex hub, the Dashboard and the status bar.
+
+   --sg-text-quiet — small text that carries information (counts, hints, field
+     labels, fold arrows, "i" marks). Light: one step lighter than --text-muted,
+     still readable on white and on grey panels. Dark: exactly --text-faint, as
+     it has always been. Plain --text-faint is now for decoration only
+     (dividers, placeholders, finished or switched-off things, grips).
+
+   --sg-light — 1 in light, 0 in dark. Used as  opacity: max(<dark value>,
+     var(--sg-light))  so a see-through fade on small text is dropped in light
+     and left exactly as it was in dark.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+body {
+	--sg-text-quiet: color-mix(in srgb, var(--text-muted) 85%, var(--text-faint));
+	--sg-light: 1;
+
+	/* ── Shared names, app-wide (light) ──────────────────────────────────────
+	   The Plot Grid defines these for itself further down (.sg-view-root,
+	   .sg-side-panel) and keeps its own values. Everything outside the grid
+	   (Dashboard, Codex hub, Activity history, windows) reads them from here.
+	   Accent comes from the Obsidian theme, never a fixed colour. */
+	--sg-accent:       var(--interactive-accent);
+	--sg-accent-hover: var(--interactive-accent-hover);
+	--sg-accent-muted: color-mix(in srgb, var(--interactive-accent) 10%, transparent);
+	--sg-border:    var(--background-modifier-border);
+	--sg-header-bg: var(--background-secondary);
+	--sg-input-bg:  var(--background-modifier-form-field);
+	/* Shadows: soft, slightly cool, one close edge + one wide soft fall. */
+	--sg-shadow-xs: 0 1px 2px rgba(16, 24, 40, 0.05);
+	--sg-shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.05), 0 3px 8px -2px rgba(16, 24, 40, 0.07);
+	--sg-shadow-md: 0 1px 3px rgba(16, 24, 40, 0.06), 0 10px 22px -8px rgba(16, 24, 40, 0.14);
+	--sg-shadow-lg: 0 2px 6px rgba(16, 24, 40, 0.06), 0 20px 40px -12px rgba(16, 24, 40, 0.20);
+	/* Motion */
+	--sg-dur-fast:   120ms;
+	--sg-dur-subtle: 150ms;
+	--sg-dur-base:   200ms;
+	--sg-dur-slow:   360ms;
+	--sg-ease-out:   cubic-bezier(0.16, 1, 0.3, 1);
+	--sg-ease-inout: cubic-bezier(0.4, 0, 0.2, 1);
+
+	/* ── Buttons and lift (light) — used by the LIGHT THEME section at the
+	   end of this file. Main = the one obvious action on a screen. The theme
+	   accent is deepened a little so the words on it reach 4.5:1.
+	   Soft = supporting actions: a tint of the same accent, dark words. */
+	--sg-btn-main-bg:       color-mix(in srgb, var(--interactive-accent) 84%, #000);
+	--sg-btn-main-bg-hover: color-mix(in srgb, var(--interactive-accent) 74%, #000);
+	--sg-btn-main-fg:       var(--text-on-accent);
+	--sg-btn-danger-bg:       color-mix(in srgb, var(--background-modifier-error) 86%, #000);
+	--sg-btn-danger-bg-hover: color-mix(in srgb, var(--background-modifier-error) 76%, #000);
+	--sg-btn-soft-bg:       color-mix(in srgb, var(--interactive-accent) 11%, var(--background-primary));
+	--sg-btn-soft-bg-hover: color-mix(in srgb, var(--interactive-accent) 19%, var(--background-primary));
+	--sg-btn-soft-border:   color-mix(in srgb, var(--interactive-accent) 30%, var(--background-primary));
+	--sg-btn-soft-ink:      color-mix(in srgb, var(--interactive-accent) 78%, #000);
+	--sg-btn-shadow:       0 1px 2px rgba(16, 24, 40, 0.14);
+	--sg-btn-shadow-hover: 0 1px 2px rgba(16, 24, 40, 0.10), 0 5px 12px -4px rgba(16, 24, 40, 0.24);
+	--sg-btn-focus-ring: 0 0 0 2px var(--background-primary), 0 0 0 4px var(--interactive-accent);
+	--sg-lift-card:       0 1px 2px rgba(16, 24, 40, 0.05), 0 12px 26px -16px rgba(16, 24, 40, 0.24);
+	--sg-lift-card-hover: 0 2px 4px rgba(16, 24, 40, 0.06), 0 18px 34px -16px rgba(16, 24, 40, 0.30);
+}
+
+/* Old phones without color-mix(): the button colours fall back to plain
+   theme colours, so a button is never see-through with white words. */
+@supports not (color: color-mix(in srgb, red, blue)) {
+	body {
+		--sg-btn-main-bg:       var(--interactive-accent);
+		--sg-btn-main-bg-hover: var(--interactive-accent-hover);
+		--sg-btn-danger-bg:       var(--background-modifier-error);
+		--sg-btn-danger-bg-hover: var(--background-modifier-error-hover);
+		--sg-btn-soft-bg:       var(--background-secondary);
+		--sg-btn-soft-bg-hover: var(--background-modifier-hover);
+		--sg-btn-soft-border:   var(--background-modifier-border);
+		--sg-btn-soft-ink:      var(--text-accent);
+	}
+}
+
+body.theme-dark {
+	--sg-text-quiet: var(--text-faint);
+	--sg-light: 0;
+
+	/* Dark keeps exactly what it had: outside the Plot Grid these names were
+	   never set, so they are switched back off here. (The Plot Grid sets its
+	   own dark values below.) Emma decides separately whether dark follows. */
+	--sg-accent: initial;
+	--sg-accent-hover: initial;
+	--sg-accent-muted: initial;
+	--sg-border: initial;
+	--sg-header-bg: initial;
+	--sg-input-bg: initial;
+	--sg-shadow-xs: initial;
+	--sg-shadow-sm: initial;
+	--sg-shadow-md: initial;
+	--sg-shadow-lg: initial;
+	--sg-dur-fast: initial;
+	--sg-dur-subtle: initial;
+	--sg-dur-base: initial;
+	--sg-dur-slow: initial;
+	--sg-ease-out: initial;
+	--sg-ease-inout: initial;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   APP-WIDE CONTRAST ON WHITE (light theme)                       [sg-lt-vars]
+   Colours that were tuned on the dark page and wash out on a white one.
+   Every name below has two values: the light one is a theme colour made one
+   step stronger; the dark one is EXACTLY what the rule used before, so dark
+   looks as it always has. Theme colours only — no fixed colours.
+
+   --sg-ink-*   colour used for small words and thin icons (the fill colours
+                are too pale to read as text on white)
+   --sg-line-*  neutral lines that carry meaning (timeline main line, family
+                lines, placeholder rings)
+   --sg-edge-soft  a hairline that has to show on white (swatches, tree cards)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+body {
+	--sg-ink-accent: color-mix(in srgb, var(--text-accent) 75%, var(--text-normal));
+	--sg-ink-accent-quiet: color-mix(in srgb, var(--text-accent) 75%, var(--text-normal));
+	--sg-ink-chip: color-mix(in srgb, var(--text-accent) 75%, var(--text-normal));
+	--sg-ink-purple: color-mix(in srgb, var(--color-purple, #9b59b6) 75%, var(--text-normal));
+	--sg-ink-green: color-mix(in srgb, var(--color-green) 58%, var(--text-normal));
+	--sg-ink-red: color-mix(in srgb, var(--color-red) 75%, var(--text-normal));
+	--sg-ink-error: color-mix(in srgb, var(--text-error) 80%, var(--text-normal));
+	--sg-line-quiet: color-mix(in srgb, var(--text-muted) 75%, var(--background-primary));
+	--sg-line-ink: var(--text-muted);
+	--sg-edge-soft: color-mix(in srgb, var(--text-normal) 26%, transparent);
+	--sg-hover-fill: var(--background-modifier-hover);
+	--sg-focus-ring: var(--interactive-accent);
+}
+
+body.theme-dark {
+	--sg-ink-accent: var(--interactive-accent);
+	--sg-ink-accent-quiet: color-mix(in srgb, var(--interactive-accent) 55%, var(--sg-text-quiet));
+	--sg-ink-chip: color-mix(in srgb, var(--interactive-accent) 85%, var(--text-normal));
+	--sg-ink-purple: var(--color-purple, #9b59b6);
+	--sg-ink-green: var(--color-green);
+	--sg-ink-red: var(--color-red);
+	--sg-ink-error: var(--text-error);
+	--sg-line-quiet: var(--text-faint);
+	--sg-line-ink: var(--text-faint);
+	--sg-edge-soft: var(--background-modifier-border);
+	--sg-hover-fill: var(--background-secondary);
+	--sg-focus-ring: var(--background-modifier-border-focus);
+}
+/* [/sg-lt-vars] */
+
+/* ═══════════════════════════════════════════════════════════════════════════
    THEME COLOR VARIABLES
    Light theme values are the defaults (current tested appearance — unchanged).
    Dark theme overrides them inside a single @media block. Palette matched to
@@ -259,7 +409,7 @@
 	color: var(--text-muted);
 }
 
-/* Template grids: the template's name + an info icon under the title; opens the beat guide window.
+/* Template grids: the template's name + an info icon under the title; opens the beat guide box ([sg-beat-guide-info]).
    `button.` + the class twice outranks Obsidian's own button look (same pattern as the toolbar). */
 button.sg-grid-template-line.sg-grid-template-line {
 	display: inline-flex;
@@ -282,7 +432,7 @@ button.sg-grid-template-line.sg-grid-template-line {
 	cursor: pointer;
 }
 button.sg-grid-template-line.sg-grid-template-line:focus-visible {
-	box-shadow: 0 0 0 2px var(--background-modifier-border-focus);
+	box-shadow: 0 0 0 2px var(--sg-focus-ring);
 }
 button.sg-grid-template-line.sg-grid-template-line:hover {
 	background: var(--background-modifier-hover);
@@ -307,71 +457,324 @@ button.sg-grid-template-line.sg-grid-template-line:hover {
 	}
 }
 
-/* Beat guide window: the text scrolls, the OK button stays in view. */
-.sg-beat-guide-modal .modal-content {
+/* ═══════════════════════════════════════════════════════════════════════════
+   BEAT GUIDE — SMALL "i" BOXES AND THE START / END CUE      [sg-beat-guide-info]
+   Replaces the old beat guide window (2026-11-26, Emma's approved sketch).
+   - A small "i" after the percentage on every beat guide card, and after the
+     beat guide column's name; the template line under the grid title opens the
+     same general box. The box is attached to the page body (ui/info-popover.ts),
+     never inside the zoomed grid.
+   - A quiet "Start of your book" under the guide column's name and "End of
+     your book" under the column: always visible, nothing to open.
+   Cards keep their size, flow and look; only the "i" is added to guide cards.
+   Light: the shared white panel + soft shadow ([sg-lt-shared]).
+   Dark: one step lighter than the page, the theme's own big shadow.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* -- The small "i". `button.` + the class twice outranks Obsidian's own button
+   look (same pattern as the template line). -- */
+button.sg-info-btn.sg-info-btn {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	width: 18px;
+	height: 18px;
+	min-width: 0;
+	min-height: 0;
+	margin: 0;
+	padding: 0;
+	border: none;
+	border-radius: 50%;
+	background: transparent;
+	box-shadow: none;
+	color: color-mix(in srgb, currentColor 55%, transparent);
+	cursor: pointer;
+}
+button.sg-info-btn.sg-info-btn:hover,
+button.sg-info-btn.sg-info-btn.is-open {
+	color: var(--text-accent);
+	background: color-mix(in srgb, var(--interactive-accent) 12%, transparent);
+}
+/* On a card the writer coloured, the accent may not read: full card ink instead. */
+.sg-card--filled button.sg-card-guide-info.sg-card-guide-info:is(:hover, .is-open) {
+	color: inherit;
+	background: color-mix(in srgb, currentColor 14%, transparent);
+}
+button.sg-info-btn.sg-info-btn:focus-visible {
+	box-shadow: 0 0 0 2px var(--sg-focus-ring);
+}
+.sg-info-btn-icon {
+	display: inline-flex;
+	pointer-events: none;
+}
+.sg-info-btn-icon svg {
+	width: 13px;
+	height: 13px;
+}
+
+/* -- On a guide card: the "i" sits right after the percentage; the edit
+   button stays on the right. -- */
+.sg-card-title.sg-card-title--guide {
+	flex: 0 1 auto;
+}
+.sg-card-header > .sg-card-guide-info ~ .sg-card-controls {
+	margin-left: auto;
+}
+
+/* -- On the guide column's name: the "i" right after the words. -- */
+.sg-guide-head {
 	display: flex;
-	flex-direction: column;
-	min-height: 0;
+	align-items: center;
+	min-width: 0;
 }
-.sg-beat-guide-body {
-	min-height: 0;
-	max-height: 60dvh;
+.sg-col-header .sg-guide-head > .sg-header-label {
+	flex: 0 1 auto;
+	min-width: 0;
+	padding-right: 4px;
+}
+.sg-guide-head > .sg-guide-col-info {
+	margin-right: 8px;
+}
+
+/* -- "Start of your book" (under the column's name) and "End of your book"
+   (under the column). Quiet: small, faint, never in the way. -- */
+.sg-guide-cue {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	min-width: 0;
+	padding: 0 8px 8px;
+	margin-top: -4px;
+	font-size: 0.72em;
+	font-weight: 500;
+	line-height: 1.3;
+	letter-spacing: 0.01em;
+	text-transform: none;
+	color: var(--text-faint);
+	white-space: nowrap;
+}
+.sg-guide-cue-icon {
+	display: inline-flex;
+	flex-shrink: 0;
+}
+.sg-guide-cue-icon svg {
+	width: 11px;
+	height: 11px;
+}
+.sg-guide-cue-text {
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+/* The line under the grid: no cell look, no lines. */
+.sg-grid tfoot.sg-guide-foot td {
+	border: none;
+	background: transparent;
+	padding: 0;
+}
+.sg-guide-foot .sg-guide-cue--end {
+	margin: 0;
+	padding: 8px 10px 6px;
+}
+
+/* -- The box. -- */
+.sg-info-pop {
+	position: fixed;
+	z-index: var(--layer-popover, 30);
+	box-sizing: border-box;
+	width: 320px;
+	max-width: calc(100vw - 16px);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 11px;
+	background: var(--background-secondary);
+	background: color-mix(in srgb, var(--background-primary) 93%, var(--text-normal));
+	box-shadow: var(--shadow-l);
+	color: var(--text-normal);
+	font-size: 13.5px;
+	line-height: 1.55;
+	text-align: left;
+}
+.sg-info-pop--wide {
+	width: 380px;
+}
+body:not(.theme-dark) .sg-info-pop {
+	background: var(--sg-lt-surface);
+	border-color: var(--sg-lt-edge);
+	box-shadow: var(--sg-lt-lift-hover);
+}
+.sg-info-pop-arrow {
+	position: absolute;
+	top: -6px;
+	width: 11px;
+	height: 11px;
+	margin-left: -5.5px;
+	background: inherit;
+	border: 0 solid;
+	border-color: inherit;
+	border-left-width: 1px;
+	border-top-width: 1px;
+	transform: rotate(45deg);
+	pointer-events: none;
+}
+.sg-info-pop--above .sg-info-pop-arrow {
+	top: auto;
+	bottom: -6px;
+	transform: rotate(225deg);
+}
+.sg-info-pop-body {
+	position: relative;
+	padding: 13px 16px 14px;
 	overflow-y: auto;
-	line-height: 1.5;
+	overscroll-behavior: contain;
+	border-radius: inherit;
+	outline: none;
 }
-.sg-beat-guide-body p {
-	margin: 0 0 4px;
+.sg-info-pop-body:focus-visible {
+	box-shadow: inset 0 0 0 2px var(--sg-focus-ring);
 }
-.sg-beat-guide-heading {
-	margin: 18px 0 6px;
-	font-size: 1em;
+.sg-info-pop-eyebrow {
+	margin-bottom: 8px;
+	font-size: 10.5px;
+	font-weight: 650;
+	letter-spacing: 0.07em;
+	text-transform: uppercase;
+	color: var(--text-muted);
+}
+.sg-info-pop-lead {
+	display: flex;
+	align-items: flex-start;
+	gap: 7px;
 	font-weight: 600;
 }
-.sg-beat-guide-heading:first-child {
-	margin-top: 0;
+.sg-info-pop-lead-icon {
+	display: inline-flex;
+	flex-shrink: 0;
+	margin-top: 3px;
+	color: var(--text-accent);
 }
-.sg-beat-guide-how {
+.sg-info-pop-lead-icon svg {
+	width: 13px;
+	height: 13px;
+}
+.sg-info-pop-heading {
+	margin: 12px 0 4px;
+	font-weight: 650;
+}
+.sg-info-pop-text {
 	margin: 0;
-	padding-left: 20px;
 }
-.sg-beat-guide-how li + li {
-	margin-top: 6px;
+.sg-info-pop-words {
+	white-space: pre-line;
 }
-.sg-beat-guide-list {
+.sg-info-pop-list {
 	margin: 0;
-	padding-left: 28px;
+	padding-left: 18px;
+	font-size: 13px;
 }
-.sg-beat-guide-beat {
-	padding: 3px 0;
+.sg-info-pop-list li + li {
+	margin-top: 5px;
 }
-.sg-beat-guide-where {
+.sg-info-pop-list li::marker {
+	color: var(--text-faint);
+}
+.sg-info-pop-beats {
+	margin: 0;
+	padding-left: 26px;
+	font-size: 13px;
+}
+.sg-info-pop-beats li {
+	padding: 1px 0;
+}
+.sg-info-pop-beat-where {
 	display: inline-block;
 	min-width: 5.5em;
-	margin-right: 8px;
+	margin-right: 6px;
 	color: var(--text-muted);
 	font-variant-numeric: tabular-nums;
 }
-.sg-beat-guide-where:empty {
-	display: none;
+.sg-info-pop-where {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 7px;
+	font-size: 12.5px;
+	color: var(--text-muted);
 }
-.sg-modal-actions.sg-beat-guide-actions {
-	flex-shrink: 0;
-	margin-top: 16px;
-	padding-top: 14px;
+.sg-info-pop-chip {
+	padding: 1px 7px;
+	border-radius: 5px;
+	background: color-mix(in srgb, var(--interactive-accent) 14%, transparent);
+	color: var(--text-accent);
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
 }
-@media (max-width: 768px) {
-	.sg-beat-guide-body {
-		max-height: none;
-		flex: 1 1 auto;
+body:not(.theme-dark) .sg-info-pop-chip {
+	background: var(--sg-lt-chip-bg);
+}
+.sg-info-pop-title {
+	margin: 0 0 5px;
+	font-size: 15px;
+	font-weight: 650;
+}
+
+/* The usable part of the screen (inside the notch / home bar), measured by
+   ui/info-popover.ts to keep the box on screen. Never seen. */
+.sg-info-pop-safe {
+	position: fixed;
+	top: calc(env(safe-area-inset-top, 0px) + 8px);
+	bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
+	left: calc(env(safe-area-inset-left, 0px) + 8px);
+	right: calc(env(safe-area-inset-right, 0px) + 8px);
+	visibility: hidden;
+	pointer-events: none;
+}
+
+/* Phones and touch screens: a 32px tap area around the small "i" (the visible
+   "i" keeps its size), and slightly bigger text in the box. */
+@media (max-width: 768px), (pointer: coarse) {
+	button.sg-info-btn.sg-info-btn::before {
+		content: '';
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		width: 32px;
+		height: 32px;
+		transform: translate(-50%, -50%);
 	}
-	.sg-beat-guide-actions {
-		padding-bottom: env(safe-area-inset-bottom, 0px);
-	}
-	.sg-beat-guide-actions .sg-modal-btn {
-		min-height: 44px;
-		min-width: 88px;
+	.sg-info-pop {
+		font-size: 14px;
 	}
 }
+/* Placement comes from info-popover.ts as custom properties (no static style
+   assignments: the store's checker flags them). While measuring, the box sits
+   hidden at the corner at its natural width. */
+.sg-info-pop {
+	left: var(--sg-pop-left, 0px);
+	top: var(--sg-pop-top, 0px);
+	width: var(--sg-pop-width, 320px);
+}
+.sg-info-pop.sg-info-pop--wide {
+	width: var(--sg-pop-width, 380px);
+}
+/* Above the phone card editor sheet (z-index 1000), so a box opened from a
+   card never lands behind it. */
+body.is-mobile .sg-info-pop {
+	z-index: 1001;
+}
+.sg-info-pop.sg-info-pop--measuring {
+	visibility: hidden;
+	left: 0;
+	top: 0;
+}
+.sg-info-pop .sg-info-pop-body {
+	max-height: var(--sg-pop-maxh, none);
+}
+.sg-info-pop .sg-info-pop-arrow {
+	left: var(--sg-pop-arrow-left, 50%);
+}
+/* [/sg-beat-guide-info] */
 
 /* Toolbar buttons — labelled by default, theme-native colours */
 /* Obsidian paints every <button> itself (`button:not(.clickable-icon)`, its
@@ -963,7 +1366,7 @@ tr .sg-row-header {
 }
 
 .sg-card:focus-visible:not(.sg-card--selected) {
-	outline: 2px dashed var(--text-faint);
+	outline: 2px dashed var(--sg-line-ink);
 	outline-offset: 2px;
 }
 
@@ -1744,7 +2147,7 @@ button.sg-md-toolbar-btn.sg-md-toolbar-btn:active {
    can see it's on and tap the same button again to turn it off. */
 .sg-md-toolbar-btn.is-active {
 	opacity: 1;
-	color: var(--interactive-accent);
+	color: var(--sg-ink-accent);
 }
 
 /* Text-size dropdown button: shows the current size (Aa / H1 / H2) + a caret. */
@@ -1947,7 +2350,7 @@ button.sg-md-toolbar-btn.sg-md-toolbar-btn:active {
 .sg-web-link-error {
 	margin-top: 6px;
 	font-size: 0.85em;
-	color: var(--text-error);
+	color: var(--sg-ink-error);
 }
 
 .sg-web-link-error:empty {
@@ -2088,7 +2491,7 @@ button.sg-md-toolbar-btn.sg-md-toolbar-btn:active {
 
 .sg-synopsis-popover-hint {
 	font-size: 0.7em;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	text-align: right;
 	margin-top: 5px;
 	padding-right: 2px;
@@ -2104,7 +2507,7 @@ button.sg-md-toolbar-btn.sg-md-toolbar-btn:active {
 
 .sg-link-modal-path {
 	font-size: 0.73em;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	margin-top: 2px;
 }
 
@@ -2118,7 +2521,7 @@ button.sg-md-toolbar-btn.sg-md-toolbar-btn:active {
 
 .sg-grid-picker-path {
 	font-size: 0.73em;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	margin-top: 2px;
 }
 
@@ -2155,7 +2558,7 @@ button.sg-md-toolbar-btn.sg-md-toolbar-btn:active {
 
 .sg-wizard-hint {
 	margin: 4px 0 12px;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	font-size: 0.82em;
 }
 
@@ -2182,6 +2585,53 @@ body:not(.is-mobile) .modal.sg-new-grid-modal {
 	max-width: 100%;
 }
 
+/* The whole New project window, steps 1 to 3 (steps 1-2 are GridScopeModal,
+   step 3 is this picker; both windows carry .sg-wizard-modal): one even
+   frame. An old one-screen-wizard rule (padding: 0 2px on this window) used
+   to strip Obsidian's padding, so the title touched the left edge and
+   "Create new project" was cut off at the bottom. Layout only, both themes.
+   Phone: Obsidian sets no top/bottom padding on a phone window, so the
+   bottom keeps clear of the home bar. */
+body:not(.is-phone) .modal.sg-wizard-modal {
+	padding: 24px 32px 28px; /* + the empty title row's 11px above = even on all sides */
+}
+body.is-phone .modal.sg-wizard-modal {
+	padding:
+		20px
+		max(16px, env(safe-area-inset-right, 0px))
+		max(20px, calc(12px + env(safe-area-inset-bottom, 0px)))
+		max(16px, env(safe-area-inset-left, 0px));
+}
+/* Step 3's title starts where steps 1 and 2 start (no extra gap above). */
+.modal.sg-wizard-modal .modal-content > h2:first-child {
+	margin-top: 0;
+}
+/* Step 3 in a short window: the template list gets smaller and scrolls, so
+   the title, the text and "Create new project" always stay in view (before,
+   the whole window scrolled and the button sat below the edge). */
+.modal.sg-new-grid-modal .modal-content {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	overflow: visible;
+}
+.modal.sg-new-grid-modal .sg-template-picker {
+	flex: 0 1 auto;
+	min-height: 140px;
+}
+.modal.sg-new-grid-modal .modal-content > :not(.sg-template-picker) {
+	flex-shrink: 0;
+}
+/* Step 1 on a phone: Series and Novel share the width and wrap their words,
+   instead of running off both edges of the window. */
+body.is-phone .sg-scope-modal-opts button.sg-scope-modal-opt {
+	flex: 1 1 0;
+	min-width: 0;
+	height: auto;
+	white-space: normal;
+	padding: 28px 12px;
+}
+
 .sg-new-grid-modal .sg-template-step-desc {
 	margin: 0 0 4px;
 	font-size: 0.92em;
@@ -2194,8 +2644,14 @@ body:not(.is-mobile) .modal.sg-new-grid-modal {
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
 	gap: 12px;
-	margin: 16px 0 4px;
+	/* -4px sides: the cards line up with the title and text above, while the
+	   4px padding still gives the focus ring and lift room */
+	margin: 18px -4px 0;
 	padding: 4px; /* room for the focus ring and lift, which overflow would clip */
+	/* Rows keep their full height: when the window is short (a phone) the list
+	   gets smaller and scrolls, instead of squeezing the cards on top of
+	   each other. */
+	grid-auto-rows: max-content;
 	max-height: min(56dvh, 540px);
 	overflow-y: auto;
 }
@@ -2261,7 +2717,7 @@ body:not(.is-mobile) .modal.sg-new-grid-modal {
 }
 
 .sg-template-picker .sg-template-card--selected .sg-template-card-title {
-	color: var(--interactive-accent);
+	color: var(--sg-ink-accent);
 }
 
 /* "Recommended for new writers": a small accent line above the name (no pill). */
@@ -2270,7 +2726,7 @@ body:not(.is-mobile) .modal.sg-new-grid-modal {
 	font-weight: 650;
 	letter-spacing: 0.02em;
 	line-height: 1.3;
-	color: var(--interactive-accent);
+	color: var(--sg-ink-accent);
 }
 
 .sg-template-picker .sg-template-card-desc {
@@ -2306,7 +2762,7 @@ body:not(.is-mobile) .modal.sg-new-grid-modal {
 	font-weight: 600;
 	text-transform: uppercase;
 	letter-spacing: 0.06em;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	margin: 0 0 16px;
 }
 
@@ -2378,7 +2834,7 @@ body:not(.is-mobile) .modal.sg-new-grid-modal {
 }
 
 .sg-scope-modal-opt.is-selected span {
-	color: color-mix(in srgb, var(--text-on-accent) 80%, transparent);
+	color: color-mix(in srgb, var(--text-on-accent) calc(80% + 20% * var(--sg-light)), transparent);
 }
 
 .sg-scope-modal-book-row {
@@ -2471,10 +2927,6 @@ body:not(.is-mobile) .modal.sg-new-grid-modal {
 
 /* ── New grid modal (one-screen wizard) ─────────────────────────────────────── */
 
-.sg-new-grid-modal {
-	padding: 0 2px;
-}
-
 .sg-new-grid-modal-title {
 	margin: 0 0 14px;
 	font-size: 1.1em;
@@ -2560,7 +3012,7 @@ body:not(.is-mobile) .modal.sg-new-grid-modal {
 	font-weight: 600;
 	letter-spacing: 0.04em;
 	text-transform: uppercase;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 }
 
 .sg-new-grid-tpl-pills {
@@ -2669,7 +3121,7 @@ body:not(.is-mobile) .modal.sg-new-grid-modal {
 	border-radius: 6px;
 	border: 1px solid transparent;
 	background: transparent;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	font-size: 0.9em;
 	cursor: pointer;
 	transition: background var(--sg-dur-base) var(--sg-ease-out), color var(--sg-dur-base) var(--sg-ease-out), border-color var(--sg-dur-base) var(--sg-ease-out), transform var(--sg-dur-base) var(--sg-ease-out);
@@ -2779,7 +3231,7 @@ body:not(.is-mobile) .modal.sg-new-grid-modal {
 	white-space: nowrap;
 	letter-spacing: 0.01em;
 	text-transform: uppercase;
-	opacity: 0.8;
+	opacity: max(0.8, var(--sg-light));
 }
 
 .sg-panel-close {
@@ -2886,7 +3338,7 @@ body:not(.is-mobile) .modal.sg-new-grid-modal {
 	align-items: center;
 	justify-content: center;
 	flex-shrink: 0;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	transition: transform 0.18s ease;
 }
 
@@ -2999,7 +3451,7 @@ body:not(.is-mobile) .modal.sg-new-grid-modal {
 	color: var(--text-muted);
 	text-transform: uppercase;
 	letter-spacing: 0.07em;
-	opacity: 0.8;
+	opacity: max(0.8, var(--sg-light));
 }
 
 /* Scene icon field: preview icon sits left of the dropdown */
@@ -3295,7 +3747,7 @@ button.sg-panel-btn-small.sg-panel-btn-small {
 	align-items: center;
 	gap: 5px;
 	background: color-mix(in srgb, var(--interactive-accent) 12%, transparent);
-	color: color-mix(in srgb, var(--interactive-accent) 85%, var(--text-normal));
+	color: var(--sg-ink-chip);
 	/* Borderless + tight line-height keeps them low and clean; 6px matches the
 	   locked design system (was a bulky 20px bordered pill). */
 	border: none;
@@ -3314,7 +3766,7 @@ button.sg-panel-btn-small.sg-panel-btn-small {
 
 .sg-chip--character {
 	background: color-mix(in srgb, var(--color-purple, #9b59b6) 15%, transparent);
-	color: var(--color-purple, #9b59b6);
+	color: var(--sg-ink-purple);
 }
 
 /* Chips in the card editor open their document on click. */
@@ -3361,7 +3813,7 @@ button.sg-chip-remove.sg-chip-remove {
 	height: auto;
 }
 
-.sg-chip-input::placeholder { color: var(--text-faint); }
+.sg-chip-input::placeholder { color: var(--sg-text-quiet); }
 
 /* ── Inline suggest dropdown ─────────────────────────────────────────────────── */
 
@@ -3394,7 +3846,7 @@ button.sg-chip-remove.sg-chip-remove {
 
 .sg-panel-suggest-path {
 	font-size: 0.75em;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	margin-top: 1px;
 }
 
@@ -3639,7 +4091,7 @@ button.sg-chip-remove.sg-chip-remove {
 .sg-color-popover-section-label {
 	font-size: 0.72em;
 	font-weight: 600;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	text-transform: uppercase;
 	letter-spacing: 0.06em;
 	margin-top: 2px;
@@ -3655,7 +4107,7 @@ button.sg-chip-remove.sg-chip-remove {
 	width: 24px;
 	height: 24px;
 	border-radius: 6px;
-	border: 1.5px solid var(--background-modifier-border);
+	border: 1.5px solid var(--sg-edge-soft);
 	cursor: pointer;
 	padding: 0;
 	transition: transform var(--sg-dur-fast), box-shadow var(--sg-dur-fast), border-color var(--sg-dur-fast);
@@ -3739,7 +4191,7 @@ button.sg-chip-remove.sg-chip-remove {
 
 .sg-panel-color-hex {
 	font-size: 0.79em;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	font-family: var(--font-monospace);
 }
 
@@ -3878,7 +4330,7 @@ button.sg-chip-remove.sg-chip-remove {
 	font-weight: 600;
 	letter-spacing: 0.07em;
 	text-transform: uppercase;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	flex-shrink: 0;
 }
 
@@ -3994,7 +4446,7 @@ button.sg-chip-remove.sg-chip-remove {
 	height: 28px;
 	border-radius: 50%;
 	flex-shrink: 0;
-	box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.15);
+	box-shadow: inset 0 0 0 1px rgba(0, 0, 0, calc(0.12 + 0.16 * var(--sg-light))), 0 1px 2px rgba(0, 0, 0, 0.15);
 }
 
 .sg-cpick-hex {
@@ -4103,7 +4555,7 @@ button.sg-chip-remove.sg-chip-remove {
 	width: 12px;
 	height: 12px;
 	border-radius: 50%;
-	box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+	box-shadow: inset 0 0 0 1px rgba(0, 0, 0, calc(0.12 + 0.16 * var(--sg-light)));
 }
 
 /* Active palette grid in the body (≤ 2 rows) */
@@ -4138,7 +4590,7 @@ button.sg-chip-remove.sg-chip-remove {
 	font-weight: 600;
 	letter-spacing: 0.07em;
 	text-transform: uppercase;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 }
 
 .sg-cpick-saved-actions {
@@ -4197,7 +4649,7 @@ button.sg-chip-remove.sg-chip-remove {
 
 .sg-cpick-saved-empty {
 	font-size: 0.76em;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	font-style: italic;
 	padding: 3px 0;
 }
@@ -4212,13 +4664,13 @@ button.sg-chip-remove.sg-chip-remove {
 	padding: 0;
 	cursor: pointer;
 	flex-shrink: 0;
-	box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1);
+	box-shadow: inset 0 0 0 1px rgba(0, 0, 0, calc(0.1 + 0.18 * var(--sg-light)));
 	transition: transform 0.1s ease, box-shadow 0.1s ease;
 }
 
 .sg-cpick-chip:hover {
 	transform: scale(1.18);
-	box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1), 0 3px 7px rgba(0, 0, 0, 0.25);
+	box-shadow: inset 0 0 0 1px rgba(0, 0, 0, calc(0.1 + 0.18 * var(--sg-light))), 0 3px 7px rgba(0, 0, 0, 0.25);
 	z-index: 1;
 }
 
@@ -4395,7 +4847,7 @@ button.sg-chip-remove.sg-chip-remove {
 	display: flex;
 	align-items: center;
 	gap: 8px;
-	color: var(--interactive-accent);
+	color: var(--sg-ink-accent);
 	font-weight: 600;
 }
 
@@ -4426,7 +4878,7 @@ button.sg-chip-remove.sg-chip-remove {
 	border-radius: 6px;
 	border: none;
 	background: transparent;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	cursor: pointer;
 	display: flex;
 	align-items: center;
@@ -4470,7 +4922,7 @@ button.sg-chip-remove.sg-chip-remove {
 	/* Text */
 	--sg-cdx-text:     var(--text-normal);
 	--sg-cdx-muted:    var(--text-muted);
-	--sg-cdx-fact-key: var(--text-faint);
+	--sg-cdx-fact-key: var(--sg-text-quiet);
 
 	/* Interactive */
 	--sg-cdx-hover-bg:          var(--background-modifier-hover);
@@ -4759,7 +5211,7 @@ button.sg-chip-remove.sg-chip-remove {
 .sg-codex-nav-group-caret {
 	display: flex;
 	flex-shrink: 0;
-	opacity: 0.6;
+	opacity: max(0.6, var(--sg-light));
 }
 
 .sg-codex-nav-group-caret svg {
@@ -5427,7 +5879,7 @@ body.is-phone .sg-codex-root .sg-codex-quickadd.is-only-add button.sg-codex-quic
 .sg-codex-card-media-icon {
 	display: flex;
 	color: var(--sg-cdx-muted);
-	opacity: 0.55;
+	opacity: max(0.55, var(--sg-light) * 0.8);
 }
 
 .sg-codex-card-media-icon svg {
@@ -5843,7 +6295,7 @@ body.is-phone .sg-codex-root .sg-codex-quickadd.is-only-add button.sg-codex-quic
 		visibility: hidden;
 	}
 	.sg-cell-content--armed {
-		outline: 2px solid color-mix(in srgb, var(--interactive-accent) 55%, transparent);
+		outline: 2px solid color-mix(in srgb, var(--interactive-accent) calc(55% + 45% * var(--sg-light)), transparent);
 		outline-offset: -3px;
 		border-radius: 6px;
 	}
@@ -6233,7 +6685,7 @@ input.sg-series-mgr-err.sg-series-mgr-err { border-color: var(--color-red); }
 	text-decoration: underline;
 }
 .sg-outline-act-num {
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	font-weight: 600;
 }
 
@@ -6281,7 +6733,7 @@ input.sg-series-mgr-err.sg-series-mgr-err { border-color: var(--color-red); }
 
 /* Empty act — styled as a drop affordance zone */
 .sg-outline-scene--empty {
-	color: color-mix(in srgb, var(--interactive-accent) 55%, var(--text-faint));
+	color: var(--sg-ink-accent-quiet);
 	font-style: normal;
 	cursor: default;
 	border: 1.5px dashed color-mix(in srgb, var(--interactive-accent) 38%, transparent);
@@ -6309,16 +6761,16 @@ input.sg-series-mgr-err.sg-series-mgr-err { border-color: var(--color-red); }
 .sg-outline-world-entity-icon {
 	display: flex;
 	align-items: center;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	flex-shrink: 0;
-	opacity: 0.7;
+	opacity: max(0.7, var(--sg-light) * 0.8);
 }
 .sg-outline-world-entity-icon svg { width: 13px; height: 13px; }
 .sg-outline-world-entity:hover .sg-outline-world-entity-icon { color: var(--interactive-accent); opacity: 1; }
 .sg-outline-world-entity.is-active .sg-outline-world-entity-icon { color: var(--interactive-accent); opacity: 1; }
 
 .sg-outline-scene-num {
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	font-size: 11.5px;
 	font-variant-numeric: tabular-nums;
 	min-width: 26px;
@@ -6340,7 +6792,7 @@ input.sg-series-mgr-err.sg-series-mgr-err { border-color: var(--color-red); }
 }
 
 .sg-outline-scene-words {
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	font-size: 11px;
 	font-variant-numeric: tabular-nums;
 	flex-shrink: 0;
@@ -6359,7 +6811,7 @@ input.sg-series-mgr-err.sg-series-mgr-err { border-color: var(--color-red); }
 	background: transparent;
 	box-shadow: none;
 	border: none;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 }
 .sg-outline-scene-more svg {
 	width: 16px;
@@ -6678,7 +7130,7 @@ input.sg-series-mgr-err.sg-series-mgr-err { border-color: var(--color-red); }
 .sg-outline-world-count {
 	justify-self: end;
 	padding-right: 4px; /* right edge = right edge of the "+" drawn in its 22px box */
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	font-weight: 400;
 	font-size: 11px;
 	letter-spacing: 0;
@@ -6752,7 +7204,7 @@ input.sg-series-mgr-err.sg-series-mgr-err { border-color: var(--color-red); }
 		width: 44px;
 		height: 44px;
 		margin-right: -8px; /* the "+" itself lines up near the row's right edge */
-		color: var(--text-faint);
+		color: var(--sg-text-quiet);
 	}
 	.sg-outline-world-end .sg-outline-world-add svg {
 		width: 16px;
@@ -6790,7 +7242,7 @@ input.sg-series-mgr-err.sg-series-mgr-err { border-color: var(--color-red); }
 	border-color: var(--interactive-accent);
 }
 .sg-outline-name-ext {
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	font-size: 12px;
 }
 
@@ -6988,7 +7440,7 @@ input.sg-series-mgr-err.sg-series-mgr-err { border-color: var(--color-red); }
 	align-items: center;
 	flex-shrink: 0;
 	width: 12px;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 }
 .sg-outline-scene-chevron svg { width: 11px; height: 11px; }
 .sg-outline-scene-chevron.is-empty { visibility: hidden; }
@@ -7140,7 +7592,7 @@ input.sg-series-mgr-err.sg-series-mgr-err { border-color: var(--color-red); }
 }
 .sg-outline-unplaced-hint {
 	padding: 5px 8px 0;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	font-size: 11px;
 }
 
@@ -7212,7 +7664,7 @@ input.sg-series-mgr-err.sg-series-mgr-err { border-color: var(--color-red); }
 	opacity: 0.6;
 }
 .sg-outline-goal-target {
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 }
 .sg-outline-todo-overflow {
 	font-style: italic;
@@ -7256,7 +7708,7 @@ input.sg-series-mgr-err.sg-series-mgr-err { border-color: var(--color-red); }
 	background: transparent;
 	cursor: pointer;
 	font-size: 11px;
-	color: var(--interactive-accent);
+	color: var(--sg-ink-accent);
 }
 .sg-outline-paste-btn:hover { opacity: 0.8; }
 
@@ -7275,7 +7727,7 @@ input.sg-series-mgr-err.sg-series-mgr-err { border-color: var(--color-red); }
 	color: var(--text-muted);
 	display: flex;
 	align-items: center;
-	opacity: 0.45;
+	opacity: max(0.45, var(--sg-light));
 	transition: opacity var(--sg-dur-subtle), color var(--sg-dur-subtle);
 }
 .sg-outline-head-plus:focus { outline: none; box-shadow: none; }
@@ -7393,7 +7845,7 @@ input.sg-series-mgr-err.sg-series-mgr-err { border-color: var(--color-red); }
 
 .sg-outline-muted {
 	font-size: 12px;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	padding: 2px 0 4px;
 }
 
@@ -7417,8 +7869,8 @@ input.sg-series-mgr-err.sg-series-mgr-err { border-color: var(--color-red); }
 	border: 1.5px dashed var(--background-modifier-border);
 	border-radius: 6px;
 	font-size: 11px;
-	color: var(--text-faint);
-	opacity: 0.45;
+	color: var(--sg-text-quiet);
+	opacity: max(0.45, var(--sg-light));
 	transition: opacity var(--sg-dur-subtle), border-color var(--sg-dur-subtle), background var(--sg-dur-subtle), color var(--sg-dur-subtle);
 	cursor: default;
 }
@@ -7451,7 +7903,7 @@ input.sg-series-mgr-err.sg-series-mgr-err { border-color: var(--color-red); }
 /* Subtask count badge */
 .sg-outline-subtask-badge {
 	font-size: 10px;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	background: var(--background-modifier-border);
 	border-radius: 8px;
 	padding: 0 5px;
@@ -8178,7 +8630,7 @@ body {
 	border-radius: 6px;
 	background: transparent;
 	box-shadow: none;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	cursor: pointer;
 	transition: color var(--sg-dur-subtle) ease;
 }
@@ -8305,7 +8757,7 @@ body {
 	border-radius: 6px;
 	background: transparent;
 	box-shadow: none;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	cursor: pointer;
 	transition: color var(--sg-dur-subtle) ease, background-color var(--sg-dur-subtle) ease;
 }
@@ -8391,7 +8843,7 @@ body {
 .sg-sheet-progress {
 	font-size: 11.5px;
 	font-weight: 500;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	padding-bottom: 2px;
 }
 
@@ -8498,11 +8950,11 @@ body {
 }
 .sg-sheet-section-count {
 	font-size: 11px;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	font-variant-numeric: tabular-nums;
 }
 .sg-sheet-section-chevron {
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	font-size: 15px;
 	transform: rotate(90deg);
 	transition: transform 0.18s ease;
@@ -8612,7 +9064,7 @@ body {
 	height: 22px;
 	border-radius: 4px;
 	cursor: pointer;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	opacity: 0;
 	flex-shrink: 0;
 	transition: opacity var(--sg-dur-subtle) ease, color var(--sg-dur-subtle) ease,
@@ -8716,7 +9168,7 @@ body {
 	font-weight: 700;
 	text-transform: uppercase;
 	letter-spacing: 0.08em;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	margin-bottom: 10px;
 }
 .sg-sheet-suggested-chips {
@@ -9042,7 +9494,7 @@ body {
 	border: none;
 	border-radius: 50%;
 	background: transparent;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	font-size: 11px;
 	line-height: 1;
 	cursor: pointer;
@@ -9077,7 +9529,7 @@ body {
 	border: none;
 	border-radius: 6px;
 	background: transparent;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	font-size: 11.5px;
 	cursor: pointer;
 }
@@ -9164,7 +9616,7 @@ body {
 	padding: 12px;
 	text-align: center;
 	font-size: 12px;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 }
 .sg-fw-image-read {
 	width: 100%;
@@ -9235,7 +9687,7 @@ body {
 	display: block;
 	margin-top: 4px;
 	font-size: 11.5px;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 }
 
 /* Checkbox */
@@ -9305,7 +9757,7 @@ body {
 	width: 100%;
 	max-width: 180px;
 	font-size: 10px;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 }
 .sg-fw-matrix-label--top { grid-column: 1 / 3; text-align: center; }
 .sg-fw-matrix-label--bottom { grid-column: 1 / 3; text-align: center; }
@@ -9361,7 +9813,7 @@ body {
 	border-radius: 4px;
 	background: none;
 	box-shadow: none;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	font-size: 15px;
 	line-height: 1;
 	cursor: pointer;
@@ -9466,7 +9918,7 @@ body {
 	border-radius: 4px;
 	background: none;
 	box-shadow: none;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	font-size: 13px;
 	line-height: 1;
 	cursor: pointer;
@@ -9515,7 +9967,7 @@ body {
 	font-weight: 650;
 	text-transform: uppercase;
 	letter-spacing: 0.06em;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 }
 .sg-fw-table-read tr:last-child td { border-bottom: none; }
 
@@ -9567,7 +10019,7 @@ body {
 	margin-left: auto;
 	font-size: 11px;
 	font-weight: 600;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	font-variant-numeric: tabular-nums;
 }
 /* Numbered dots joined by connectors. A finished step fills in and shows a
@@ -9613,7 +10065,7 @@ body {
 	box-shadow:
 		0 0 0 1.5px color-mix(in srgb, var(--background-modifier-border) 85%, transparent),
 		inset 0 1px 0 rgba(255, 255, 255, 0.35);
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	font-size: 11.5px;
 	font-weight: 700;
 	font-variant-numeric: tabular-nums;
@@ -9752,11 +10204,11 @@ body {
 	box-shadow: 0 0 0 2px color-mix(in srgb, var(--sg-sheet-accent, var(--interactive-accent)) 20%, transparent);
 	outline: none;
 }
-.sg-select-trigger.is-empty .sg-select-value { color: var(--text-faint); }
+.sg-select-trigger.is-empty .sg-select-value { color: var(--sg-text-quiet); }
 .sg-select-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sg-select-caret {
 	display: flex;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	flex-shrink: 0;
 	transition: transform 220ms cubic-bezier(0.32, 0.72, 0, 1);
 }
@@ -9825,7 +10277,7 @@ body {
 .sg-select-group-chevron {
 	display: flex;
 	flex-shrink: 0;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	transition: transform 200ms cubic-bezier(0.32, 0.72, 0, 1);
 }
 .sg-select-group-header.is-expanded .sg-select-group-chevron { transform: rotate(90deg); }
@@ -9833,7 +10285,7 @@ body {
 .sg-select-group-count {
 	font-size: 10.5px;
 	font-weight: 600;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	font-variant-numeric: tabular-nums;
 }
 /* Indented so an expanded branch's rows visibly nest under their heading —
@@ -9857,12 +10309,12 @@ body {
 .sg-select-option-hint {
 	font-size: 11px;
 	line-height: 1.35;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 }
 .sg-select-empty {
 	padding: 14px 12px;
 	font-size: 12.5px;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	text-align: center;
 }
 
@@ -9889,7 +10341,7 @@ body {
 .sg-fc-hint {
 	font-size: 11.5px;
 	line-height: 1.45;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 }
 .sg-fc-choice--new { font-style: italic; }
 
@@ -9921,7 +10373,7 @@ body {
 	box-shadow: 0 0 0 1px var(--sg-sheet-accent);
 }
 .sg-fc-type-name { font-size: 12.5px; font-weight: 600; color: var(--text-normal); }
-.sg-fc-type-hint { font-size: 11px; line-height: 1.35; color: var(--text-faint); }
+.sg-fc-type-hint { font-size: 11px; line-height: 1.35; color: var(--sg-text-quiet); }
 .sg-fc-card--staged .sg-fc-actions {
 	padding: 10px 16px 14px;
 	margin-top: 0;
@@ -9996,7 +10448,7 @@ body {
 .sg-fc-label {
 	font-size: 11px;
 	font-weight: 600;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 }
 .sg-fc-checkbox-label {
 	display: flex;
@@ -10045,7 +10497,7 @@ body {
 	font-size: 11px;
 	text-transform: uppercase;
 	letter-spacing: 0.04em;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 }
 .sg-tplb-field-cat {
 	font-size: 11px;
@@ -10054,7 +10506,7 @@ body {
 	background: color-mix(in srgb, var(--interactive-accent) 14%, transparent);
 	color: var(--interactive-accent);
 }
-.sg-tplb-del { display: flex; cursor: pointer; color: var(--text-faint); background: none; border: none; padding: 0; font: inherit; }
+.sg-tplb-del { display: flex; cursor: pointer; color: var(--sg-text-quiet); background: none; border: none; padding: 0; font: inherit; }
 .sg-tplb-del:hover { color: var(--text-error, #d05050); }
 .sg-tplb-del:focus-visible { box-shadow: 0 0 0 2px var(--background-primary), 0 0 0 4px var(--interactive-accent); border-radius: 4px; }
 .sg-tplb-del svg { width: 13px; height: 13px; }
@@ -10563,7 +11015,7 @@ body {
 .sg-outline-preview-rel-sub {
 	font-size: 10.5px;
 	font-weight: 600;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	padding: 5px 0 1px;
 	border-top: 1px solid var(--background-modifier-border);
 	margin-top: 2px;
@@ -10670,7 +11122,7 @@ body {
 .sg-outline-coach-sub {
 	margin-top: -6px;
 	font-size: var(--font-ui-smaller);
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 }
 .sg-outline-coach-group {
 	border-top: 1px solid var(--background-modifier-border);
@@ -10698,7 +11150,7 @@ body {
 .sg-outline-coach-chev {
 	display: inline-flex;
 	margin-left: auto;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 }
 .sg-outline-coach-chev svg {
 	width: 14px;
@@ -11187,14 +11639,14 @@ body {
 	margin-bottom: 12px;
 }
 .sg-detail-images-add { gap: 6px; }
-.sg-detail-images-hint { font-size: 12px; color: var(--text-faint); }
+.sg-detail-images-hint { font-size: 12px; color: var(--sg-text-quiet); }
 .sg-detail-images-paste {
 	flex: 1 1 200px;
 	min-height: 44px;
 	padding: 12px;
 	border: 1px dashed var(--background-modifier-border);
 	border-radius: 6px;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	font-size: 13px;
 	box-sizing: border-box;
 	-webkit-user-select: text;
@@ -11236,7 +11688,7 @@ body {
 	left: 6px;
 	padding: 2px 6px;
 	border-radius: 6px;
-	background: var(--interactive-accent);
+	background: var(--sg-ink-accent);
 	color: var(--text-on-accent);
 	font-size: 11px;
 	font-weight: 600;
@@ -11404,7 +11856,7 @@ body {
 	font-weight: 600;
 	text-transform: uppercase;
 	letter-spacing: 0.06em;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 }
 .sg-detail-appearance-title { font-size: 13px; font-weight: 450; color: var(--text-normal); }
 
@@ -11422,7 +11874,7 @@ body {
 .sg-detail-empty {
 	padding: 40px 0;
 	text-align: center;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	font-style: italic;
 }
 .sg-detail-section { margin-bottom: 32px; }
@@ -11581,7 +12033,7 @@ body {
 	color: var(--text-normal);
 	overflow-wrap: break-word;
 }
-.sg-detail-drive-placeholder { color: var(--text-faint); font-style: italic; font-weight: 400; }
+.sg-detail-drive-placeholder { color: var(--sg-text-quiet); font-style: italic; font-weight: 400; }
 
 /* ── Relationship chips ── */
 .sg-detail-section--relations .sg-detail-section-title { margin-bottom: 12px; }
@@ -11770,7 +12222,7 @@ body {
 	font-weight: 650;
 	text-transform: uppercase;
 	letter-spacing: 0.09em;
-	color: var(--interactive-accent);
+	color: var(--sg-ink-accent);
 }
 .sg-dash-title-icon svg {
 	width: 14px;
@@ -11945,7 +12397,7 @@ body {
 	border-radius: 6px;
 	background: transparent;
 	box-shadow: none;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	cursor: pointer;
 	transition: color var(--sg-dur-subtle) ease;
 }
@@ -11975,7 +12427,7 @@ body {
 .sg-dash-muted {
 	padding: 10px 0;
 	font-size: 13px;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 }
 
 .sg-dash-muted code {
@@ -12048,7 +12500,7 @@ body {
 
 .sg-dash-streak-best {
 	font-size: 11.5px;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	margin-left: 4px;
 }
 
@@ -12093,7 +12545,7 @@ body {
 	align-items: center;
 	gap: 4px;
 	font-size: 12px;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	cursor: pointer;
 	padding: 4px 2px;
 	list-style: none;
@@ -12151,7 +12603,7 @@ body {
 	border-radius: 6px;
 	border: 1px solid var(--background-modifier-border);
 	background: var(--background-primary);
-	color: var(--interactive-accent);
+	color: var(--sg-ink-accent);
 	cursor: pointer;
 	white-space: nowrap;
 	transition: background var(--sg-dur-subtle), border-color var(--sg-dur-subtle);
@@ -12172,7 +12624,7 @@ body {
 	font-weight: 600;
 	text-transform: uppercase;
 	letter-spacing: 0.07em;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	margin-bottom: 7px;
 }
 
@@ -12279,7 +12731,7 @@ button.sg-todo-add-btn.sg-todo-add-btn {
 	color: var(--text-muted);
 	display: flex;
 	align-items: center;
-	opacity: 0.45;
+	opacity: max(0.45, var(--sg-light));
 	transition: opacity var(--sg-dur-subtle), color var(--sg-dur-subtle);
 }
 .sg-todo-add-btn:focus { outline: none; box-shadow: none; }
@@ -12318,8 +12770,8 @@ button.sg-todo-add-btn.sg-todo-add-btn {
 	box-sizing: border-box;
 }
 .sg-todo-input:focus { outline: none; border-color: var(--interactive-accent); }
-.sg-todo-empty { font-size: 12px; color: var(--text-faint); font-style: italic; padding: 4px 0; }
-.sg-todo-overflow { font-size: 11px; color: var(--text-faint); font-style: italic; margin-top: 2px; padding: 2px 0; }
+.sg-todo-empty { font-size: 12px; color: var(--sg-text-quiet); font-style: italic; padding: 4px 0; }
+.sg-todo-overflow { font-size: 11px; color: var(--sg-text-quiet); font-style: italic; margin-top: 2px; padding: 2px 0; }
 
 /* Draggable wrapper */
 .sg-todo-wrap { position: relative; display: flex; flex-direction: column; cursor: grab; border: 1px solid transparent; border-radius: 6px; transition: opacity var(--sg-dur-subtle) ease; }
@@ -12336,7 +12788,7 @@ button.sg-todo-add-btn.sg-todo-add-btn {
 	border-radius: 6px;
 	font-size: 12px;
 }
-.sg-todo-row:hover { background: var(--background-secondary); }
+.sg-todo-row:hover { background: var(--sg-hover-fill); }
 .sg-todo-row.is-done .sg-todo-text { text-decoration: line-through; color: var(--text-faint); }
 .sg-todo-row input[type='checkbox'] { margin: 2px 0 0; cursor: pointer; flex-shrink: 0; }
 .sg-todo-text { flex: 1; color: var(--text-normal); min-width: 0; overflow-wrap: anywhere; line-height: 1.35; }
@@ -12409,7 +12861,7 @@ button.sg-todo-add-btn.sg-todo-add-btn {
 	border: none;
 	border-radius: 6px;
 	background: transparent;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	cursor: pointer;
 	padding: 0;
 	transition: background var(--sg-dur-fast), color var(--sg-dur-fast);
@@ -12448,7 +12900,7 @@ button.sg-todo-add-btn.sg-todo-add-btn {
 	border-radius: 4px;
 	font-size: 11px;
 }
-.sg-todo-sub:hover { background: var(--background-secondary); }
+.sg-todo-sub:hover { background: var(--sg-hover-fill); }
 .sg-todo-sub.is-done .sg-todo-sub-text { text-decoration: line-through; color: var(--text-faint); }
 .sg-todo-sub-indent { width: 22px; flex-shrink: 0; }
 .sg-todo-sub-text { flex: 1; color: var(--text-muted); }
@@ -12456,7 +12908,7 @@ button.sg-todo-add-btn.sg-todo-add-btn {
 	background: none;
 	border: none;
 	cursor: pointer;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	opacity: 0;
 	display: flex;
 	align-items: center;
@@ -12491,8 +12943,8 @@ button.sg-todo-add-btn.sg-todo-add-btn {
 	border-radius: 6px;
 	border: 1px dashed var(--background-modifier-border);
 	font-size: 11px;
-	color: var(--text-faint);
-	opacity: 0.6;
+	color: var(--sg-text-quiet);
+	opacity: max(0.6, var(--sg-light));
 	transition: opacity var(--sg-dur-subtle), border-color var(--sg-dur-subtle), background var(--sg-dur-subtle), color var(--sg-dur-subtle);
 	cursor: default;
 }
@@ -12525,7 +12977,7 @@ button.sg-todo-add-btn.sg-todo-add-btn {
 	background: transparent;
 	cursor: pointer;
 	font-size: 11px;
-	color: var(--interactive-accent);
+	color: var(--sg-ink-accent);
 	font-weight: 500;
 }
 .sg-todo-undo-btn:hover { background: var(--interactive-accent); color: var(--text-on-accent); }
@@ -12569,6 +13021,10 @@ button.sg-todo-add-btn.sg-todo-add-btn {
 	border-top: none;
 	border-left: none;
 	transform: rotate(45deg);
+}
+body:not(.theme-dark) .sg-todo-row input[type='checkbox']:checked::after,
+body:not(.theme-dark) .sg-todo-sub input[type='checkbox']:checked::after {
+	border-color: var(--text-on-accent);
 }
 
 /* ── Priority dot ── */
@@ -12646,12 +13102,12 @@ button.sg-todo-add-btn.sg-todo-add-btn {
 }
 .sg-todo-due.is-overdue {
 	background: color-mix(in srgb, var(--color-red) 12%, transparent);
-	color: var(--color-red);
+	color: var(--sg-ink-red);
 	font-weight: 600;
 }
 .sg-todo-due.is-today {
 	background: rgba(var(--interactive-accent-rgb, 101, 116, 205), 0.12);
-	color: var(--interactive-accent);
+	color: var(--sg-ink-accent);
 	font-weight: 600;
 }
 
@@ -12668,10 +13124,10 @@ button.sg-todo-add-btn.sg-todo-add-btn {
 	border-radius: 6px;
 	width: 100%;
 	font-size: 11px;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	transition: background var(--sg-dur-fast);
 }
-.sg-todo-done-toggle:hover { background: var(--background-secondary); color: var(--text-muted); }
+.sg-todo-done-toggle:hover { background: var(--sg-hover-fill); color: var(--text-muted); }
 .sg-todo-done-caret svg { width: 10px; height: 10px; }
 .sg-todo-done-label { font-weight: 500; }
 .sg-todo-clear-btn {
@@ -12682,7 +13138,7 @@ button.sg-todo-add-btn.sg-todo-add-btn {
 	border: 1px solid var(--background-modifier-border);
 	border-radius: 6px;
 	font-size: 11px;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	cursor: pointer;
 	text-align: center;
 	transition: border-color var(--sg-dur-fast), color var(--sg-dur-fast);
@@ -12698,7 +13154,7 @@ button.sg-todo-add-btn.sg-todo-add-btn {
 	padding: 1px 6px 1px 4px;
 	border-radius: 10px;
 	background: color-mix(in srgb, var(--interactive-accent) 12%, transparent);
-	color: var(--interactive-accent);
+	color: var(--sg-ink-accent);
 	cursor: pointer;
 	flex-shrink: 0;
 	border: none;
@@ -12867,7 +13323,7 @@ button.sg-todo-add-btn.sg-todo-add-btn {
 }
 .sg-dash-habit-chev {
 	display: inline-flex;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 }
 .sg-dash-habit-chev svg {
 	width: 14px;
@@ -12946,7 +13402,7 @@ button.sg-todo-add-btn.sg-todo-add-btn {
 .sg-dash-pace-note {
 	margin-top: 8px;
 	font-size: var(--font-ui-smaller);
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 }
 @media (max-width: 480px) {
 	.sg-dash-pace-row {
@@ -12994,7 +13450,7 @@ button.sg-todo-add-btn.sg-todo-add-btn {
 	text-align: right;
 	font-size: var(--font-ui-smaller);
 	font-variant-numeric: tabular-nums;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 }
 
 /* ── Status pipeline ── */
@@ -13465,7 +13921,7 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 	display: flex;
 	align-items: center;
 	font-size: 12px;
-	opacity: 0.55;
+	opacity: max(0.55, var(--sg-light));
 	transition: opacity var(--sg-dur-subtle) ease, color var(--sg-dur-subtle) ease;
 	padding: 0 4px;
 	border-radius: 6px;
@@ -13475,7 +13931,7 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 }
 .sg-status-mode.is-active {
 	opacity: 1;
-	color: var(--interactive-accent);
+	color: var(--sg-ink-accent);
 	font-weight: 600;
 }
 .theme-dark .sg-status-mode.is-active {
@@ -13486,7 +13942,7 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 
 .sg-status-wordcount {
 	font-size: 12px;
-	opacity: 0.55;
+	opacity: max(0.55, var(--sg-light));
 	transition: opacity var(--sg-dur-subtle) ease, color var(--sg-dur-subtle) ease;
 	padding: 0 4px;
 }
@@ -13495,7 +13951,7 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 }
 .sg-status-wordcount.is-met {
 	opacity: 1;
-	color: var(--color-green);
+	color: var(--sg-ink-green);
 	font-weight: 600;
 }
 .theme-dark .sg-status-wordcount.is-met {
@@ -13504,7 +13960,7 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 
 /* Outline panel — word count met */
 .sg-outline-scene-words.is-met {
-	color: var(--color-green);
+	color: var(--sg-ink-green);
 	font-weight: 600;
 }
 
@@ -13514,9 +13970,9 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 	font-size: 12px;
 	font-variant-numeric: tabular-nums;
 	font-weight: 600;
-	opacity: 0.85;
+	opacity: max(0.85, var(--sg-light));
 	padding: 0 4px;
-	color: var(--interactive-accent);
+	color: var(--sg-ink-accent);
 	transition: opacity var(--sg-dur-subtle) ease;
 }
 .sg-status-sprint:hover {
@@ -13548,7 +14004,7 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 }
 .sg-sprint-wpm {
 	font-size: 0.85em;
-	opacity: 0.55;
+	opacity: max(0.55, var(--sg-light) * 0.7);
 	margin-top: 6px;
 }
 .sg-sprint-streak {
@@ -13584,7 +14040,7 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 	border-bottom: 1px solid var(--background-modifier-border);
 }
 .sg-preview-header h2 { margin: 0; font-size: 1.1em; }
-.sg-preview-meta { font-size: 0.8em; opacity: 0.55; }
+.sg-preview-meta { font-size: 0.8em; opacity: max(0.55, var(--sg-light) * 0.7); }
 .sg-preview-body {
 	display: flex;
 	flex: 1;
@@ -13611,14 +14067,14 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 .sg-preview-rail-item:hover { background: var(--background-modifier-hover); opacity: 1; }
 .sg-preview-rail-item.is-active {
 	background: color-mix(in srgb, var(--interactive-accent) 14%, transparent);
-	color: var(--interactive-accent);
+	color: var(--sg-ink-accent);
 	opacity: 1;
 	font-weight: 600;
 }
 .sg-preview-rail-item--h1 { font-weight: 700; }
 .sg-preview-rail-item--h2 { padding-left: 18px; }
 .sg-preview-rail-item--h3 { padding-left: 30px; font-size: 0.78em; }
-.sg-preview-rail-empty { font-size: 0.78em; opacity: 0.5; padding: 10px; }
+.sg-preview-rail-empty { font-size: 0.78em; opacity: max(0.5, var(--sg-light) * 0.7); padding: 10px; }
 .sg-preview-pane {
 	flex: 1;
 	overflow-y: auto;
@@ -13722,7 +14178,7 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 
 .sg-tw-pop-val {
 	font-size: 11px;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	min-width: 28px;
 	text-align: right;
 	font-variant-numeric: tabular-nums;
@@ -13836,7 +14292,7 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 }
 .sg-codex-tree-count {
 	font-size: 11px;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	flex-shrink: 0;
 }
 .sg-codex-tree-add {
@@ -13882,7 +14338,7 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 }
 .sg-codex-tree-hint {
 	font-size: 11px;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	padding: 8px 10px 0;
 }
 
@@ -14294,7 +14750,7 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 	font-size: var(--font-ui-smaller);
 }
 .sg-dash-sprint-goal-label { color: var(--text-muted); }
-.sg-dash-sprint-goal-nums { color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.sg-dash-sprint-goal-nums { color: var(--sg-text-quiet); font-variant-numeric: tabular-nums; }
 .sg-dash-sprint-goal-nums .sg-dash-num {
 	font-size: var(--font-ui-large);
 	letter-spacing: -0.02em;
@@ -14917,7 +15373,7 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 
 .sg-welcome-footer p {
 	font-size: 0.85rem;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	margin: 0 0 14px;
 }
 
@@ -15086,7 +15542,7 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 
 .sg-intent-card-subtitle {
 	font-size: 0.82rem;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	margin: 0 0 16px;
 	line-height: 1.4;
 }
@@ -15124,7 +15580,7 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 	font-weight: 600;
 	text-transform: uppercase;
 	letter-spacing: 0.03em;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	margin-bottom: 8px;
 }
 
@@ -15148,7 +15604,7 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 .sg-intent-chip-icon {
 	display: flex;
 	align-items: center;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 }
 
 .sg-intent-chip-icon svg {
@@ -15163,7 +15619,7 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 
 .sg-intent-footer p {
 	font-size: 0.82rem;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	margin: 0;
 }
 
@@ -15258,7 +15714,7 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 .sg-panel-entity-kind-label {
 	font-size: 10px;
 	font-weight: 600;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	text-transform: uppercase;
 	letter-spacing: 0.06em;
 }
@@ -15469,7 +15925,7 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 
 .sg-history-empty-sub {
 	font-size: 0.82em;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	max-width: 280px;
 	line-height: 1.5;
 }
@@ -15683,13 +16139,13 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 	width: 28px;
 	height: 28px;
 	border-radius: 50%;
-	border: 1.5px dashed color-mix(in srgb, var(--interactive-accent) 60%, transparent);
+	border: 1.5px dashed color-mix(in srgb, var(--interactive-accent) calc(60% + 40% * var(--sg-light)), transparent);
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	font-size: 1.1em;
 	font-weight: 300;
-	color: color-mix(in srgb, var(--interactive-accent) 60%, transparent);
+	color: color-mix(in srgb, var(--interactive-accent) calc(60% + 40% * var(--sg-light)), transparent);
 }
 
 .sg-ghost-hint-text {
@@ -15697,7 +16153,7 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 	color: var(--text-muted);
 	text-align: center;
 	line-height: 1.3;
-	opacity: 0.8;
+	opacity: max(0.8, var(--sg-light));
 }
 
 .theme-dark .sg-ghost-hint-icon {
@@ -15875,7 +16331,7 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 	border-radius: 50%;
 	font-size: 0.72em;
 	line-height: 1;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	cursor: help;
 	flex-shrink: 0;
 	transition: color var(--sg-dur-subtle);
@@ -16809,6 +17265,14 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 	overflow: hidden;
 	background: var(--background-primary);
 	position: relative;
+	/* Node colour per Codex family, straight from the Obsidian theme (so light
+	   and dark each get their own): purple characters, green places, orange
+	   items, red groups, a quiet grey for everything else. */
+	--sg-rg-node-character: var(--color-purple, #a882ff);
+	--sg-rg-node-place: var(--color-green, #44cf6e);
+	--sg-rg-node-item: var(--color-orange, #e9973f);
+	--sg-rg-node-group: var(--color-red, #fb464c);
+	--sg-rg-node-other: color-mix(in srgb, var(--text-muted) 50%, var(--text-faint));
 }
 
 /* ─── Toolbar ─── */
@@ -16959,7 +17423,7 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 .sg-rg-group-popover-empty {
 	padding: 6px 8px;
 	font-size: 12px;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 }
 
 .sg-rg-group-popover-row {
@@ -17005,7 +17469,7 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 
 .sg-rg-edge {
 	/* Default: colored lines, slightly transparent so the graph reads lightly */
-	stroke-opacity: 0.55;
+	stroke-opacity: max(0.55, var(--sg-light) * 0.6);
 	transition: opacity 150ms ease, stroke-opacity 150ms ease;
 }
 
@@ -17016,13 +17480,13 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 
 /* Non-connected edges fade away */
 .sg-rg-edge.is-dimmed {
-	opacity: 0.06;
+	opacity: max(0.06, var(--sg-light) * 0.14);
 }
 
 /* Outside the current Ego/Groups perspective — independent of hover dimming
    above (a different class, toggled by applyPerspectiveFade). */
 .sg-rg-edge.is-faded {
-	opacity: 0.08;
+	opacity: max(0.08, var(--sg-light) * 0.2);
 }
 
 /* Type word centered on a collapsed mutual line ("Spouses") — invisible at
@@ -17078,18 +17542,70 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 
 /* Unconnected nodes (and their labels) fade away together */
 .sg-rg-node.is-dimmed {
-	opacity: 0.15;
+	opacity: max(0.15, var(--sg-light) * 0.22);
 }
 
 /* Outside the current Ego/Groups perspective — independent of hover dimming
    above (a different class, toggled by applyPerspectiveFade). */
 .sg-rg-node.is-faded {
-	opacity: 0.08;
+	opacity: max(0.08, var(--sg-light) * 0.18);
 }
 
 /* Dragged node grows like the hovered one */
 .sg-rg-node.is-dragging .sg-rg-node-circle:not(.has-portrait) {
 	r: 10px;
+}
+
+/* Non-character nodes (sketch v2): a small shape per Codex family — soft
+   triangle (places), hexagon (groups), diamond (items), rounded square
+   (everything else) — a touch softer than the characters' dots. Clicks land on
+   the invisible round hit area underneath, which is exactly the old dot's
+   size and grows with it, so hover/click/drag behave as before. */
+.sg-rg-node-hit {
+	pointer-events: all;
+	transition: r 0.2s ease;
+}
+.sg-rg-node.is-hovered .sg-rg-node-hit,
+.sg-rg-node.is-dragging .sg-rg-node-hit {
+	r: 10px;
+}
+
+.sg-rg-node-shape {
+	opacity: 0.85;
+	/* Same-colour hairline that rounds the corners off */
+	stroke-width: 1.1px;
+	/* Scale around the node's centre (its own 0,0), not the shape's box */
+	transform-box: view-box;
+	transform-origin: 0 0;
+	transition: transform 0.2s ease, stroke 150ms ease, stroke-width 0.2s ease, opacity 150ms ease;
+}
+/* Hover / drag: grows to the dot's 10px hover size at full strength. The
+   outline is divided by the same growth, so it stays today's 2px ring. */
+.sg-rg-node.is-hovered .sg-rg-node-shape,
+.sg-rg-node.is-dragging .sg-rg-node-shape {
+	transform: scale(var(--sg-rg-grow, 1));
+	opacity: 1;
+	stroke-width: calc(1.1px / var(--sg-rg-grow, 1));
+}
+.sg-rg-node.is-hovered .sg-rg-node-shape {
+	stroke: var(--interactive-accent);
+	stroke-width: calc(2px / var(--sg-rg-grow, 1));
+}
+
+/* Small shape pictures: the key, the "Show" filter buttons, the group list */
+.sg-rg-shape-icon {
+	width: 10px;
+	height: 10px;
+	flex-shrink: 0;
+	overflow: visible;
+}
+.sg-rg-legend .sg-rg-shape-icon {
+	width: 12px;
+	height: 12px;
+}
+.sg-rg-shape-icon-mark {
+	opacity: 0.85;
+	stroke-width: 1.1px;
 }
 
 /* Node labels — opacity follows zoom level (Obsidian-style: fade in as you
@@ -17170,7 +17686,7 @@ body.theme-dark.sg-sheets-styled .storygrid-sheet .callout[data-callout-metadata
 /* `p.` so it outranks `.sg-rg-empty p` above (same specificity, later). */
 p.sg-rg-example-note {
 	font-size: 0.78em;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	max-width: 320px;
 }
 
@@ -17217,7 +17733,7 @@ p.sg-rg-example-note {
 }
 /* The "Unspecified" entry: a thin, muted line (the others get their relationship colour inline). */
 .sg-rg-legend-swatch--bare {
-	background: var(--text-faint);
+	background: var(--sg-line-quiet);
 	height: 1px;
 }
 
@@ -17351,7 +17867,7 @@ p.sg-rg-example-note {
 .sg-rg-settings-empty {
 	margin: 0;
 	font-size: 12px;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 }
 
 .sg-rg-settings-row {
@@ -17475,13 +17991,6 @@ p.sg-rg-example-note {
 	background: var(--interactive-accent);
 	color: var(--text-on-accent);
 	border-color: var(--interactive-accent);
-}
-
-.sg-rg-pill-dot {
-	width: 8px;
-	height: 8px;
-	border-radius: 50%;
-	flex-shrink: 0;
 }
 
 .sg-rg-pill-swatch {
@@ -17806,7 +18315,7 @@ p.sg-rg-example-note {
 }
 
 .sg-st-note-more {
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	cursor: help;
 }
 
@@ -17819,13 +18328,13 @@ p.sg-rg-example-note {
 .sg-st-node.is-placeholder .sg-st-node-card,
 .sg-st-node.is-placeholder .sg-st-node-circle {
 	fill: transparent;
-	stroke: var(--text-faint);
+	stroke: var(--sg-line-ink);
 	stroke-dasharray: 4 4;
 	stroke-opacity: 0.7;
 }
 
 .sg-st-node.is-placeholder .sg-st-node-label {
-	fill: var(--text-faint);
+	fill: var(--sg-text-quiet);
 	font-style: italic;
 }
 
@@ -17856,7 +18365,7 @@ p.sg-rg-example-note {
 /* ─── Edges ─── */
 
 .sg-st-edge {
-	stroke: var(--text-faint);
+	stroke: var(--sg-line-ink);
 	stroke-width: 1.5;
 	stroke-opacity: 0.75;
 	stroke-linecap: round;
@@ -17888,21 +18397,21 @@ p.sg-rg-example-note {
 .sg-st-edge-sibling {
 	stroke-dasharray: 1 5;
 	stroke-linecap: round;
-	stroke-opacity: 0.5;
+	stroke-opacity: max(0.5, var(--sg-light) * 0.65);
 }
 
 /* Cousins: fainter than siblings — same row, a looser bond. */
 .sg-st-edge-cousin {
 	stroke-dasharray: 1 7;
 	stroke-linecap: round;
-	stroke-opacity: 0.35;
+	stroke-opacity: max(0.35, var(--sg-light) * 0.55);
 }
 
 /* Guardian / aunt / uncle / niece: from above, but not a parent line. */
 .sg-st-edge-kin {
 	stroke-dasharray: 2 5;
 	stroke-linecap: round;
-	stroke-opacity: 0.5;
+	stroke-opacity: max(0.5, var(--sg-light) * 0.65);
 }
 
 .sg-st-edge-union-drop {
@@ -17949,7 +18458,7 @@ p.sg-rg-example-note {
 
 .sg-st-node-card {
 	fill: var(--background-primary);
-	stroke: var(--background-modifier-border);
+	stroke: var(--sg-edge-soft);
 	stroke-width: 1;
 }
 
@@ -17975,7 +18484,7 @@ p.sg-rg-example-note {
 }
 
 .sg-st-node.is-placeholder .sg-st-node-sub {
-	fill: var(--text-faint);
+	fill: var(--sg-text-quiet);
 	font-style: italic;
 }
 
@@ -18017,7 +18526,7 @@ p.sg-rg-example-note {
 }
 
 .sg-st-rank-label {
-	fill: var(--text-faint);
+	fill: var(--sg-text-quiet);
 	font-weight: 600;
 	letter-spacing: 0.06em;
 }
@@ -18039,7 +18548,7 @@ p.sg-rg-example-note {
 /* The unknown parent: a dashed, empty circle with a "?". */
 .sg-st-ph.is-unknown .sg-st-ph-circle {
 	fill: none;
-	stroke: var(--text-faint);
+	stroke: var(--sg-line-quiet);
 	stroke-width: 1.5;
 	stroke-dasharray: 3 3;
 }
@@ -18172,7 +18681,7 @@ p.sg-rg-example-note {
 /* `p.` so it outranks `.sg-st-empty p` above (same specificity, later). */
 p.sg-st-example-note {
 	font-size: 0.78em;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	max-width: 320px;
 }
 
@@ -18977,7 +19486,7 @@ body.sg-plugin-active a.internal-link {
   border: 1px solid var(--background-modifier-border);
 }
 .sg-switch-badge--series {
-  color: var(--interactive-accent);
+  color: var(--sg-ink-accent);
   border-color: var(--interactive-accent);
   background: transparent;
 }
@@ -19176,7 +19685,7 @@ body.sg-plugin-active a.internal-link {
  * stroke-width rule to carry over.
  */
 .sg-tl-spine {
-	fill: var(--text-faint);
+	fill: var(--sg-line-quiet);
 	cursor: pointer;
 }
 
@@ -19188,7 +19697,7 @@ body.sg-plugin-active a.internal-link {
 }
 
 .sg-tl-cap-dot {
-	fill: var(--text-faint);
+	fill: var(--sg-line-quiet);
 }
 
 /* Ticks ride with the camera; the settle refresh only adds new ones, which fade in. */
@@ -19202,7 +19711,7 @@ body.sg-plugin-active a.internal-link {
 }
 
 .sg-tl-spine-tick {
-	stroke: var(--background-modifier-border);
+	stroke: var(--sg-edge-soft);
 	stroke-width: 1;
 }
 
@@ -19222,7 +19731,7 @@ body.sg-plugin-active a.internal-link {
 
 .sg-tl-tick-label.is-day {
 	font-size: 9px;
-	opacity: 0.75;
+	opacity: max(0.75, var(--sg-light));
 }
 
 .sg-tl-year-chip-bg {
@@ -19274,7 +19783,7 @@ body.sg-plugin-active a.internal-link {
 .sg-tl-stitch {
 	stroke-width: 1;
 	stroke-dasharray: 3 4;
-	opacity: 0.45;
+	opacity: max(0.45, var(--sg-light) * 0.65);
 }
 
 /* ── Plotline lanes + names ──
@@ -19320,7 +19829,7 @@ body.sg-plugin-active a.internal-link {
 
 .sg-tl-node-halo {
 	fill: var(--background-primary);
-	stroke: rgba(0, 0, 0, 0.14);
+	stroke: rgba(0, 0, 0, calc(0.14 + 0.28 * var(--sg-light)));
 	stroke-width: 1px;
 }
 
@@ -19419,7 +19928,7 @@ body.sg-plugin-active a.internal-link {
 }
 
 .sg-tl-key-spine {
-	fill: var(--text-faint);
+	fill: var(--sg-line-quiet);
 }
 
 .sg-tl-key-thread {
@@ -19443,9 +19952,9 @@ body.sg-plugin-active a.internal-link {
 
 .sg-tl-key-era {
 	fill: var(--interactive-accent);
-	fill-opacity: 0.18;
+	fill-opacity: calc(0.18 + 0.08 * var(--sg-light));
 	stroke: var(--interactive-accent);
-	stroke-opacity: 0.45;
+	stroke-opacity: calc(0.45 + 0.25 * var(--sg-light));
 	stroke-width: 1;
 }
 
@@ -19491,7 +20000,7 @@ body.sg-plugin-active a.internal-link {
 
 .sg-tl-node.is-hovered .sg-tl-ev-label,
 .sg-tl-node.is-active .sg-tl-ev-label {
-	fill: var(--interactive-accent);
+	fill: var(--sg-ink-accent);
 }
 
 /*
@@ -19819,7 +20328,7 @@ body.sg-plugin-active a.internal-link {
 .sg-tl-appearance-value {
 	font-size: 12px;
 	font-variant-numeric: tabular-nums;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	min-width: 2em;
 	text-align: right;
 }
@@ -19930,7 +20439,7 @@ body.sg-plugin-active a.internal-link {
 
 .sg-tl-range-hint {
 	font-size: 12px;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 }
 
 /* ── Empty state (ghost-content, mirrors .sg-rg-no-connections) ── */
@@ -19977,7 +20486,7 @@ body.sg-plugin-active a.internal-link {
 
 .sg-tl-empty-hint {
 	font-size: 0.78em;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 }
 
 .sg-tl-empty-cta {
@@ -20221,7 +20730,7 @@ body.sg-plugin-active a.internal-link {
 
 .sg-tl-editor-hint {
 	font-size: 12px;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	line-height: 1.5;
 }
 
@@ -20342,7 +20851,7 @@ body.sg-plugin-active a.internal-link {
 
 .sg-tl-icon-none-btn.is-selected {
 	border-color: var(--interactive-accent);
-	color: var(--interactive-accent);
+	color: var(--sg-ink-accent);
 }
 
 /* Scrolling grid: max-height caps the popover's height, min-height:0 is what
@@ -20385,7 +20894,7 @@ body.sg-plugin-active a.internal-link {
 
 .sg-tl-icon-btn.is-selected {
 	border-color: var(--interactive-accent);
-	color: var(--interactive-accent);
+	color: var(--sg-ink-accent);
 }
 
 .sg-tl-icon-empty {
@@ -20393,7 +20902,7 @@ body.sg-plugin-active a.internal-link {
 	padding: 12px 4px;
 	text-align: center;
 	font-size: 12px;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 }
 
 /* The glyph painted inside a marker/bar on the canvas itself (not the UI
@@ -20443,7 +20952,7 @@ body.sg-plugin-active a.internal-link {
 	border: 1px solid var(--interactive-accent);
 	border-radius: 6px;
 	background: var(--background-primary);
-	color: var(--interactive-accent);
+	color: var(--sg-ink-accent);
 	font-size: 12px;
 	font-weight: 600;
 	box-shadow: none;
@@ -20671,7 +21180,7 @@ body.is-mobile .sg-st-empty-cta--quiet {
 	flex: none;
 	order: 3;
 	margin-left: auto;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 }
 .sg-setup-fold-caret svg {
 	width: 12px;
@@ -21052,7 +21561,7 @@ body.is-mobile .sg-detail--setup-page .sg-setup-row .sg-setup-row-x {
 	box-shadow: none;
 }
 .sg-setup-win input[type="text"]::placeholder {
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	opacity: 1;
 }
 .sg-setup-win input.sg-setup-win-name {
@@ -22191,12 +22700,12 @@ body.is-mobile .sg-sheet-lines button.sg-sheet-line-add {
 }
 .sg-dash-setups-row.is-done .sg-dash-setups-icon,
 .sg-dash-setups-row.is-done .sg-dash-setups-fact {
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 }
 /* Gone quiet: the same accent as the note, on the icon and the fact only. */
 .sg-dash-setups-row.is-quiet .sg-dash-setups-icon,
 .sg-dash-setups-row.is-quiet .sg-dash-setups-fact {
-	color: var(--interactive-accent);
+	color: var(--sg-ink-accent);
 }
 .sg-dash-setups-rest {
 	display: flex;
@@ -22204,7 +22713,7 @@ body.is-mobile .sg-sheet-lines button.sg-sheet-line-add {
 	min-height: 32px;
 	padding-left: 24px; /* under the names: 16px icon slot + 8px gap */
 	font-size: var(--font-ui-smaller);
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 }
 
 /* Nothing planted yet: the Setups plant and one calm sentence. */
@@ -22291,7 +22800,7 @@ h3 button.sg-setup-info {
 	border-radius: 6px;
 	background: transparent;
 	box-shadow: none;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	vertical-align: middle;
 	cursor: pointer;
 	transition: color var(--sg-dur-subtle) ease;
@@ -22543,22 +23052,22 @@ body.is-mobile button.sg-history-event-action.sg-history-event-action::after {
 	background: transparent;
 }
 .sg-setup-card.is-planned .sg-setup-stage-icon {
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 }
 /* "· Payoff planned for Chapter 12" after the stage line of a written setup. */
 .sg-setup-card-plan {
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 }
 
 /* ── Setup sheet: the stage line ── */
 .sg-setup-sheet-stage.is-planned .sg-setup-stage-icon {
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 }
 .sg-setup-sheet-stage.is-planned .sg-setup-stage-word {
 	font-weight: 500;
 }
 .sg-setup-sheet-plan {
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 }
 .sg-setup-sheet-plan::before {
 	content: "·";
@@ -22577,7 +23086,7 @@ body.is-mobile button.sg-history-event-action.sg-history-event-action::after {
 	font-size: 12px;
 	font-weight: 600;
 	line-height: 1.4;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 }
 .sg-setup-places-group .sg-setup-sheet-hint {
 	margin: 0 0 4px;
@@ -22585,7 +23094,7 @@ body.is-mobile button.sg-history-event-action.sg-history-event-action::after {
 	line-height: 1.45;
 }
 .sg-setup-place.is-planned .sg-setup-stage-icon {
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 }
 /* A planned line carries the name of the card or event, not the writer's own sentence. */
 .sg-setup-place.is-planned .sg-setup-place-quote {
@@ -22710,7 +23219,7 @@ button.sg-panel-setup-open.sg-panel-setup-open {
 .sg-panel-setup-icon {
 	display: inline-flex;
 	flex-shrink: 0;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 }
 .sg-panel-setup-row.is-written .sg-panel-setup-icon {
 	color: var(--text-muted);
@@ -22728,7 +23237,7 @@ button.sg-panel-setup-open.sg-panel-setup-open {
 .sg-panel-setup-state {
 	flex-shrink: 0;
 	font-size: 11.5px;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	white-space: nowrap;
 }
 .sg-panel-setup-row.is-written .sg-panel-setup-state {
@@ -22748,7 +23257,7 @@ button.sg-panel-setup-x.sg-panel-setup-x {
 	border-radius: 6px;
 	background: none;
 	box-shadow: none;
-	color: var(--text-faint);
+	color: var(--sg-text-quiet);
 	opacity: 0;
 	cursor: pointer;
 	transition: opacity var(--sg-dur-fast) ease, color var(--sg-dur-fast) ease, background-color var(--sg-dur-fast) ease;
@@ -22863,3 +23372,2321 @@ body.is-mobile button.sg-panel-setup-x.sg-panel-setup-x {
 		transition: none;
 	}
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LIGHT THEME ONLY                                              [sg-lt-rules]
+   Every rule in this block starts with  body:not(.theme-dark)  so it can never
+   match in dark. These are the places where light needs something dark gets
+   for free (a darker page separates things on its own; a white page needs a
+   line, a tint or a soft shadow). Theme colours only.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Connections Map: on white the lines are drawn at three quarters of their
+   set thickness (--sg-rg-w is that thickness, written on each line by
+   rel-graph-view.ts), so the map stays airy. Thick still means a closer bond;
+   the thinnest kind never drops under 0.9. ── */
+body:not(.theme-dark) .sg-rg-edge {
+	stroke-width: max(0.8px, calc(var(--sg-rg-w) * 0.6px));
+}
+
+/* A link with no relationship named yet: a hairline in the quiet line colour
+   (the faintest grey disappears on white). ── */
+body:not(.theme-dark) .sg-rg-edge--bare {
+	stroke: var(--sg-line-quiet);
+	stroke-width: 0.75px;
+}
+
+/* ── Card editor: section headers ("Scene details", "Appearance" …) are soft
+   grey bars, as in dark — not white boxes that look like text fields. ── */
+body:not(.theme-dark) button.sg-panel-section-summary {
+	background: var(--background-modifier-hover);
+	box-shadow: none;
+}
+
+body:not(.theme-dark) button.sg-panel-section-summary:hover {
+	background: var(--background-modifier-border);
+}
+
+body:not(.theme-dark) button.sg-panel-section-summary:focus-visible {
+	box-shadow: inset 0 0 0 2px var(--interactive-accent);
+}
+
+/* ── Colour picker: near-white swatches get an edge that shows on the white
+   picker (at rest only; hover and the chosen swatch keep their own look). ── */
+body:not(.theme-dark) button.sg-cpick-chip:not(.sg-cpick-chip--active):not(:hover):not(:focus-visible) {
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text-normal) 28%, transparent);
+}
+
+/* ── Codex cards without a picture: the picture area is a soft grey band, so
+   the card reads as a card (in dark the band is already a lighter strip). ── */
+body:not(.theme-dark) .sg-codex-card-media {
+	background: var(--background-secondary);
+}
+
+/* ── Codex cards / list switch: the one that is on is a white chip with a
+   soft shadow on the grey tray; the other one is flat. ── */
+body:not(.theme-dark) button.sg-codex-view-btn {
+	background: transparent;
+	box-shadow: none;
+}
+
+body:not(.theme-dark) button.sg-codex-view-btn:hover {
+	background: var(--background-modifier-hover);
+}
+
+body:not(.theme-dark) button.sg-codex-view-btn.is-active {
+	background: var(--background-primary);
+	color: var(--text-normal);
+	box-shadow: 0 1px 2px color-mix(in srgb, var(--text-normal) 16%, transparent);
+}
+
+body:not(.theme-dark) button.sg-codex-view-btn:focus-visible {
+	box-shadow: var(--sg-btn-focus-ring);
+}
+
+/* ── Sheet editor: "changed while you were editing" carries the same warm
+   tint as the "not saved" bar, so both warnings look like warnings. ── */
+body:not(.theme-dark) .sg-sheet-changed {
+	background: color-mix(in srgb, var(--color-orange) 12%, var(--background-primary));
+	border-bottom-color: color-mix(in srgb, var(--color-orange) 35%, transparent);
+}
+
+/* ── Setups board: cards lift off the white page with one soft shadow; a
+   planned setup keeps its dashed outline, drawn strong enough to see. ── */
+body:not(.theme-dark) .sg-setup-card {
+	box-shadow: 0 1px 3px color-mix(in srgb, var(--text-normal) 10%, transparent);
+}
+
+body:not(.theme-dark) .sg-setup-card.is-planned {
+	border-color: var(--text-faint);
+	box-shadow: none;
+}
+
+body:not(.theme-dark) .sg-setup-card.is-planned:hover {
+	border-color: var(--text-muted);
+}
+
+/* ── Phone: the grip on the Codex menu sheet. ── */
+body:not(.theme-dark) .sg-codex-phone-sheet-grip {
+	background: var(--text-faint);
+}
+
+/* ── To-dos: the "Task deleted · Undo" strip had the same grey as the panel
+   under it, so it had no visible box. ── */
+body:not(.theme-dark) .sg-todo-toast {
+	background: var(--background-primary);
+	box-shadow: inset 0 0 0 1px var(--background-modifier-border);
+}
+
+/* ── Dashboard: keyboard focus on the main buttons and "add a task". Shown
+   only when moving with the keyboard (:focus-visible), never on click. ── */
+body:not(.theme-dark) .sg-dash-action-card:focus-visible,
+body:not(.theme-dark) .sg-dash-jump-tile:focus-visible,
+body:not(.theme-dark) .sg-dash-sprint-start:focus-visible,
+body:not(.theme-dark) .sg-dash-widget-foldbtn:focus-visible,
+body:not(.theme-dark) .sg-todo-add-btn:focus-visible {
+	box-shadow: 0 0 0 2px var(--background-primary), 0 0 0 4px var(--interactive-accent);
+}
+
+/* ── Phone: the card editor sheet gets a top line and a shadow that points
+   up (the desktop side shadow points sideways and is lost on white). ── */
+@media (max-width: 768px) {
+	body:not(.theme-dark) .sg-side-panel--open {
+		border-top: 1px solid var(--background-modifier-border);
+		box-shadow: 0 -8px 24px color-mix(in srgb, var(--text-normal) 14%, transparent);
+	}
+}
+/* [/sg-lt-rules] */
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TOUCH SCREENS ONLY — bigger tap area, same look              [sg-touch-tap]
+   Small Dashboard buttons keep their size; an invisible area around them
+   takes the tap (44px rule). Nothing changes with a mouse, in either theme.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media (hover: none) and (pointer: coarse) {
+	.sg-dash-edit-toggle,
+	.sg-dash-widget-foldbtn,
+	.sg-dash-widget-move,
+	.sg-dash-widget-eye,
+	.sg-dash-streak-dismiss {
+		position: relative;
+	}
+
+	.sg-dash-edit-toggle::before,
+	.sg-dash-widget-foldbtn::before,
+	.sg-dash-widget-move::before,
+	.sg-dash-widget-eye::before,
+	.sg-dash-streak-dismiss::before,
+	.sg-todo-add-btn::before {
+		content: "";
+		position: absolute;
+	}
+
+	.sg-dash-edit-toggle::before {
+		inset: -6px;
+	}
+
+	/* Side by side in the customise row: grow up and down only, so the
+	   areas of neighbouring buttons never overlap. */
+	.sg-dash-widget-foldbtn::before,
+	.sg-dash-widget-move::before,
+	.sg-dash-widget-eye::before {
+		inset: -9px -2px;
+	}
+
+	.sg-dash-streak-dismiss::before {
+		inset: -14px;
+	}
+
+	.sg-todo-add-btn::before {
+		inset: -7px -12px;
+	}
+}
+/* [/sg-touch-tap] */
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LIGHT THEME — BUTTONS AND LIFT
+   Obsidian paints every <button> itself (button:not(.clickable-icon) sets
+   fill, text colour and shadow) and that outranks a single plugin class. In
+   light this left the main buttons as white boxes. The rules below give each
+   button family its fill back, and give cards a soft lift.
+
+   Every rule starts with  body:not(.theme-dark)  so dark is untouched.
+   If dark should follow later: remove that gate from the rule (and give the
+   names in the top block dark values). Colours: top block, --sg-btn-*.
+
+   Three kinds of button:
+     main  — the one obvious action on a screen: filled with the theme accent.
+     soft  — supporting actions: a light tint of the accent, dark words.
+     quiet — Cancel and friends: page colour, hairline, no shadow.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Main ──────────────────────────────────────────────────────────────────── */
+body:not(.theme-dark) button:is(
+	.sg-dash-action-card,
+	.sg-outline-dash-btn + .sg-outline-dash-btn,
+	.sg-outline-btn--primary,
+	.sg-codex-btn--primary,
+	.sg-detail-action--primary,
+	.sg-sheet-btn--primary,
+	.sg-modal-btn-primary,
+	.sg-tl-btn-primary:not(.sg-tl-btn-era),
+	.sg-tl-empty-cta,
+	.sg-rg-empty-cta,
+	.sg-st-empty-cta:not(.sg-st-empty-cta--quiet),
+	.sg-welcome-btn--primary,
+	.sg-due-apply,
+	.sg-scan-apply-btn,
+	.sg-series-mgr-btn
+) {
+	background-color: var(--sg-btn-main-bg);
+	border-color: transparent;
+	color: var(--sg-btn-main-fg);
+	--text-color: var(--sg-btn-main-fg);
+	box-shadow: var(--sg-btn-shadow);
+	filter: none;
+}
+
+body:not(.theme-dark) button:is(
+	.sg-dash-action-card,
+	.sg-outline-dash-btn + .sg-outline-dash-btn,
+	.sg-outline-btn--primary,
+	.sg-codex-btn--primary,
+	.sg-detail-action--primary,
+	.sg-sheet-btn--primary,
+	.sg-modal-btn-primary,
+	.sg-tl-btn-primary:not(.sg-tl-btn-era),
+	.sg-tl-empty-cta,
+	.sg-rg-empty-cta,
+	.sg-st-empty-cta:not(.sg-st-empty-cta--quiet),
+	.sg-welcome-btn--primary,
+	.sg-due-apply,
+	.sg-scan-apply-btn,
+	.sg-series-mgr-btn
+):hover {
+	background-color: var(--sg-btn-main-bg-hover);
+	box-shadow: var(--sg-btn-shadow-hover);
+}
+/* (the older rules fade a main button to 88% on hover; the darker fill above
+   replaces that — but never on a switched-off button, which stays faded) */
+body:not(.theme-dark) button:is(
+	.sg-outline-btn--primary, .sg-modal-btn-primary, .sg-tl-empty-cta, .sg-rg-empty-cta,
+	.sg-st-empty-cta, .sg-welcome-btn--primary, .sg-scan-apply-btn, .sg-series-mgr-btn
+):hover:not(:disabled, [disabled], [aria-disabled="true"], .sg-scan-apply-btn--disabled) {
+	opacity: 1;
+}
+
+body:not(.theme-dark) button:is(
+	.sg-dash-action-card,
+	.sg-outline-dash-btn + .sg-outline-dash-btn,
+	.sg-outline-btn--primary,
+	.sg-codex-btn--primary,
+	.sg-detail-action--primary,
+	.sg-sheet-btn--primary,
+	.sg-modal-btn-primary,
+	.sg-tl-btn-primary:not(.sg-tl-btn-era),
+	.sg-tl-empty-cta,
+	.sg-rg-empty-cta,
+	.sg-st-empty-cta:not(.sg-st-empty-cta--quiet),
+	.sg-welcome-btn--primary,
+	.sg-due-apply,
+	.sg-scan-apply-btn,
+	.sg-series-mgr-btn
+):active {
+	background-color: var(--sg-btn-main-bg-hover);
+	box-shadow: var(--sg-btn-shadow);
+}
+
+/* Icons that sit inside a main button */
+body:not(.theme-dark) button:is(.sg-codex-btn--primary, .sg-tl-btn-primary:not(.sg-tl-btn-era), .sg-welcome-btn--primary) svg {
+	color: var(--sg-btn-main-fg);
+}
+
+/* A switched-off main button stays filled; hovering changes nothing */
+body:not(.theme-dark) button:is(.sg-scan-apply-btn, .sg-modal-btn-primary, .sg-sheet-btn--primary, .sg-outline-btn--primary, .sg-due-apply, .sg-series-mgr-btn, .sg-codex-btn--primary, .sg-detail-action--primary, .sg-tl-btn-primary, .sg-welcome-btn--primary):disabled:hover,
+body:not(.theme-dark) button.sg-scan-apply-btn.sg-scan-apply-btn--disabled:hover {
+	background-color: var(--sg-btn-main-bg);
+	box-shadow: var(--sg-btn-shadow);
+}
+
+/* ── Danger (the confirm button of a delete question) ─────────────────────── */
+body:not(.theme-dark) button.sg-modal-btn-danger {
+	background-color: var(--sg-btn-danger-bg);
+	border-color: transparent;
+	color: var(--text-on-accent);
+	--text-color: var(--text-on-accent);
+	box-shadow: var(--sg-btn-shadow);
+}
+body:not(.theme-dark) button.sg-modal-btn-danger:hover {
+	background-color: var(--sg-btn-danger-bg-hover);
+	box-shadow: var(--sg-btn-shadow-hover);
+}
+body:not(.theme-dark) button.sg-modal-btn-danger:hover:not(:disabled, [disabled]) {
+	opacity: 1;
+}
+body:not(.theme-dark) button.sg-modal-btn-danger:disabled:hover {
+	background-color: var(--sg-btn-danger-bg);
+	box-shadow: var(--sg-btn-shadow);
+}
+
+/* ── Soft ──────────────────────────────────────────────────────────────────── */
+body:not(.theme-dark) button:is(
+	.sg-dash-jump-tile,
+	.sg-dash-sprint-start,
+	.sg-outline-dash-btn:first-child,
+	.sg-tl-btn-primary.sg-tl-btn-era,
+	.sg-st-toolbar-add,
+	.sg-sprint-banner-btn--primary
+) {
+	background-color: var(--sg-btn-soft-bg);
+	border: 1px solid var(--sg-btn-soft-border);
+	color: var(--text-normal);
+	--text-color: var(--text-normal);
+	box-shadow: none;
+	filter: none;
+}
+body:not(.theme-dark) button:is(
+	.sg-dash-jump-tile,
+	.sg-dash-sprint-start,
+	.sg-outline-dash-btn:first-child,
+	.sg-tl-btn-primary.sg-tl-btn-era,
+	.sg-st-toolbar-add,
+	.sg-sprint-banner-btn--primary
+):hover {
+	background-color: var(--sg-btn-soft-bg-hover);
+	border-color: var(--sg-btn-soft-ink);
+	color: var(--text-normal);
+	box-shadow: var(--sg-shadow-sm);
+}
+body:not(.theme-dark) button:is(.sg-dash-jump-tile, .sg-dash-sprint-start, .sg-outline-dash-btn:first-child):active {
+	background-color: var(--sg-btn-soft-bg-hover);
+	box-shadow: none;
+}
+body:not(.theme-dark) .sg-dash-jump-tile .sg-dash-jump-label {
+	color: var(--text-normal);
+}
+body:not(.theme-dark) .sg-dash-jump-tile .sg-dash-jump-icon,
+body:not(.theme-dark) button:is(.sg-dash-sprint-start, .sg-outline-dash-btn:first-child, .sg-tl-btn-primary.sg-tl-btn-era, .sg-st-toolbar-add) svg {
+	color: var(--sg-btn-soft-ink);
+}
+
+/* ── Quiet (Cancel and the other plain buttons beside a main one) ─────────── */
+body:not(.theme-dark) button:is(
+	.sg-modal-btn,
+	.sg-sheet-btn,
+	.sg-detail-action,
+	.sg-detail-back,
+	.sg-codex-btn,
+	.sg-outline-btn,
+	.sg-tl-btn,
+	.sg-tl-add-cancel,
+	.sg-scan-cancel-btn,
+	.sg-welcome-btn--secondary,
+	.sg-st-empty-cta--quiet
+):not(.is-active, .is-selected, .is-on, .mod-cta, .mod-warning, .sg-modal-btn-primary, .sg-modal-btn-danger, .sg-sheet-btn--primary, .sg-detail-action--primary, .sg-codex-btn--primary, .sg-outline-btn--primary, .sg-tl-btn-primary) {
+	background-color: var(--background-primary);
+	box-shadow: none;
+}
+body:not(.theme-dark) button:is(
+	.sg-modal-btn,
+	.sg-sheet-btn,
+	.sg-detail-action,
+	.sg-detail-back,
+	.sg-codex-btn,
+	.sg-outline-btn,
+	.sg-tl-btn,
+	.sg-tl-add-cancel,
+	.sg-scan-cancel-btn,
+	.sg-welcome-btn--secondary,
+	.sg-st-empty-cta--quiet
+):not(.is-active, .is-selected, .is-on, .mod-cta, .mod-warning, .sg-modal-btn-primary, .sg-modal-btn-danger, .sg-sheet-btn--primary, .sg-detail-action--primary, .sg-codex-btn--primary, .sg-outline-btn--primary, .sg-tl-btn-primary):hover {
+	background-color: var(--background-modifier-hover);
+	box-shadow: none;
+}
+
+/* ── Keyboard focus: one clear ring on every button touched above ─────────── */
+body:not(.theme-dark) button:is(
+	.sg-dash-action-card, .sg-dash-jump-tile, .sg-dash-sprint-start, .sg-outline-dash-btn,
+	.sg-outline-btn, .sg-codex-btn, .sg-detail-action, .sg-detail-back, .sg-sheet-btn,
+	.sg-modal-btn, .sg-tl-btn, .sg-tl-add-cancel, .sg-tl-add-create, .sg-tl-empty-cta,
+	.sg-rg-empty-cta, .sg-st-empty-cta, .sg-st-toolbar-add, .sg-welcome-btn,
+	.sg-due-apply, .sg-scan-apply-btn, .sg-scan-cancel-btn, .sg-series-mgr-btn,
+	.sg-sprint-banner-btn--primary
+):focus-visible {
+	outline: none;
+	box-shadow: var(--sg-btn-focus-ring);
+}
+
+/* ── Lift: cards rest softly on the page ──────────────────────────────────── */
+/* (Dashboard panels and folded bars: see [sg-lt-shared] -> Panel) */
+body:not(.theme-dark) .sg-dash-stat {
+	box-shadow: var(--sg-lift-card);
+}
+body:not(.theme-dark) .sg-dash-stat:hover {
+	box-shadow: var(--sg-lift-card-hover);
+}
+body:not(.theme-dark) .sg-codex-root {
+	--sg-cdx-accent: var(--text-accent);
+	--sg-cdx-card-shadow: var(--sg-lift-card);
+	--sg-cdx-card-shadow-hover: var(--sg-lift-card-hover);
+}
+
+/* The line under "Resume Draft" (which scene you land in) at full strength */
+body:not(.theme-dark) .sg-dash-action-card .sg-dash-action-card-sub {
+	opacity: 1;
+}
+
+/* ── Welcome and "What do you create?": these two pages set their own purple
+   (see .sg-welcome / .sg-intent). The button colours are worked out again
+   here so they come from that purple, glow included, as before. ── */
+body:not(.theme-dark) :is(.sg-welcome, .sg-intent) {
+	--sg-btn-main-bg:       var(--interactive-accent);
+	--sg-btn-main-bg-hover: var(--interactive-accent-hover);
+	--sg-btn-shadow:       0 6px 24px color-mix(in srgb, var(--interactive-accent) 45%, transparent);
+	--sg-btn-shadow-hover: 0 6px 24px color-mix(in srgb, var(--interactive-accent) 45%, transparent);
+	--sg-btn-soft-bg:       color-mix(in srgb, var(--interactive-accent) 11%, var(--background-primary));
+	--sg-btn-soft-bg-hover: color-mix(in srgb, var(--interactive-accent) 19%, var(--background-primary));
+	--sg-btn-soft-border:   color-mix(in srgb, var(--interactive-accent) 30%, var(--background-primary));
+	--sg-btn-soft-ink:      color-mix(in srgb, var(--interactive-accent) 78%, #000);
+	--sg-btn-focus-ring: 0 0 0 2px var(--background-primary), 0 0 0 4px var(--interactive-accent);
+}
+
+/* ── Small accent-worded buttons (their colour lost to Obsidian's own button
+   paint, so they showed as plain boxed buttons with black words) ── */
+body:not(.theme-dark) button:is(.sg-outline-paste-btn, .sg-dash-paste-skip-btn) {
+	background-color: var(--background-primary);
+	color: var(--sg-ink-accent);
+	--text-color: var(--sg-ink-accent);
+	box-shadow: none;
+}
+body:not(.theme-dark) button:is(.sg-outline-paste-btn, .sg-dash-paste-skip-btn):hover {
+	background-color: var(--sg-btn-soft-bg);
+	border-color: var(--sg-btn-soft-ink);
+	box-shadow: none;
+	opacity: 1;
+}
+body:not(.theme-dark) button.sg-todo-undo-btn {
+	background-color: transparent;
+	color: var(--sg-ink-accent);
+	--text-color: var(--sg-ink-accent);
+	box-shadow: none;
+}
+body:not(.theme-dark) button.sg-todo-undo-btn:hover {
+	background-color: var(--sg-btn-main-bg);
+	border-color: transparent;
+	color: var(--sg-btn-main-fg);
+	box-shadow: none;
+}
+body:not(.theme-dark) button.sg-todo-link-chip {
+	background-color: color-mix(in srgb, var(--interactive-accent) 12%, transparent);
+	color: var(--sg-ink-accent);
+	--text-color: var(--sg-ink-accent);
+	box-shadow: none;
+}
+body:not(.theme-dark) button.sg-todo-link-chip:hover {
+	background-color: color-mix(in srgb, var(--interactive-accent) 22%, transparent);
+	box-shadow: none;
+}
+body:not(.theme-dark) button:is(.sg-outline-paste-btn, .sg-dash-paste-skip-btn, .sg-todo-undo-btn, .sg-todo-link-chip):focus-visible {
+	outline: none;
+	box-shadow: var(--sg-btn-focus-ring);
+}
+/* Story Tree toolbar "Add a character": accent words on the soft tint */
+body:not(.theme-dark) button.sg-st-toolbar-add.sg-st-toolbar-add,
+body:not(.theme-dark) button.sg-st-toolbar-add.sg-st-toolbar-add:hover {
+	color: var(--sg-ink-accent);
+	--text-color: var(--sg-ink-accent);
+}
+body:not(.theme-dark) button.sg-st-toolbar-add.sg-st-toolbar-add svg {
+	color: var(--sg-ink-accent);
+}
+/* Grid picker: the "new grid" line keeps its accent words */
+body:not(.theme-dark) .suggestion-item.sg-picker-new-item {
+	color: var(--sg-ink-accent);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LIGHT THEME — SHARED PARTS                                    [sg-lt-shared]
+   The Dashboard's light look as parts every module can use: white panels on
+   a softly tinted page, one soft shadow, hairline edges, empty parts nearly
+   gone, the accent only as touches (icon chips, numbers, focus).
+
+   Every rule starts with  body:not(.theme-dark)  so dark never changes.
+   A module joins a family by adding its selector to that family's list.
+
+   Names use their own prefix (--sg-lt-*): the Plot Grid and the Codex
+   already re-define --sg-accent, --sg-header-bg and --sg-border on their
+   own roots, so those names must not be reused here.
+
+   The names are declared on body AND again on each module root and on
+   Obsidian's window box, so each place mixes its own theme colours (a theme
+   or a module that changes --background-primary there is followed).
+
+   Colours: theme colours only. One exception, flagged for Emma: the panel
+   colour is the theme's page colour mixed 65% toward white, because some
+   themes (AnuPpuccin / Catppuccin "Latte") have no white at all - their
+   lightest colour is a pale grey-blue. With Obsidian's default theme the
+   page colour is already white, so nothing extra happens there.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+body:not(.theme-dark),
+body:not(.theme-dark) :is(.sg-dash-root, .sg-codex-root, .sg-outline-root, .sg-history-root,
+	.sg-view-root, .sg-tl-root, .sg-st-root, .sg-rg-root, .sg-sm-root, .sg-sheet-tab,
+	.sg-welcome, .sg-intent, .modal-container) {
+	--sg-lt-page:      color-mix(in srgb, var(--interactive-accent) 5%, var(--background-secondary));
+	--sg-lt-surface:   color-mix(in srgb, var(--background-primary) 35%, #fff);
+	--sg-lt-edge:      color-mix(in srgb, var(--text-normal) 7%, transparent);
+	--sg-lt-hairline:  color-mix(in srgb, var(--text-normal) 12%, transparent);
+	--sg-lt-lift:      0 1px 2px color-mix(in srgb, var(--text-normal) 7%, transparent),
+	                   0 8px 20px -10px color-mix(in srgb, var(--text-normal) 18%, transparent);
+	--sg-lt-lift-hover: 0 1px 2px color-mix(in srgb, var(--text-normal) 8%, transparent),
+	                   0 12px 26px -10px color-mix(in srgb, var(--text-normal) 24%, transparent);
+	--sg-lt-track:     color-mix(in srgb, var(--text-normal) 7%, transparent);
+	--sg-lt-empty:     color-mix(in srgb, var(--text-normal) 5%, transparent);
+	--sg-lt-inset:     color-mix(in srgb, var(--text-normal) 4%, transparent);
+	--sg-lt-chip-bg:   color-mix(in srgb, var(--interactive-accent) 13%, transparent);
+	--sg-lt-tint-hover: color-mix(in srgb, var(--interactive-accent) 6%, var(--sg-lt-surface));
+	--sg-lt-tint-press: color-mix(in srgb, var(--interactive-accent) 10%, var(--sg-lt-surface));
+	--sg-lt-band-bg:   color-mix(in srgb, var(--interactive-accent) 11%, var(--sg-lt-surface));
+	--sg-lt-band-ring: inset 0 0 0 1px color-mix(in srgb, var(--interactive-accent) 14%, transparent);
+	--sg-lt-num-xl:    40px;
+	--sg-lt-num-lg:    26px;
+	--sg-lt-num-md:    20px;
+	--sg-lt-title-xl:  32px;
+}
+
+/* Old phones without color-mix(): plain theme colours instead. */
+@supports not (color: color-mix(in srgb, red, blue)) {
+	body:not(.theme-dark),
+	body:not(.theme-dark) :is(.sg-dash-root, .sg-codex-root, .sg-outline-root, .sg-history-root,
+		.sg-view-root, .sg-tl-root, .sg-st-root, .sg-rg-root, .sg-sm-root, .sg-sheet-tab,
+		.sg-welcome, .sg-intent, .modal-container) {
+		--sg-lt-page:      var(--background-secondary);
+		--sg-lt-surface:   var(--background-primary);
+		--sg-lt-edge:      var(--background-modifier-border);
+		--sg-lt-hairline:  var(--background-modifier-border);
+		--sg-lt-lift:      var(--sg-lift-card);
+		--sg-lt-lift-hover: var(--sg-lift-card-hover);
+		--sg-lt-track:     var(--background-modifier-border);
+		--sg-lt-empty:     var(--background-secondary);
+		--sg-lt-inset:     var(--background-secondary);
+		--sg-lt-chip-bg:   var(--background-secondary);
+		--sg-lt-tint-hover: var(--background-modifier-hover);
+		--sg-lt-tint-press: var(--background-modifier-hover);
+		--sg-lt-band-bg:   var(--background-secondary);
+		--sg-lt-band-ring: inset 0 0 0 1px var(--background-modifier-border);
+	}
+}
+
+/* -- Page: a soft tint behind everything, so white panels can lift. -- */
+body:not(.theme-dark) :is(.sg-dash-root) {
+	background: var(--sg-lt-page);
+}
+
+/* -- Panel: white, a barely-there edge, one soft shadow.
+   Dashboard: Today, Writing sprint, Writing goals, Writing activity,
+   Character balance, Setups, To-do, Manuscript status pipeline, folded bars. -- */
+body:not(.theme-dark) :is(.sg-dash-section, .sg-dash-today, .sg-dash-sprint-panel, .sg-dash-widget-collapsed-bar) {
+	background: var(--sg-lt-surface);
+	border-color: var(--sg-lt-edge);
+	box-shadow: var(--sg-lt-lift);
+}
+
+/* -- Track and empty: bar tracks and empty cells nearly disappear.
+   Dashboard: the bars of Today, Writing sprint, Writing goals, Character
+   balance; the empty "Last 30 days" squares. -- */
+body:not(.theme-dark) :is(.sg-dash-bar, .sg-dash-today-bar) {
+	background: var(--sg-lt-track);
+}
+body:not(.theme-dark) :is(.sg-dash-heatmap-cell--l0) {
+	background: var(--sg-lt-empty);
+}
+
+/* -- Quiet icon button: white, one hairline, grey icon; hover = soft accent
+   tint, accent icon. Obsidian's own button paint (grey fill + dark bottom
+   edge) outranks a single class; these two already win. A button that is
+   also in the Quiet list above needs its own doubled-class rule (button.x.x)
+   placed after this one - not an entry here, because :is() takes the
+   weight of its heaviest entry and would lift the whole list.
+   Dashboard top right, Writers Panel top, Codex top: the row next to the
+   project name, plus the Dashboard cog. -- */
+body:not(.theme-dark) button:is(.sg-quicklaunch-btn, .sg-dash-edit-toggle) {
+	background-color: var(--sg-lt-surface);
+	border: 1px solid var(--sg-lt-hairline);
+	box-shadow: none;
+	color: var(--text-muted);
+	--text-color: var(--text-muted);
+}
+body:not(.theme-dark) button:is(.sg-quicklaunch-btn, .sg-dash-edit-toggle):hover {
+	background-color: var(--sg-btn-soft-bg);
+	border-color: var(--sg-btn-soft-border);
+	color: var(--sg-btn-soft-ink);
+	box-shadow: none;
+}
+body:not(.theme-dark) button:is(.sg-quicklaunch-btn, .sg-dash-edit-toggle):focus-visible {
+	outline: none;
+	box-shadow: var(--sg-btn-focus-ring);
+}
+
+/* -- Field: a select or search box on the page: white and one hairline.
+   Dashboard: the project box beside the quiet buttons. -- */
+body:not(.theme-dark) :is(.sg-dash-project-select) {
+	background-color: var(--sg-lt-surface);
+	border: 1px solid var(--sg-lt-hairline);
+	box-shadow: none;
+}
+
+/* -- Chip: a panel title's icon in a small accent square.
+   Dashboard: every panel title, To-do included. -- */
+body:not(.theme-dark) :is(.sg-dash-section-icon, .sg-todo-head-icon) {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 26px;
+	height: 26px;
+	border-radius: 6px;
+	background: var(--sg-lt-chip-bg);
+}
+body:not(.theme-dark) :is(.sg-dash-section-icon, .sg-todo-head-icon) svg {
+	width: 15px;
+	height: 15px;
+	color: var(--sg-ink-accent);
+}
+
+/* -- Band: a header in a soft accent-tinted band.
+   Dashboard: the book title row. -- */
+body:not(.theme-dark) :is(.sg-dash-header) {
+	border-radius: 6px;
+	background: var(--sg-lt-band-bg);
+	box-shadow: var(--sg-lt-band-ring);
+}
+/* [/sg-lt-shared] */
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LIGHT THEME — BRIGHTER DASHBOARD                         [sg-lt-dash-bright]
+   Emma's choice B ("more character"). Uses the shared parts above for the
+   page, panels, tracks, quiet buttons, chips and the header band; only what
+   is the Dashboard's own stays here.
+   Every rule starts with  body:not(.theme-dark)  so dark never changes.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+body:not(.theme-dark) .sg-dash-widget-collapsed-bar:hover {
+	box-shadow: var(--sg-lt-lift-hover);
+}
+
+/* Written days in "Last 30 days": clean steps of the accent only (grey mixed
+   into the light steps made them look muddy). */
+body:not(.theme-dark) .sg-dash-heatmap-cell--l1 { background: color-mix(in srgb, var(--interactive-accent) 30%, transparent); }
+body:not(.theme-dark) .sg-dash-heatmap-cell--l2 { background: color-mix(in srgb, var(--interactive-accent) 62%, transparent); }
+body:not(.theme-dark) .sg-dash-heatmap-cell--l3 { background: var(--interactive-accent); }
+
+/* Small inside boxes keep a soft fill on the white panel, no grey frame. */
+body:not(.theme-dark) .sg-dash-paste-skip {
+	background: var(--sg-lt-inset);
+	border-color: transparent;
+}
+body:not(.theme-dark) .sg-dash-streak:not(.sg-dash-streak--at-risk) {
+	border-bottom-color: var(--sg-lt-edge);
+}
+
+/* -- Today -> "Write today to keep your streak!": the theme accent instead
+   of a blue that appears nowhere else. -- */
+body:not(.theme-dark) .sg-dash-streak--at-risk {
+	background: color-mix(in srgb, var(--interactive-accent) 9%, var(--sg-lt-surface));
+	border-color: color-mix(in srgb, var(--interactive-accent) 24%, transparent);
+}
+body:not(.theme-dark) .sg-dash-streak--at-risk .sg-dash-streak-count {
+	color: var(--sg-ink-accent);
+}
+body:not(.theme-dark) button.sg-dash-streak-dismiss {
+	background: transparent;
+	box-shadow: none;
+	color: var(--sg-ink-accent);
+}
+
+/* -- Section titles: strong small capitals, so the numbers under them lead.
+   To-do matches the others. -- */
+body:not(.theme-dark) .sg-dash-section-title,
+body:not(.theme-dark) .sg-dash-section .sg-todo-head-title {
+	font-size: 12.5px;
+	font-weight: 700;
+	letter-spacing: 0.07em;
+	text-transform: uppercase;
+	color: var(--text-normal);
+}
+body:not(.theme-dark) :is(.sg-dash-section-head, .sg-dash-sprint-head-label, .sg-todo-head-left) {
+	gap: 10px;
+}
+
+/* -- Footer -> Compile manuscript: white with one hairline. -- */
+body:not(.theme-dark) button.sg-dash-compile-btn {
+	background-color: var(--sg-lt-surface);
+	border: 1px solid var(--sg-lt-hairline);
+	box-shadow: none;
+}
+body:not(.theme-dark) .sg-dash-footer {
+	border-top-color: var(--sg-lt-edge);
+}
+
+/* -- Resume Draft (the one main action): stays filled, but now reads as the
+   most important thing on the page: words in normal letters and larger,
+   icon in a light round chip, left-aligned like a card, a soft accent
+   shadow. height:auto = guard so no theme's button height can squeeze it. -- */
+body:not(.theme-dark) button.sg-dash-action-card {
+	height: auto;
+	min-height: 64px;
+	justify-content: flex-start;
+	gap: 14px;
+	padding: 12px 18px;
+	white-space: normal;
+	box-shadow: 0 1px 2px color-mix(in srgb, var(--interactive-accent) 30%, transparent),
+	            0 10px 22px -12px color-mix(in srgb, var(--interactive-accent) 70%, transparent);
+}
+body:not(.theme-dark) button.sg-dash-action-card:hover {
+	box-shadow: 0 1px 2px color-mix(in srgb, var(--interactive-accent) 30%, transparent),
+	            0 14px 28px -12px color-mix(in srgb, var(--interactive-accent) 80%, transparent);
+}
+body:not(.theme-dark) .sg-dash-action-card-icon {
+	width: 36px;
+	height: 36px;
+	border-radius: 50%;
+	background: color-mix(in srgb, var(--text-on-accent) 18%, transparent);
+}
+body:not(.theme-dark) .sg-dash-action-card-icon svg { width: 18px; height: 18px; }
+body:not(.theme-dark) .sg-dash-action-card-title {
+	font-size: 15px;
+	font-weight: 650;
+	letter-spacing: 0;
+	text-transform: none;
+}
+body:not(.theme-dark) .sg-dash-action-card-sub {
+	font-size: 12.5px;
+	margin-top: 2px;
+	color: color-mix(in srgb, var(--text-on-accent) 85%, transparent);
+}
+
+/* -- The five tiles (Plot grid, Codex, Activity, Social Maps, Timeline):
+   white cards, the icon in a small accent chip, so Resume Draft is the only
+   coloured block. Hover lifts and tints softly, without the darker frame
+   that made one tile look chosen. -- */
+body:not(.theme-dark) button.sg-dash-jump-tile.sg-dash-jump-tile {
+	height: 48px;
+	gap: 8px;
+	background-color: var(--sg-lt-surface);
+	border: 1px solid var(--sg-lt-edge);
+	box-shadow: var(--sg-lt-lift);
+}
+body:not(.theme-dark) button.sg-dash-jump-tile.sg-dash-jump-tile:hover {
+	background-color: var(--sg-lt-tint-hover);
+	border-color: var(--sg-lt-edge);
+	box-shadow: var(--sg-lt-lift-hover);
+}
+body:not(.theme-dark) button.sg-dash-jump-tile.sg-dash-jump-tile:active {
+	background-color: var(--sg-lt-tint-press);
+	box-shadow: var(--sg-lt-lift);
+}
+body:not(.theme-dark) .sg-dash-jump-tile .sg-dash-jump-icon {
+	width: 24px;
+	height: 24px;
+	border-radius: 6px;
+	background: var(--sg-lt-chip-bg);
+	color: var(--sg-ink-accent);
+}
+body:not(.theme-dark) .sg-dash-jump-tile .sg-dash-jump-icon svg { width: 16px; height: 16px; }
+body:not(.theme-dark) .sg-dash-jump-tile .sg-dash-jump-label {
+	font-weight: 650;
+	color: var(--text-normal);
+}
+
+/* -- Writing sprint -> Start a sprint: white with accent words, a quiet
+   partner of the tiles (no second lavender block). -- */
+body:not(.theme-dark) button.sg-dash-sprint-start.sg-dash-sprint-start {
+	background-color: var(--sg-lt-surface);
+	border: 1px solid var(--sg-btn-soft-border);
+	color: var(--sg-ink-accent);
+	--text-color: var(--sg-ink-accent);
+	font-weight: 650;
+}
+body:not(.theme-dark) button.sg-dash-sprint-start.sg-dash-sprint-start:hover {
+	background-color: var(--sg-btn-soft-bg);
+	border-color: var(--sg-btn-soft-border);
+}
+
+/* -- Header: the book title, bigger, inside the shared band. -- */
+body:not(.theme-dark) .sg-dash-header {
+	align-items: center;
+	padding: 16px 20px;
+	margin-bottom: 14px;
+}
+body:not(.theme-dark) .sg-dash-project-name {
+	font-size: var(--sg-lt-title-xl);
+	font-weight: 750;
+	letter-spacing: -0.02em;
+}
+
+/* -- Bigger numbers, small quiet words: the data leads. -- */
+body:not(.theme-dark) .sg-dash-today-value { font-size: var(--sg-lt-num-xl); letter-spacing: -0.03em; }
+body:not(.theme-dark) .sg-dash-goal-done { font-size: var(--sg-lt-num-md); }
+body:not(.theme-dark) .sg-dash-sprint-goal-nums .sg-dash-num { font-size: var(--sg-lt-num-md); }
+body:not(.theme-dark) .sg-dash-setups-sum .sg-dash-num { font-size: var(--sg-lt-num-lg); }
+body:not(.theme-dark) .sg-dash-footer-stat-value { font-size: var(--sg-lt-num-md); }
+/* [/sg-lt-dash-bright] */
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LIGHT THEME — NEW PROJECT WINDOW                              [sg-lt-wizard]
+   Steps 1 to 3 of a new project in the Dashboard's light look: a white
+   window, the choices as white cards with one soft shadow; hover and the
+   chosen card in the accent. Uses [sg-lt-shared].
+   Every rule starts with  body:not(.theme-dark)  so dark never changes.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+body:not(.theme-dark) .modal.sg-wizard-modal {
+	background-color: var(--sg-lt-surface);
+}
+
+/* Step 1 -> Series / Novel: white cards instead of grey boxes (Obsidian's
+   own button paint used to win here). */
+body:not(.theme-dark) button.sg-scope-modal-opt {
+	background-color: var(--sg-lt-surface);
+	border-color: var(--sg-lt-hairline);
+	box-shadow: var(--sg-lt-lift);
+}
+body:not(.theme-dark) button.sg-scope-modal-opt:hover {
+	background-color: var(--sg-lt-tint-hover);
+	border-color: var(--interactive-accent);
+	box-shadow: var(--sg-lt-lift-hover);
+}
+body:not(.theme-dark) button.sg-scope-modal-opt:focus-visible {
+	outline: none;
+	box-shadow: var(--sg-btn-focus-ring);
+}
+
+/* Step 3 -> the templates: white cards with one soft shadow; the chosen
+   one keeps its accent tint and glow, now mixed into white. */
+body:not(.theme-dark) .sg-template-picker button.sg-template-card {
+	background: var(--sg-lt-surface);
+	border-color: var(--sg-lt-hairline);
+	box-shadow: var(--sg-lt-lift);
+}
+body:not(.theme-dark) .sg-template-picker button.sg-template-card:hover {
+	background: var(--sg-lt-tint-hover);
+	border-color: var(--interactive-accent);
+	box-shadow: var(--sg-lt-lift-hover);
+}
+body:not(.theme-dark) .sg-template-picker button.sg-template-card.sg-template-card--selected {
+	background: color-mix(in srgb, var(--interactive-accent) 12%, var(--sg-lt-surface));
+	border-color: var(--interactive-accent);
+	box-shadow: 0 6px 18px color-mix(in srgb, var(--interactive-accent) 22%, transparent);
+}
+body:not(.theme-dark) .sg-template-picker button.sg-template-card:focus-visible {
+	box-shadow: var(--sg-btn-focus-ring);
+}
+/* [/sg-lt-wizard] */
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LIGHT THEME — PLOT GRID CHROME + CARD EDITOR       SKETCH, not in the app yet
+   Goes into [sg-lt-shared] (family lists) + a short [sg-lt-grid] block after it.
+   Uses the shared --sg-lt-* parts (Panel / Page / Quiet icon button / Field).
+   Every rule starts with  body:not(.theme-dark)  so dark never changes.
+
+   NOT touched here (locked look, needs Emma's OK — see grid-card-idea.css):
+   card face, card size 200×130, card flow, fold-out, grid lines, cells,
+   row/column headers that carry the writer's own colours.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* -- Page: the space around the grid gets the Dashboard's soft tint, so the
+   white bar, grid frame and card editor can lift off it. Painted on the view
+   itself too (as dark already does), so no untinted edge shows round it. -- */
+body:not(.theme-dark) .sg-view-root,
+body:not(.theme-dark) .sg-view-root .sg-wrapper {
+	background: var(--sg-lt-page);
+}
+
+/* -- Grid name above the bar: the book's name leads (normal ink, a little
+   bigger), like the book title on the Dashboard. Beat-guide line keeps its
+   words; its info icon becomes an accent touch. -- */
+body:not(.theme-dark) .sg-view-root .sg-grid-title {
+	color: var(--text-normal);
+	font-weight: 650;
+	font-size: 1.15em;
+	letter-spacing: 0.04em;
+}
+body:not(.theme-dark) .sg-view-root .sg-grid-template-icon {
+	color: var(--sg-ink-accent);
+}
+
+/* -- Panel family: the floating tool bar and the grid's frame. -- */
+body:not(.theme-dark) .sg-view-root :is(.sg-toolbar, .sg-scroll-container) {
+	background: var(--sg-lt-surface);
+	border-color: var(--sg-lt-edge);
+	box-shadow: var(--sg-lt-lift);
+}
+
+/* -- Tool bar buttons (Row, Column, Connections, Dashboard, Codex, ⋯):
+   same shape as now; normal ink so the words read; hover = the soft accent
+   tint + accent icon, like the Dashboard's quiet buttons. -- */
+body:not(.theme-dark) button.sg-toolbar-btn.sg-toolbar-btn:not(.sg-toolbar-btn--accent) {
+	color: var(--text-normal);
+}
+body:not(.theme-dark) button.sg-toolbar-btn.sg-toolbar-btn:not(.sg-toolbar-btn--accent) .sg-toolbar-btn-icon {
+	color: var(--text-muted);
+}
+body:not(.theme-dark) button.sg-toolbar-btn.sg-toolbar-btn:not(.sg-toolbar-btn--accent):hover {
+	background: var(--sg-lt-tint-hover);
+	color: var(--sg-btn-soft-ink);
+}
+body:not(.theme-dark) button.sg-toolbar-btn.sg-toolbar-btn:not(.sg-toolbar-btn--accent):hover .sg-toolbar-btn-icon {
+	color: var(--sg-ink-accent);
+}
+/* "New": the one accent button keeps its colour; gets the same soft lift as
+   the Dashboard's Resume Draft so it reads as THE action. */
+body:not(.theme-dark) button.sg-toolbar-btn--accent.sg-toolbar-btn--accent {
+	box-shadow: 0 1px 2px color-mix(in srgb, var(--interactive-accent) 30%, transparent),
+	            0 4px 12px -4px color-mix(in srgb, var(--interactive-accent) 45%, transparent);
+}
+
+/* -- Zoom (− 80% +): one white field with a hairline, like the project box
+   on the Dashboard. -- */
+body:not(.theme-dark) .sg-view-root .sg-toolbar-zoom {
+	background: var(--sg-lt-surface);
+	border-color: var(--sg-lt-hairline);
+}
+body:not(.theme-dark) .sg-toolbar-zoom button.sg-toolbar-zoom-btn:hover {
+	background: var(--sg-lt-tint-hover);
+}
+
+/* -- Row and column names WITHOUT the writer's own colour (and the empty
+   corner): white like the frame, so the grid reads as one bright sheet.
+   Headers that carry a colour (.sg-axis-tinted) are not touched. -- */
+body:not(.theme-dark) .sg-view-root :is(.sg-col-header, .sg-row-header):not(.sg-axis-tinted),
+body:not(.theme-dark) .sg-view-root .sg-corner {
+	background: var(--sg-lt-surface);
+}
+
+/* ── Card editor (desktop): the side panel becomes the third white panel —
+   floating beside the grid with the same edge, corner and shadow.
+   Phone keeps its bottom sheet (its own rules in [sg-lt-rules]). ── */
+body:not(.theme-dark) .sg-side-panel {
+	--sg-panel-bg: var(--sg-lt-surface);
+	--sg-border: var(--sg-lt-edge);
+}
+@media (min-width: 769px) {
+	body:not(.theme-dark) .sg-side-panel--open {
+		margin: 0 10px 10px 0;
+		border: 1px solid var(--sg-lt-edge);
+		border-radius: 8px;
+		box-shadow: var(--sg-lt-lift);
+	}
+}
+
+/* Header ("CARD" + ⋯ + ×): the card's name in normal ink; a hairline under
+   it; ⋯ and × become quiet icon buttons (white, hairline, grey icon). */
+body:not(.theme-dark) .sg-side-panel .sg-panel-header {
+	padding: 12px 12px 10px 14px;
+	border-bottom: 1px solid var(--sg-lt-edge);
+}
+body:not(.theme-dark) .sg-side-panel .sg-panel-header-title {
+	color: var(--text-normal);
+	opacity: 1;
+	letter-spacing: 0.06em;
+}
+body:not(.theme-dark) button.sg-panel-close.sg-panel-close {
+	background-color: var(--sg-lt-surface);
+	border: 1px solid var(--sg-lt-hairline);
+	box-shadow: none;
+	color: var(--text-muted);
+}
+body:not(.theme-dark) button.sg-panel-close.sg-panel-close:hover {
+	background-color: var(--sg-btn-soft-bg);
+	border-color: var(--sg-btn-soft-border);
+	color: var(--sg-btn-soft-ink);
+	box-shadow: none;
+}
+body:not(.theme-dark) button.sg-panel-close.sg-panel-close:focus-visible {
+	outline: none;
+	box-shadow: var(--sg-btn-focus-ring);
+}
+
+/* Field family: Title, Status and the Synopsis box are white with one
+   hairline (no grey fill, no sunken shadow); focus = accent edge + ring. */
+body:not(.theme-dark) input.sg-panel-input.sg-panel-input,
+body:not(.theme-dark) select.sg-panel-select.sg-panel-select,
+body:not(.theme-dark) .sg-side-panel .sg-panel-richtext {
+	background-color: var(--sg-lt-surface);
+	border: 1px solid var(--sg-lt-hairline);
+	box-shadow: none;
+}
+body:not(.theme-dark) input.sg-panel-input.sg-panel-input:focus,
+body:not(.theme-dark) select.sg-panel-select.sg-panel-select:focus,
+body:not(.theme-dark) .sg-side-panel .sg-panel-richtext:focus {
+	border-color: var(--interactive-accent);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--interactive-accent) 18%, transparent);
+}
+/* Bold / Italic / Aa / List: hover gets the soft tint (today nothing shows). */
+body:not(.theme-dark) .sg-side-panel button.sg-md-toolbar-btn.sg-md-toolbar-btn {
+	border-radius: 6px;
+	color: var(--text-muted);
+}
+body:not(.theme-dark) .sg-side-panel button.sg-md-toolbar-btn.sg-md-toolbar-btn:hover {
+	background: var(--sg-lt-tint-hover);
+	color: var(--sg-ink-accent);
+}
+
+/* Folded bars (LINKED SCENE, SCENE DETAILS, LINKED ENTRIES, SETUPS,
+   APPEARANCE): separate soft bars with a small gap instead of one grey
+   block cut by lines — same idea as the Dashboard's folded panels, but
+   nearly-invisible fill since they sit on white. ⓘ moves next to its word. */
+body:not(.theme-dark) .sg-side-panel .sg-panel-section {
+	border-top: none;
+	margin-top: 6px;
+}
+body:not(.theme-dark) .sg-side-panel .sg-panel-section:first-of-type {
+	margin-top: 14px;
+}
+body:not(.theme-dark) .sg-side-panel button.sg-panel-section-summary {
+	background: var(--sg-lt-inset);
+	border: 1px solid var(--sg-lt-edge);
+	border-radius: 6px;
+	padding: 10px 12px;
+	gap: 6px;
+}
+body:not(.theme-dark) .sg-side-panel button.sg-panel-section-summary:hover {
+	background: var(--sg-lt-tint-hover);
+	border-color: var(--sg-btn-soft-border);
+}
+body:not(.theme-dark) .sg-side-panel button.sg-panel-section-summary:hover .sg-panel-section-label,
+body:not(.theme-dark) .sg-side-panel button.sg-panel-section-summary:hover .sg-panel-section-chevron {
+	color: var(--sg-btn-soft-ink);
+}
+body:not(.theme-dark) .sg-side-panel .sg-panel-section-summary .sg-field-help-icon {
+	margin-right: auto;
+}
+body:not(.theme-dark) .sg-side-panel .sg-panel-section-summary .sg-panel-section-chevron {
+	margin-left: auto;
+}
+/* An open section: its bar gets the white look + accent word. */
+body:not(.theme-dark) .sg-side-panel .sg-panel-section--open > button.sg-panel-section-summary {
+	background: var(--sg-lt-surface);
+	border-color: var(--sg-lt-hairline);
+}
+body:not(.theme-dark) .sg-side-panel .sg-panel-section--open > button.sg-panel-section-summary .sg-panel-section-label {
+	color: var(--sg-ink-accent);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LIGHT THEME — PLOT GRID CARD IDEA            NEEDS EMMA'S OK (locked look)
+   Only on top of grid-light.css. Every rule starts with body:not(.theme-dark).
+   Touches: empty cells (lighter) and cards WITHOUT the writer's own colour
+   (white + the one soft shadow). Size, flow, fold-out, grid lines, the
+   writer's colours on cards/rows/columns: unchanged.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Empty cells: from mid-grey to a faint tint of the white frame, so they read
+   as quiet slots instead of a grey block. Coloured rows/columns paint their
+   own cell colour inline and are not affected. */
+body:not(.theme-dark) .sg-view-root {
+	--sg-cell-bg: color-mix(in srgb, var(--text-normal) 5%, var(--sg-lt-surface));
+	/* the "light default" card colours the writer may have picked map here */
+	--sg-default-card-bg: var(--sg-lt-surface);
+}
+
+/* Cards without their own colour: white, the hairline edge, the one soft
+   shadow from the Dashboard panels. Hover keeps today's accent edge. */
+body:not(.theme-dark) .sg-view-root .sg-card:not(.sg-card--filled):not(.sg-dragging) {
+	background: var(--sg-lt-surface);
+}
+body:not(.theme-dark) .sg-view-root .sg-card:not(.sg-card--framed):not(.sg-card--status-frame):not(.sg-card--editing):not(.sg-dragging):not(:hover) {
+	border-color: var(--sg-lt-edge);
+}
+body:not(.theme-dark) .sg-view-root .sg-card:not(.sg-card--framed, .sg-card--status-frame, .sg-card--editing, .sg-dragging, .sg-card--live-swap) {
+	box-shadow: var(--sg-lt-lift);
+}
+body:not(.theme-dark) .sg-view-root .sg-card:not(.sg-card--framed, .sg-card--status-frame, .sg-card--editing, .sg-dragging, .sg-card--live-swap):hover {
+	box-shadow: var(--sg-lt-lift-hover);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LIGHT THEME — BRIGHTER CODEX HUB                              [sg-lt-codex]
+   Emma's pick (2026-11-26): the brighter cards. Hub only (the list of
+   characters, places ...); a sheet's own page is NOT changed here.
+   Needs [sg-lt-shared]. Every rule starts with  body:not(.theme-dark)  so
+   dark never changes.
+
+   Same idea as the Dashboard: white cards on a softly tinted page, one soft
+   shadow, hairline edges, the accent only as touches. Card shapes, the big
+   framed round photo on character cards (locked) and the colour of each
+   Codex family stay exactly as they are.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* -- The Codex's own colour names, pointed at the shared parts. The page
+   behind everything is the soft tint; cards and the category list are
+   white. (--sg-cdx-media-bg is NOT changed: it fills the round photo frame
+   when there is no photo, part of the locked look.) -- */
+body:not(.theme-dark) .sg-codex-root {
+	--sg-cdx-bg:                var(--sg-lt-page);
+	--sg-cdx-sidebar-bg:        var(--sg-lt-surface);
+	--sg-cdx-card-bg:           var(--sg-lt-surface);
+	--sg-cdx-card-border:       var(--sg-lt-edge);
+	--sg-cdx-border:            var(--sg-lt-edge);
+	--sg-cdx-input-bg:          var(--sg-lt-surface);
+	--sg-cdx-hover-bg:          var(--sg-lt-tint-hover);
+	--sg-cdx-card-shadow:       var(--sg-lt-lift);
+	--sg-cdx-card-shadow-hover: var(--sg-lt-lift-hover);
+}
+/* A sheet's own page (one character, place ...) shows the Codex's page
+   colour behind it: keep today's colour there, the page is not part of
+   this step. */
+body:not(.theme-dark) .sg-codex-root.sg-codex-root--detail {
+	--sg-cdx-bg: var(--background-primary);
+}
+
+/* -- Top of the hub (Codex · project name · search · shortcut buttons):
+   the soft accent band instead of the grey gradient, book icon in accent. -- */
+body:not(.theme-dark) .sg-codex-header {
+	background: var(--sg-lt-band-bg);
+	border-bottom-color: color-mix(in srgb, var(--interactive-accent) 14%, transparent);
+}
+body:not(.theme-dark) .sg-codex-title-icon {
+	color: var(--sg-ink-accent);
+}
+
+/* -- "Search this project's world..." and the project box: white with one
+   hairline, so they sit clearly on the band. -- */
+body:not(.theme-dark) :is(.sg-codex-search, .sg-codex-project-select) {
+	background: var(--sg-lt-surface);
+	border-color: var(--sg-lt-hairline);
+	box-shadow: none;
+}
+
+/* -- Category list on the left: white (from the names above); the open
+   category is a soft accent chip with accent words, its number in accent;
+   other numbers sit in a barely-there grey. -- */
+body:not(.theme-dark) .sg-codex-nav-item.is-active {
+	background: var(--sg-lt-chip-bg);
+	color: var(--sg-ink-accent);
+}
+body:not(.theme-dark) .sg-codex-nav-count {
+	background: var(--sg-lt-inset);
+}
+body:not(.theme-dark) .sg-codex-nav-item.is-active .sg-codex-nav-count {
+	background: var(--sg-lt-surface);
+	color: var(--sg-ink-accent);
+}
+
+/* -- Cards / list switch (next to "New Character"): a white tray with a
+   hairline; the view that is on = accent chip with accent icon, the other
+   one a grey icon. -- */
+body:not(.theme-dark) .sg-codex-view-toggle {
+	background: var(--sg-lt-surface);
+	box-shadow: inset 0 0 0 1px var(--sg-lt-hairline);
+}
+body:not(.theme-dark) button.sg-codex-view-btn {
+	color: var(--text-muted);
+}
+body:not(.theme-dark) button.sg-codex-view-btn:hover {
+	background: var(--sg-lt-tint-hover);
+	color: var(--sg-ink-accent);
+}
+body:not(.theme-dark) button.sg-codex-view-btn.is-active {
+	background: var(--sg-lt-chip-bg);
+	color: var(--sg-ink-accent);
+	box-shadow: none;
+}
+body:not(.theme-dark) button.sg-codex-view-btn:focus-visible {
+	box-shadow: var(--sg-btn-focus-ring);
+}
+
+/* -- Character cards: the card under the round photo is white with one
+   soft shadow (it borrowed the grey header gradient before). Shape, sizes
+   and the framed photo stay. -- */
+body:not(.theme-dark) .sg-codex-card-portrait-body {
+	background: var(--sg-lt-surface);
+	border-color: var(--sg-lt-edge);
+	box-shadow: var(--sg-lt-lift);
+}
+body:not(.theme-dark) .sg-codex-card--portrait:hover .sg-codex-card-portrait-body {
+	box-shadow: var(--sg-lt-lift-hover);
+}
+
+/* -- Other cards (places, items ...) without a picture: the picture area is
+   a barely-there grey on the white card. -- */
+body:not(.theme-dark) .sg-codex-card-media {
+	background: var(--sg-lt-inset);
+}
+/* [/sg-lt-codex] */
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LIGHT THEME — WRITERS PANEL, BOX-FREE                SKETCH, not in the app yet
+   Emma: "something else to do than more squares … I like the brightness tho".
+   No new panels, cards or frames. Brightness comes from the panel's own page
+   (only our view, never Obsidian's other side panes) being the light surface;
+   structure comes from headings, one faint hairline per section, space and
+   accent touches. Uses the shared --sg-lt-* parts from [sg-lt-shared].
+   Every rule starts with  body:not(.theme-dark)  so dark never changes.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* -- The panel's page: the light surface (our view only). This is where the
+   brightness lives now, instead of white boxes inside a grey sidebar. -- */
+body:not(.theme-dark) .sg-outline-root {
+	background: var(--sg-lt-surface);
+}
+
+/* -- Tabs: the underline stays; the bar's line is the soft edge; the active
+   tab's icon is an accent touch. -- */
+body:not(.theme-dark) .sg-outline-root .sg-flat-tabs {
+	border-bottom-color: var(--sg-lt-edge);
+}
+body:not(.theme-dark) .sg-outline-root .sg-flat-tab.is-active .sg-flat-tab-icon {
+	color: var(--sg-ink-accent);
+}
+
+/* ── Writing tab ───────────────────────────────────────────────────────── */
+
+/* Scene rows: a little more air; numbers and word counts step back so the
+   scene names lead. Hover = the soft accent tint (only while pointing). */
+body:not(.theme-dark) .sg-outline-root .sg-outline-list--tree {
+	padding-top: 4px;
+}
+body:not(.theme-dark) .sg-outline-root .sg-outline-scene {
+	position: relative;
+	padding-top: 6px;
+	padding-bottom: 6px;
+}
+body:not(.theme-dark) .sg-outline-root .sg-outline-scene-num,
+body:not(.theme-dark) .sg-outline-root .sg-outline-scene-words {
+	color: var(--text-faint);
+	font-variant-numeric: tabular-nums;
+}
+body:not(.theme-dark) .sg-outline-root .sg-outline-scene:not(.sg-outline-scene--divider):not(.sg-outline-scene--empty):not(.sg-outline-world-entity):hover {
+	background: var(--sg-lt-tint-hover);
+}
+
+/* The open scene: no filled band. A slim accent bar at its left edge, the
+   number in the accent, the name in bold. */
+body:not(.theme-dark) .sg-outline-root .sg-outline-scene.is-active,
+body:not(.theme-dark) .sg-outline-root .sg-outline-scene.is-active:hover {
+	background: transparent;
+}
+body:not(.theme-dark) .sg-outline-root .sg-outline-scene.is-active::after {
+	content: "";
+	position: absolute;
+	left: 3px;
+	top: 6px;
+	bottom: 6px;
+	width: 3px;
+	border-radius: 3px;
+	background: var(--interactive-accent);
+}
+body:not(.theme-dark) .sg-outline-root .sg-outline-scene.is-active .sg-outline-scene-num {
+	color: var(--sg-ink-accent);
+	font-weight: 600;
+}
+body:not(.theme-dark) .sg-outline-root .sg-outline-scene.is-active .sg-outline-scene-words {
+	color: var(--text-muted);
+}
+
+/* "New scene — name it, press Enter": no box, just one underline; the + is
+   an accent touch; while typing the underline turns accent. */
+body:not(.theme-dark) .sg-outline-root .sg-outline-new-scene-row:not(.sg-outline-new-divider-row) {
+	background: transparent;
+	border: none;
+	border-bottom: 1px solid var(--sg-lt-hairline);
+	border-radius: 0;
+	margin-left: 8px;
+	margin-right: 8px;
+	padding: 0 2px;
+}
+body:not(.theme-dark) .sg-outline-root .sg-outline-new-scene-row:not(.sg-outline-new-divider-row) .sg-outline-tab-icon {
+	color: var(--sg-ink-accent);
+}
+body:not(.theme-dark) .sg-outline-root .sg-outline-new-scene-row:not(.sg-outline-new-divider-row):focus-within {
+	border-bottom-color: var(--interactive-accent);
+	box-shadow: 0 1px 0 0 var(--interactive-accent);
+}
+
+/* "New divider…" and "Export manuscript…": quiet text rows; the line above
+   Export goes (the New scene underline already closes the list, two lines
+   this close read like a form); hover = soft tint. */
+body:not(.theme-dark) .sg-outline-root .sg-outline-new-divider-row {
+	margin-left: 8px;
+	margin-right: 8px;
+	padding-left: 2px;
+}
+body:not(.theme-dark) .sg-outline-root .sg-outline-compile-link {
+	border-top-color: transparent;
+	margin-top: 0;
+	margin-left: 8px;
+	margin-right: 8px;
+	padding-left: 2px;
+}
+body:not(.theme-dark) .sg-outline-root .sg-outline-new-divider-row:hover,
+body:not(.theme-dark) .sg-outline-root .sg-outline-compile-link:hover {
+	background: var(--sg-lt-tint-hover);
+	color: var(--sg-btn-soft-ink);
+}
+
+/* ── Progress tab ──────────────────────────────────────────────────────── */
+
+/* Writing sprint, Writing goals, To-do: no blocks. More air around each,
+   and one faint hairline between them (none above the first). */
+body:not(.theme-dark) .sg-outline-root .sg-outline-dash-section {
+	background: transparent;
+	border: none;
+	padding: 22px 14px 14px;
+}
+body:not(.theme-dark) .sg-outline-root .sg-outline-dash-section + .sg-outline-dash-section {
+	border-top: 1px solid var(--sg-lt-edge);
+	margin: 0 6px;
+	padding-left: 8px;
+	padding-right: 8px;
+}
+
+/* Section titles: a quiet, strong heading; the icon is an accent touch on
+   its own (the small square behind it goes, here only - the Dashboard keeps
+   its icon chips). Same look for all three titles. */
+body:not(.theme-dark) .sg-outline-root :is(.sg-outline-dash-head, .sg-todo-head) {
+	margin-bottom: 14px;
+	gap: 8px;
+}
+body:not(.theme-dark) .sg-outline-root :is(.sg-outline-dash-title, .sg-todo-head-title) {
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: 0.07em;
+	color: var(--text-normal);
+}
+body:not(.theme-dark) .sg-outline-root :is(.sg-outline-dash-head > .sg-outline-tab-icon, .sg-todo-head-icon) {
+	display: inline-flex;
+	width: auto;
+	height: auto;
+	background: transparent;
+	color: var(--sg-ink-accent);
+}
+body:not(.theme-dark) .sg-outline-root :is(.sg-outline-dash-head > .sg-outline-tab-icon, .sg-todo-head-icon) svg {
+	width: 15px;
+	height: 15px;
+	color: var(--sg-ink-accent);
+}
+
+/* Numbers: the done number a step bigger, so it leads the row. */
+body:not(.theme-dark) .sg-outline-root .sg-outline-goal-done {
+	font-size: 14px;
+}
+
+/* Bars: the empty part almost disappears (green "goal met" fill unchanged).
+   The "N more sprints…" line sits right under its own bar. */
+body:not(.theme-dark) .sg-outline-root .sg-outline-bar {
+	background: var(--sg-lt-track);
+	height: 6px;
+}
+body:not(.theme-dark) .sg-outline-root .sg-sprint-left {
+	margin: -13px 0 18px; /* bar keeps its 20px; this pulls the line up to 7px under it (no :has, the store checker flags it) */
+	color: var(--text-faint);
+}
+
+/* To-do rows: separated by space, never lines; the date and person tags
+   lose their outline and keep only their soft tint. */
+body:not(.theme-dark) .sg-outline-root .sg-todo-list {
+	gap: 10px;
+}
+body:not(.theme-dark) .sg-outline-root .sg-todo-row:hover,
+body:not(.theme-dark) .sg-outline-root .sg-todo-sub:hover {
+	background: var(--sg-lt-tint-hover);
+}
+body:not(.theme-dark) .sg-outline-root button.sg-todo-due.sg-todo-due {
+	border: none;
+	box-shadow: none;
+	padding: 2px 8px;
+	height: auto;
+}
+
+/* "Completed (2)": a quiet text link at the left, not a grey block. */
+body:not(.theme-dark) .sg-outline-root button.sg-todo-done-toggle.sg-todo-done-toggle {
+	background-color: transparent;
+	border: none;
+	box-shadow: none;
+	width: auto;
+	justify-content: flex-start;
+	padding: 3px 2px;
+	color: var(--text-muted);
+	--text-color: var(--text-muted);
+}
+body:not(.theme-dark) .sg-outline-root button.sg-todo-done-toggle.sg-todo-done-toggle:hover {
+	background-color: transparent;
+	color: var(--sg-ink-accent);
+	--text-color: var(--sg-ink-accent);
+}
+body:not(.theme-dark) .sg-outline-root button.sg-todo-done-toggle.sg-todo-done-toggle:hover .sg-todo-done-label {
+	text-decoration: underline;
+	text-underline-offset: 2px;
+}
+
+/* "Drag here to delete": a faint line of text, no dashed box at rest; it
+   still turns red when a task is dragged onto it (unchanged). */
+body:not(.theme-dark) .sg-outline-root .sg-todo-trash:not(.is-over) {
+	border-color: transparent;
+	padding-left: 2px;
+	color: var(--text-faint);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LIGHT THEME — CODEX SHEET PAGE + SHEET EDITOR                 [sg-lt-sheet]
+   Emma's pick (2026-11-26): "Book page + margin" for a sheet's own page in
+   the Codex (one character, place, group, item ...), and the clean + bright
+   sheet editor (Edit, as a tab and as a pop-up). LIGHT ONLY for now: every
+   rule starts with  body:not(.theme-dark)  so dark never changes (dark
+   follows in a later update). Needs [sg-lt-shared] (--sg-lt-*).
+   A setup's own page (.sg-detail--setup-page) is left alone.
+
+   The page: one calm reading column (photo, name and one-line essence on
+   top, then Drives, relationships, the writer's sections) with a slim
+   margin on the RIGHT holding Vitals, "On N cards" and Images (last, so
+   opening it never pushes the others away). The big framed round photo
+   stays (locked). CSS only: the page becomes a grid and .sg-detail-grid
+   steps aside (display: contents) so its aside + main sit in the page grid.
+   When the Codex pane is narrower than 900px (sidebars open, phone) the
+   margin folds in under the photo and name.
+
+   Built in this order (later parts refine earlier ones, keep the order):
+     1. clean page basics   2. the book page   3. the margin   4. the editor
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* -- Names used below (light). -- */
+
+body:not(.theme-dark) :is(.sg-detail:not(.sg-detail--setup-page), .sg-sheet) {
+	--sgx-page:  var(--sg-lt-page);
+	--sgx-card:  var(--sg-lt-surface);
+	--sgx-edge:  var(--sg-lt-edge);
+	--sgx-lift:  var(--sg-lt-lift);
+	--sgx-ink:   var(--sg-ink-accent);
+	--sgx-tick:  var(--interactive-accent);
+	--sgx-chip:  var(--sg-lt-chip-bg);
+	--sgx-hover: var(--sg-lt-tint-hover);
+	--sgx-band:  var(--sg-lt-band-bg);
+}
+
+/* ── 1. Clean page basics ──────────────────────────────────────────────── */
+
+/* Page: the soft tint (part 2 makes it paper-white). */
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) {
+	background: var(--sgx-page);
+}
+
+/* Top bar: no family-colour gradient; a plain bar with one hairline.
+   The back-arrow square keeps its family colour (small touch). */
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-band {
+	background: var(--sgx-page);
+	border-bottom-color: var(--sgx-edge);
+	backdrop-filter: none;
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-band {
+	background: var(--sg-lt-surface);
+}
+/* Light: "Back to ...", "Characters", "View family tree", "..." = quiet white
+   buttons with a hairline. */
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) button.sg-detail-back.sg-detail-back,
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) button.sg-detail-action.sg-detail-action:not(.sg-detail-action--primary) {
+	background-color: var(--sg-lt-surface);
+	border-color: var(--sg-lt-hairline);
+	box-shadow: none;
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) button.sg-detail-back.sg-detail-back:hover,
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) button.sg-detail-action.sg-detail-action:not(.sg-detail-action--primary):hover {
+	background-color: var(--sg-lt-tint-hover);
+}
+/* "Back to <person>" and the back hover: theme accent, not the family colour. */
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-back--origin {
+	color: var(--sgx-ink);
+	border-color: color-mix(in srgb, var(--interactive-accent) 40%, var(--sgx-edge));
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-back:hover {
+	color: var(--sgx-ink);
+	border-color: var(--interactive-accent);
+}
+
+/* Cover behind the photo: same place and size, but one flat soft tint of the
+   theme accent instead of a three-layer family-colour gradient + sheen. */
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-hero::before {
+	background: var(--sgx-band);
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--interactive-accent) 14%, transparent);
+}
+
+/* The big framed round photo stays. Frame = the card colour, a thin ring in
+   the family colour (small touch), a softer shadow. */
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-portrait {
+	box-shadow:
+		0 0 0 4px var(--sgx-card),
+		0 0 0 5px color-mix(in srgb, var(--sg-sheet-accent) 32%, transparent),
+		0 12px 26px -16px rgba(15, 18, 28, 0.45);
+}
+@media (max-width: 760px) {
+	body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-portrait {
+		box-shadow:
+			0 0 0 3px var(--sgx-card),
+			0 0 0 4px color-mix(in srgb, var(--sg-sheet-accent) 32%, transparent),
+			0 10px 22px -14px rgba(15, 18, 28, 0.45);
+	}
+}
+
+/* "CHARACTER" badge -> a small dot in the family colour + "Character" in
+   normal letters (the clean redesign's "icon + word"). */
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-hero-kind {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 0;
+	background: none;
+	box-shadow: none;
+	text-transform: none;
+	letter-spacing: 0;
+	font-size: 12.5px;
+	font-weight: 600;
+	color: var(--text-muted);
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-hero-kind::before {
+	content: '';
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: var(--sg-sheet-accent);
+	flex-shrink: 0;
+}
+/* The quote line: theme accent. */
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-quote {
+	border-left-color: var(--interactive-accent);
+}
+
+/* "Images (0)": a plain fold line, no grey box. */
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) button.sg-detail-images-head.sg-detail-images-head {
+	background: transparent;
+	box-shadow: none;
+	border: none;
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) button.sg-detail-images-head.sg-detail-images-head:hover {
+	background: var(--sgx-hover);
+}
+
+/* ONE section-title style for the whole page: strong, dark, sentence case,
+   a short accent tick before it. Main-column titles also get one hairline
+   under them (the earlier redesign's "stronger titles and a thin line"). */
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) :is(.sg-detail-section-title, .sg-detail-facts-title) {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	text-transform: none;
+	letter-spacing: -0.01em;
+	font-weight: 700;
+	color: var(--text-normal);
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) :is(.sg-detail-section-title, .sg-detail-facts-title)::before {
+	content: '';
+	width: 12px;
+	height: 2px;
+	border-radius: 2px;
+	background: var(--sgx-tick);
+	flex-shrink: 0;
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-section-title {
+	font-size: 15px;
+	padding-bottom: 8px;
+	margin-bottom: 14px;
+	border-bottom: 1px solid var(--sgx-edge);
+	border-image: none;
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-facts-title {
+	font-size: 14px;
+	padding: 13px 0 10px;
+}
+/* "Other relationships": a quieter sub-title under "Key relationships". */
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-section-title.sg-detail-section-title--other {
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--text-muted);
+	border-bottom: none;
+	padding-bottom: 0;
+	margin: 18px 0 8px;
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-section-title--other::before {
+	content: none;
+}
+
+/* Vitals and "On 3 cards": ONE card (white in light), one hairline, one soft
+   shadow - instead of a box in a tinted tray in a second ring. Same place. */
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-facts {
+	background: var(--sgx-card);
+	box-shadow: 0 0 0 1px var(--sgx-edge), var(--sgx-lift);
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) :is(.sg-detail-fact, .sg-detail-appearance) {
+	border-top-color: var(--sgx-edge);
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-fact-key[title]:hover,
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-appearance:hover .sg-detail-appearance-title {
+	color: var(--sgx-ink);
+}
+/* "ACT 1" -> "Act 1" */
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-appearance-col {
+	text-transform: none;
+	letter-spacing: 0;
+	font-size: 12px;
+	font-weight: 500;
+}
+
+/* Drives (Want, Need, Flaw): the same cards in the same grid, flat like the
+   Vitals card; icon in a small theme-accent square; labels in normal letters. */
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-drive-chip,
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-drive-chip:not(.sg-detail-drive-chip--empty) {
+	background: var(--sgx-card);
+	box-shadow: 0 0 0 1px var(--sgx-edge), var(--sgx-lift);
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-drive-chip.sg-detail-drive-chip--empty {
+	background: transparent;
+	box-shadow: 0 0 0 1px var(--sgx-edge);
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-drive-icon {
+	background: var(--sgx-chip);
+	color: var(--sgx-ink);
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-drive-label {
+	text-transform: none;
+	letter-spacing: 0;
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--text-muted);
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-drive-val {
+	font-size: 14px;
+}
+
+/* Relationship chips: same chips, flat card colour, hairline; the letter
+   circle in the theme accent. The coloured line under a chip stays. */
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-rel-chip {
+	background: var(--sgx-card);
+	border-color: var(--sgx-edge);
+	box-shadow: var(--sgx-lift);
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-rel-chip--link:hover {
+	background: var(--sgx-hover);
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-rel-avatar {
+	background: var(--sgx-chip);
+	color: var(--sgx-ink);
+}
+
+/* The writer's own words: a touch bigger. */
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-section-body {
+	font-size: 14px;
+}
+
+/* ── 2. The book page: one calm reading column ─────────────────────────── */
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) {
+	--sga-col: 700px;
+	--sga-serif: 'Iowan Old Style', 'Charter', 'Georgia', 'Cambria', serif;
+}
+/* A clean paper-white page instead of the tinted one. */
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) {
+	--sgx-page: var(--sg-lt-surface);
+	background: var(--sg-lt-surface);
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-band {
+	background: var(--sg-lt-surface);
+}
+
+/* ── Top: photo, name, essence, centred ── */
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-hero {
+	flex-direction: column;
+	align-items: center;
+	text-align: center;
+	max-width: var(--sga-col);
+	padding: 44px 24px 0;
+	gap: 18px;
+}
+/* The cover becomes a faint round glow of the theme accent behind the photo:
+   softness without an edge. */
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-hero::before {
+	top: -10px;
+	left: 50%;
+	right: auto;
+	width: 560px;
+	height: 260px;
+	transform: translateX(-50%);
+	border-radius: 50%;
+	background: radial-gradient(closest-side,
+		color-mix(in srgb, var(--interactive-accent) 15%, transparent),
+		transparent);
+	box-shadow: none;
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-portrait {
+	width: 136px;
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-hero-info {
+	padding-top: 0;
+	align-items: center;
+	gap: 14px;
+	width: 100%;
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-hero-top {
+	justify-content: center;
+	align-items: center;
+	gap: 6px 8px;
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-hero-name {
+	flex-basis: 100%;
+	font-family: var(--sga-serif);
+	font-size: 38px;
+	font-weight: 600;
+	letter-spacing: -0.01em;
+	margin-bottom: 4px;
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-hero-sub {
+	flex-basis: auto;
+	font-size: 13px;
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-hero-sub::before {
+	content: '·';
+	margin-right: 8px;
+	color: var(--text-faint);
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-quote {
+	margin: 2px auto 0;
+	padding: 0;
+	border: none;
+	max-width: 46ch;
+	font-family: var(--sga-serif);
+	font-size: 19px;
+	line-height: 1.5;
+	color: var(--text-normal);
+}
+
+/* "Images (0)": a quiet centred fold line. */
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-images {
+	max-width: var(--sga-col);
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	padding-top: 10px;
+}
+
+/* ── One reading column ── */
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-grid {
+	grid-template-columns: minmax(0, 1fr);
+	align-content: start;
+	gap: 0;
+	max-width: var(--sga-col);
+	padding: 26px 24px 88px;
+}
+
+/* Vitals + "On 3 cards": one slim strip, two columns, between two hairlines.
+   No box, no wash. */
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-aside {
+	flex-direction: row;
+	gap: 48px;
+	padding: 18px 0 20px;
+	margin-bottom: 52px;
+	border-top: 1px solid var(--sgx-edge);
+	border-bottom: 1px solid var(--sgx-edge);
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-facts {
+	flex: 1;
+	min-width: 0;
+	padding: 0;
+	background: none;
+	box-shadow: none;
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-facts-title {
+	padding: 0 0 10px;
+	font-size: 13px;
+	font-weight: 700;
+	color: var(--text-muted);
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-facts-title::before {
+	content: none;
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-fact {
+	border-top: none;
+	padding: 4px 0;
+	font-size: 14px;
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-fact-key {
+	color: var(--text-muted);
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-appearance {
+	flex-direction: row;
+	justify-content: flex-start;
+	align-items: baseline;
+	gap: 12px;
+	border-top: none;
+	padding: 4px 0;
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-appearance-col {
+	width: 44px;
+	flex-shrink: 0;
+	font-size: 13px;
+	color: var(--text-muted);
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-appearance-title {
+	font-size: 14px;
+}
+
+/* ── Sections: space + a strong title with a short accent bar above ── */
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-section {
+	margin-bottom: 52px;
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-section-title {
+	display: block;
+	font-size: 21px;
+	font-weight: 700;
+	letter-spacing: -0.015em;
+	padding-bottom: 0;
+	margin-bottom: 16px;
+	border-bottom: none;
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-section-title::before {
+	display: block;
+	width: 22px;
+	height: 3px;
+	margin-bottom: 12px;
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-section-title.sg-detail-section-title--other {
+	font-size: 13px;
+	font-weight: 700;
+	margin: 22px 0 10px;
+}
+
+/* Drives: a ruled three-line list - Want / Need / Flaw. */
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-drives {
+	grid-template-columns: minmax(0, 1fr);
+	gap: 0;
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-drive-chip,
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-drive-chip:not(.sg-detail-drive-chip--empty),
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-drive-chip.sg-detail-drive-chip--empty {
+	grid-template-columns: 20px 76px minmax(0, 1fr);
+	grid-template-areas: "icon label value";
+	gap: 10px;
+	padding: 12px 0;
+	border-radius: 0;
+	background: none;
+	box-shadow: none;
+	border-bottom: 1px solid var(--sgx-edge);
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-drive-chip:first-child {
+	border-top: 1px solid var(--sgx-edge);
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-drive-icon {
+	width: 20px;
+	height: 20px;
+	background: none;
+	color: var(--sgx-ink);
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-drive-icon svg {
+	width: 16px;
+	height: 16px;
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-drive-label {
+	font-size: 14px;
+	font-weight: 600;
+	color: var(--text-muted);
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-drive-val {
+	font-size: 15px;
+	line-height: 1.5;
+}
+
+/* Relationships: plain names; a small dot in the relationship's own colour
+   (grey when it has none); the type after the name. */
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-relations {
+	gap: 10px 32px;
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-rel-chip,
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-rel-chip--link:hover {
+	padding: 4px 0 4px 18px;
+	border: none;
+	background: none;
+	box-shadow: none;
+	overflow: visible;
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-rel-chip::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	top: 50%;
+	width: 8px;
+	height: 8px;
+	margin-top: -4px;
+	border-radius: 50%;
+	background: var(--text-faint);
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-rel-bar {
+	left: 0;
+	right: auto;
+	top: 50%;
+	bottom: auto;
+	width: 8px;
+	height: 8px;
+	margin-top: -4px;
+	border-radius: 50%;
+	opacity: 1;
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-rel-avatar {
+	display: none;
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-rel-info {
+	flex-direction: row;
+	align-items: baseline;
+	gap: 7px;
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-rel-name {
+	font-size: 15px;
+	font-weight: 600;
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-rel-chip--link .sg-detail-rel-name {
+	text-decoration: underline;
+	text-decoration-color: var(--sgx-edge);
+	text-underline-offset: 4px;
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-rel-chip--link:hover .sg-detail-rel-name {
+	color: var(--sgx-ink);
+	text-decoration-color: currentColor;
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-rel-type {
+	font-size: 13px;
+}
+
+/* The writer's prose: a comfortable reading size. */
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-section-body {
+	font-size: 15px;
+	line-height: 1.75;
+	max-width: none;
+}
+
+/* Phone: the strip stacks; the column already fits. */
+@media (max-width: 760px) {
+	body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-aside { flex-direction: column; gap: 18px; margin-bottom: 40px; }
+	body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-hero::before { width: 360px; height: 200px; }
+	body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-hero-name { font-size: 30px; }
+	body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-section { margin-bottom: 40px; }
+	body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-rel-chip--link { min-height: 44px; }
+}
+
+/* ── 3. The margin beside the text (right) ──────────────────────────────── */
+/* The Codex pane reports its own width, so the margin folds under the header
+   when the PANE is narrow (sidebars open), not only on a phone. */
+body:not(.theme-dark) .sg-codex-root.sg-codex-root--detail {
+	container-type: inline-size;
+	container-name: sg-codex-page;
+}
+
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) {
+	--sgm-main: 620px;   /* the reading column (A had 700 incl. padding) */
+	--sgm-gap: 64px;     /* the gutter between text and margin */
+	--sgm-side: 208px;   /* the margin */
+	--sgm-key: 58px;     /* one shared label width for every margin note */
+	display: grid;
+	grid-template-columns:
+		minmax(24px, 1fr) minmax(0, var(--sgm-main)) var(--sgm-gap) var(--sgm-side) minmax(24px, 1fr);
+	grid-template-rows: auto auto auto 1fr;
+	grid-template-areas:
+		"band band   band band   band"
+		".    hero   .    .      .   "
+		".    main   .    side   .   "
+		".    main   .    images .   ";
+	align-items: start;
+	align-content: start; /* short sheets: no stretched rows */
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) > .sg-detail-band { grid-area: band; }
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) > .sg-detail-grid { display: contents; }
+
+/* ── The reading column: A's hero sits on top of the text, not the spread ── */
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-hero {
+	grid-area: hero;
+	max-width: none;
+	margin: 0;
+	padding: 48px 0 0;
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-main {
+	grid-area: main;
+	padding: 60px 0 96px;
+}
+
+/* ── The margin ── */
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-images {
+	grid-area: images;
+	max-width: none;
+	margin: 30px 0 96px;
+	padding: 0;
+	align-items: stretch;
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-aside {
+	grid-area: side;
+	flex-direction: column;
+	gap: 0;
+	margin: 0;
+	padding: 60px 0 0;   /* the first hairline sits level with the Drives bar */
+	border: none;
+}
+
+/* Every margin note: one hairline above, a small plain label, then lines.
+   The Drives accent bar lines up with the first hairline (Vitals). */
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) :is(.sg-detail-images, .sg-detail-aside .sg-detail-facts) {
+	border-top: 1px solid var(--sgx-edge);
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-aside .sg-detail-facts {
+	flex: none;
+	padding-top: 12px;
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-aside .sg-detail-facts + .sg-detail-facts {
+	margin-top: 30px;
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-facts-title {
+	padding: 0 0 8px;
+	font-size: 12.5px;
+	font-weight: 650;
+	letter-spacing: 0.01em;
+	color: var(--text-muted);
+}
+/* Label + value on one line, all labels on one shared edge. */
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-aside .sg-detail-fact {
+	display: grid;
+	grid-template-columns: var(--sgm-key) minmax(0, 1fr);
+	gap: 10px;
+	padding: 3px 0;
+	font-size: 14px;
+	line-height: 1.45;
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-aside .sg-detail-fact-key {
+	min-width: 0;
+	font-size: 13px;
+	color: var(--text-faint);
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-aside .sg-detail-appearance {
+	display: grid;
+	grid-template-columns: var(--sgm-key) minmax(0, 1fr);
+	gap: 10px;
+	padding: 3px 0;
+	margin: 0 -6px;
+	padding-inline: 6px;
+	border-radius: 6px;
+	line-height: 1.45;
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-aside .sg-detail-appearance:hover {
+	background: var(--sgx-hover);
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-aside .sg-detail-appearance-col {
+	width: auto;
+	font-size: 13px;
+	color: var(--text-faint);
+}
+
+/* "Images (N)": the last margin note. Its fold button reads as a label. */
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) button.sg-detail-images-head.sg-detail-images-head {
+	align-self: flex-start;
+	height: auto;
+	margin: 0 0 0 -4px;
+	padding: 12px 6px 4px 2px;
+	border-radius: 6px;
+	font-size: 12.5px;
+	font-weight: 650;
+	letter-spacing: 0.01em;
+	color: var(--text-muted);
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-images-caret svg { width: 12px; height: 12px; }
+
+/* Open: one picture per line, wide enough for its name and both buttons. */
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-images-body { padding: 8px 0 0; }
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-images-actions {
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 6px;
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-images-hint { line-height: 1.45; }
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-images-empty { font-size: 13px; line-height: 1.5; color: var(--text-faint); }
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-images-grid {
+	grid-template-columns: minmax(0, 1fr);
+	gap: 16px;
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-image-open {
+	aspect-ratio: 4 / 3;
+	border: none;
+	box-shadow: 0 0 0 1px var(--sgx-edge);
+}
+
+/* ── Narrow pane or phone: the margin folds in under the header ──
+   Order: photo, name, essence → Vitals, On N cards, Images → Drives … */
+@container sg-codex-page (max-width: 900px) {
+	body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) {
+		grid-template-columns: minmax(16px, 1fr) minmax(0, 640px) minmax(16px, 1fr);
+		grid-template-rows: auto;
+		grid-template-areas:
+			"band band   band"
+			".    hero   .   "
+			".    side   .   "
+			".    images .   "
+			".    main   .   ";
+	}
+	body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-hero { padding-top: 36px; }
+	body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-images { margin: 24px 0 0; }
+	body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-aside { padding: 36px 0 0; }
+	body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-aside .sg-detail-facts + .sg-detail-facts { margin-top: 24px; }
+	body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-main { padding: 48px 0 72px; }
+	body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-images-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+	body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-images-actions { flex-direction: row; align-items: center; }
+}
+/* Phone fingers: the clickable "On N cards" lines get a full touch height. */
+@media (max-width: 768px) {
+	body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-aside .sg-detail-appearance { min-height: 44px; align-items: center; }
+	body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) button.sg-detail-images-head.sg-detail-images-head { min-height: 44px; padding-bottom: 0; }
+}
+/* Longer labels (a place's "Population", "Ruled By" ...): the shared label
+   edge widens for the whole margin (up to 96px, longer labels wrap) instead
+   of a label running into its value. Short labels (Role, Age, Act 1) keep the
+   58px edge. Without subgrid support it falls back to the fixed 58px edge. */
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-aside {
+	display: grid;
+	grid-template-columns: minmax(var(--sgm-key), max-content) minmax(0, 1fr);
+	column-gap: 10px;
+	align-content: start;
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-aside .sg-detail-facts {
+	grid-column: 1 / -1;
+	display: grid;
+	grid-template-columns: subgrid;
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-aside .sg-detail-facts > * {
+	grid-column: 1 / -1;
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-aside :is(.sg-detail-fact, .sg-detail-appearance) {
+	grid-template-columns: subgrid;
+}
+body:not(.theme-dark) .sg-detail:not(.sg-detail--setup-page) .sg-detail-aside :is(.sg-detail-fact-key, .sg-detail-appearance-col) {
+	justify-self: start; /* the label keeps its text width (hover underline) */
+	max-width: 96px;
+}
+
+/* ── 4. The sheet editor (Edit: tab and pop-up) ─────────────────────────── */
+/* Page behind the form: light = soft tint, so the white rail and the white
+   section cards lift off it. */
+body:not(.theme-dark) :is(.sg-sheet-tab.view-content, .modal.sg-sheet-host) {
+	background-color: var(--sg-lt-page);
+}
+
+/* Top band: one flat soft accent tint (like the Codex and Dashboard tops),
+   no family-colour gradient. The small icon square keeps the family colour. */
+body:not(.theme-dark) .sg-sheet .sg-sheet-band {
+	background: var(--sgx-band);
+	border-bottom-color: var(--sgx-edge);
+}
+
+/* Left column (photo, name, other names, Identity): white panel in light. */
+body:not(.theme-dark) .sg-sheet .sg-sheet-rail {
+	background: var(--sg-lt-surface);
+}
+body:not(.theme-dark) .sg-sheet .sg-sheet-rail {
+	border-right-color: var(--sgx-edge);
+}
+body:not(.theme-dark) .sg-sheet .sg-sheet-portrait:hover,
+body:not(.theme-dark) .sg-sheet .sg-sheet-portrait:focus-visible {
+	border-color: var(--interactive-accent);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--interactive-accent) 22%, transparent);
+}
+
+/* The name: simply big text you type in, one line under it. */
+body:not(.theme-dark) .sg-sheet .sg-sheet-rail input.sg-sheet-name.sg-sheet-name {
+	height: auto;
+	padding: 4px 0 6px;
+	border: none;
+	border-bottom: 1px solid var(--sgx-edge);
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
+	font-size: 20px;
+	font-weight: 700;
+	letter-spacing: -0.015em;
+}
+body:not(.theme-dark) .sg-sheet .sg-sheet-rail input.sg-sheet-name.sg-sheet-name:focus {
+	border-bottom-color: var(--interactive-accent);
+}
+
+/* Titles ("Identity", section heads, "Explore deeper"): the same strong,
+   dark, sentence-case title as on the sheet's page. */
+body:not(.theme-dark) .sg-sheet .sg-sheet-rail-facts-title,
+body:not(.theme-dark) .sg-sheet .sg-sheet-suggested-title {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	text-transform: none;
+	letter-spacing: -0.01em;
+	font-size: 14px;
+	font-weight: 700;
+	color: var(--text-normal);
+}
+body:not(.theme-dark) .sg-sheet .sg-sheet-rail-facts-title::before {
+	content: '';
+	width: 12px;
+	height: 2px;
+	border-radius: 2px;
+	background: var(--sgx-tick);
+	flex-shrink: 0;
+}
+body:not(.theme-dark) .sg-sheet .sg-sheet-rail-facts {
+	border-top-color: var(--sgx-edge);
+}
+
+/* Field labels: normal letters, a little bigger ("ROLE" -> "Role"). */
+body:not(.theme-dark) .sg-sheet :is(.sg-sheet-field-label, .sg-sheet-field-labelinput) {
+	text-transform: none;
+	letter-spacing: 0;
+	font-size: 12.5px;
+	font-weight: 600;
+}
+
+/* Boxes you type in: white + hairline in light; a thin theme-accent edge
+   while typing, no glow. */
+body:not(.theme-dark) .sg-sheet :is(.sg-sheet-field-input, .sg-sheet-field-area) {
+	background: var(--sg-lt-surface);
+	border-color: var(--sg-lt-hairline);
+}
+body:not(.theme-dark) .sg-sheet :is(.sg-sheet-field-input, .sg-sheet-field-area):focus {
+	border-color: var(--interactive-accent);
+	box-shadow: none;
+}
+/* Phone: Obsidian takes the edge off one-line boxes there, and a white box on
+   a white card disappears - give the hairline back so every box shows. */
+body.is-mobile:not(.theme-dark) .sg-sheet input.sg-sheet-field-input {
+	border-width: 1px;
+	border-style: solid;
+}
+
+/* Sections (Inner life, Presence, Story, Notes): the same folding cards,
+   white in light with one soft shadow; the head gets the Dashboard's small
+   accent icon square and a bigger title. */
+body:not(.theme-dark) .sg-sheet .sg-sheet-section {
+	background: var(--sgx-card);
+	box-shadow: 0 0 0 1px var(--sgx-edge), var(--sgx-lift);
+}
+body:not(.theme-dark) .sg-sheet .sg-sheet-section:not(.is-collapsed) .sg-sheet-section-head {
+	border-bottom-color: var(--sgx-edge);
+}
+body:not(.theme-dark) .sg-sheet .sg-sheet-section-head:hover {
+	background: var(--sgx-hover);
+}
+body:not(.theme-dark) .sg-sheet .sg-sheet-section-icon {
+	align-items: center;
+	justify-content: center;
+	width: 26px;
+	height: 26px;
+	border-radius: 6px;
+	background: var(--sgx-chip);
+	color: var(--sgx-ink);
+}
+body:not(.theme-dark) .sg-sheet .sg-sheet-section-title {
+	font-size: 15px;
+}
+
+/* "+ Add field": a quiet accent line at the end of the list, not a dashed box. */
+body:not(.theme-dark) .sg-sheet button.sg-sheet-addfield.sg-sheet-addfield {
+	justify-content: flex-start;
+	border: 1px solid transparent;
+	background: transparent;
+	box-shadow: none;
+	color: var(--sgx-ink);
+	font-weight: 600;
+}
+body:not(.theme-dark) .sg-sheet button.sg-sheet-addfield.sg-sheet-addfield:hover {
+	background: var(--sgx-hover);
+	border-color: transparent;
+}
+/* Light: the plain buttons on the form ("Save as template", "Cancel",
+   "Pick a person...") are white with a hairline, like the page's top bar. */
+body:not(.theme-dark) .sg-sheet button.sg-sheet-btn.sg-sheet-btn:not(.sg-sheet-btn--primary) {
+	background-color: var(--sg-lt-surface);
+	border-color: var(--sg-lt-hairline);
+}
+body:not(.theme-dark) .sg-sheet button.sg-sheet-btn.sg-sheet-btn:not(.sg-sheet-btn--primary):hover {
+	background-color: var(--sg-lt-tint-hover);
+}
+body:not(.theme-dark) .sg-sheet button.sg-sheet-btn.sg-sheet-addfield.sg-sheet-addfield,
+body:not(.theme-dark) .sg-sheet button.sg-sheet-btn.sg-sheet-addfield.sg-sheet-addfield {
+	background-color: transparent;
+	border-color: transparent;
+}
+body:not(.theme-dark) .sg-sheet button.sg-sheet-btn.sg-sheet-addfield.sg-sheet-addfield:hover,
+body:not(.theme-dark) .sg-sheet button.sg-sheet-btn.sg-sheet-addfield.sg-sheet-addfield:hover {
+	background-color: var(--sgx-hover);
+}
+/* Other light-weight buttons ("Save as template", "Pick a person...",
+   "+ New relationship type"): a hairline instead of a dashed edge. */
+body:not(.theme-dark) .sg-sheet button.sg-sheet-btn--ghost:not(.sg-sheet-addfield) {
+	border-style: solid;
+	border-color: var(--sgx-edge);
+}
+body:not(.theme-dark) .sg-sheet button.sg-sheet-btn--ghost:not(.sg-sheet-addfield):hover {
+	color: var(--sgx-ink);
+	border-color: var(--interactive-accent);
+}
+
+/* "Explore deeper": a quiet card, no dashed edge; chips hover in the accent. */
+body:not(.theme-dark) .sg-sheet .sg-sheet-suggested {
+	border: none;
+	background: var(--sgx-card);
+	box-shadow: 0 0 0 1px var(--sgx-edge);
+}
+body:not(.theme-dark) .sg-sheet button.sg-sheet-suggested-chip.sg-sheet-suggested-chip {
+	background-color: transparent;
+	border: 1px solid var(--sgx-edge);
+	box-shadow: none;
+}
+body:not(.theme-dark) .sg-sheet button.sg-sheet-suggested-chip.sg-sheet-suggested-chip:hover {
+	color: var(--sgx-ink);
+	border-color: var(--interactive-accent);
+}
+body:not(.theme-dark) .sg-sheet .sg-sheet-suggested-chip-icon {
+	color: var(--sgx-ink);
+}
+
+/* Bottom bar: white. */
+body:not(.theme-dark) .sg-sheet .sg-sheet-footer {
+	background: var(--sg-lt-surface);
+}
+body:not(.theme-dark) .sg-sheet .sg-sheet-footer {
+	border-top-color: var(--sgx-edge);
+}
+/* [/sg-lt-sheet] */

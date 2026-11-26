@@ -1,4 +1,5 @@
-import { isTap, TAP_SLOP_PX, truncate, pointerDist, fanOffsets, computeTimelineFit } from './graph-shared';
+import { isTap, TAP_SLOP_PX, truncate, pointerDist, fanOffsets, computeTimelineFit, nodeFamily, nodeShapeOutline, NODE_FAMILIES, NODE_FAMILY_COLOR } from './graph-shared';
+import { CODEX_GROUPS } from '../entities/worldbuilding-kinds';
 
 describe('isTap', () => {
 	it('treats zero movement as a tap', () => {
@@ -126,5 +127,68 @@ describe('computeTimelineFit', () => {
 		const { scale, offset } = computeTimelineFit([0, 100], 0, PX_PER_DAY, MIN_SCALE, MAX_SCALE, 1);
 		expect(scale).toBe(1);
 		expect(offset).toBe(0);
+	});
+});
+
+describe('nodeFamily (Connections Map shape per Codex family)', () => {
+	const kindsOf = (id: string) => CODEX_GROUPS.find((g) => g.id === id)!.kinds;
+
+	it('keeps characters round', () => {
+		expect(nodeFamily('character')).toBe('character');
+	});
+
+	it('gives every kind in a family that family, not a per-kind shape', () => {
+		for (const k of kindsOf('places')) expect(nodeFamily(k)).toBe('place');
+		for (const k of kindsOf('groups')) expect(nodeFamily(k)).toBe('group');
+		for (const k of kindsOf('items')) expect(nodeFamily(k)).toBe('item');
+	});
+
+	it('treats the retired location kind as a place', () => {
+		expect(nodeFamily('location')).toBe('place');
+	});
+
+	it('puts every other family, retired kinds and user-made kinds under "everything else"', () => {
+		for (const k of [...kindsOf('history'), ...kindsOf('systems'), ...kindsOf('setups')]) expect(nodeFamily(k)).toBe('other');
+		expect(nodeFamily('system')).toBe('other');
+		expect(nodeFamily('scene')).toBe('other');
+		expect(nodeFamily('my-own-kind')).toBe('other');
+		expect(nodeFamily('constructor')).toBe('other');
+	});
+
+	it('has a theme colour for every family', () => {
+		for (const f of NODE_FAMILIES) expect(NODE_FAMILY_COLOR[f]).toMatch(/^var\(--sg-rg-node-/);
+	});
+});
+
+describe('nodeShapeOutline', () => {
+	const farthest = (points: string) => Math.max(...points.split(' ').map((p) => {
+		const [x, y] = p.split(',').map(Number);
+		return Math.hypot(x, y);
+	}));
+
+	it('keeps every shape inside the round dot plus the triangle tip margin, so line ends still fit', () => {
+		for (const r of [6, 7.5, 9]) {
+			for (const f of ['place', 'group', 'item'] as const) {
+				const o = nodeShapeOutline(f, r);
+				if (o.tag !== 'polygon') throw new Error('expected a polygon');
+				expect(farthest(o.points)).toBeLessThanOrEqual(r * 1.08 + 0.01);
+				// Lines stop 10px from the centre: no shape may reach that far.
+				expect(farthest(o.points)).toBeLessThan(10);
+			}
+			const sq = nodeShapeOutline('other', r);
+			if (sq.tag !== 'rect') throw new Error('expected a rect');
+			expect(sq.size).toBeCloseTo(r * 1.48);
+			expect(sq.x).toBeCloseTo(-r * 0.74);
+		}
+	});
+
+	it('draws a triangle, a hexagon and a diamond', () => {
+		const count = (f: 'place' | 'group' | 'item') => {
+			const o = nodeShapeOutline(f, 8);
+			return o.tag === 'polygon' ? o.points.split(' ').length : 0;
+		};
+		expect(count('place')).toBe(3);
+		expect(count('group')).toBe(6);
+		expect(count('item')).toBe(4);
 	});
 });

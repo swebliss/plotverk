@@ -1179,7 +1179,7 @@ if (projects.length > 1) {
 				moduleId: 'codex',
 			},
 			{
-				icon: 'clock-counter-clockwise', fallback: '◷',
+				icon: 'clock', fallback: '◷',
 				label: t('dashboard.jump.activity'),
 				onClick: () => void this.plugin.openHistory(project.rootPath),
 				moduleId: 'history',

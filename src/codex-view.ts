@@ -476,6 +476,9 @@ export class StorygridCodexView extends ItemView {
 		const gen = ++this._renderGen;
 		const el = this.contentEl;
 		el.empty();
+		// Marks "a single sheet's page is showing" for the stylesheet (the store's
+		// checker flags :has(), so the CSS keys off this class instead).
+		el.toggleClass('sg-codex-root--detail', !!this.detailPath);
 
 		const project = this.currentProject();
 		if (!project) {
@@ -494,6 +497,7 @@ export class StorygridCodexView extends ItemView {
 				return;
 			}
 			this.detailPath = null; // file vanished — fall back to the gallery
+			el.removeClass('sg-codex-root--detail');
 		}
 
 		this.renderHeader(el, project);

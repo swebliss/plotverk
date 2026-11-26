@@ -20,8 +20,9 @@ import { addWebLink, cleanWebLinks, normalizeWebUrl, removeWebLink, webLinkLabel
 import { SaveLayoutModal } from './modals/save-layout-modal';
 import { ConfirmModal, TextPromptModal } from './modals/prompt-modal';
 import { SnapshotBrowserModal } from './modals/snapshot-browser-modal';
-import { BeatGuideModal } from './modals/beat-guide-modal';
-import { beatGuideFor } from './templates/beat-guide';
+import { beatGuideFor, beatGuideFromGrid, guideColumnIds, type BeatGuide } from './templates/beat-guide';
+import { bindInfoTrigger, closeInfoPopover } from './ui/info-popover';
+import { createInfoButton, fillBeatBox, fillBeatGuideBox, SHOW_DRAFT_BEAT_WORDS } from './ui/beat-guide-info';
 import { writeGridBackup, restoreNewestValidBackup } from './utils/grid-backup';
 import { getDocPreview } from './utils/doc-preview';
 import { reportError, runSafely } from './utils/report-error';
@@ -364,6 +365,7 @@ export class StorygridView extends ItemView {
 		// container for another view (e.g. a normal markdown note) — otherwise
 		// our scoped CSS would bleed onto that document.
 		this.contentEl.removeClass('sg-view-root');
+		closeInfoPopover(this.contentEl);
 		this.contentEl.empty();
 		// Always clean up global listeners when the view closes
 		if (this._themeObserver) {
@@ -585,6 +587,7 @@ export class StorygridView extends ItemView {
 		// Remember panel state across re-renders
 		const wasOpenCardId = this.panelCardId;
 
+		closeInfoPopover(this.contentEl);
 		this.contentEl.empty();
 		this.panelEl = null;
 		this.scrollContainerEl = null;
@@ -651,8 +654,9 @@ export class StorygridView extends ItemView {
 		});
 	}
 
-	/** Template grids only: the template's name + an info icon under the grid title. Clicking it opens the
-	 *  beat guide window (what beats are, how to read the grid, every beat in order). No guide text = no line. */
+	/** Template grids only: the template's name + an info icon under the grid title. Pointing at it (or
+	 *  clicking / tapping it) opens the beat guide box (how to read the grid, what beats are, every beat in
+	 *  order) — the same box as the beat guide column's "i". No guide text = no line. */
 	private renderBeatGuideLine(parent: HTMLElement): void {
 		const guide = beatGuideFor(this.gridData?.templateId, this.plugin.settings.customTemplates);
 		if (!guide) return;
@@ -662,15 +666,25 @@ export class StorygridView extends ItemView {
 		});
 		line.createSpan({ cls: 'sg-grid-template-name', text: guide.name || i18n('grid.guide.header') });
 		setPhosphorIcon(line.createSpan({ cls: 'sg-grid-template-icon' }), 'info', 'ⓘ');
-		line.addEventListener('click', () => new BeatGuideModal(this.app, guide).open());
+		bindInfoTrigger(line, {
+			build: (box) => fillBeatGuideBox(box, guide, guide.name),
+			label: () => guide.name || i18n('grid.guide.header'),
+			wide: true,
+		});
+	}
+
+	/** What the beat guide box explains: the grid's template, or (when that template is gone) the grid's own guide cards. */
+	private currentBeatGuide(): BeatGuide | null {
+		if (!this.gridData) return null;
+		return beatGuideFor(this.gridData.templateId, this.plugin.settings.customTemplates)
+			?? beatGuideFromGrid(this.gridData.rows, this.gridData.cards);
 	}
 
 	/** True while a brand-new grid's two tips are on screen (the Creator box waits for them). */
 	private _newGridTourRunning = false;
 
 	/**
-	 * Every newly created grid, once: a grid made from a template with a beat guide first opens the beat guide
-	 * window; then tip 1 points at a column name (right-click / press and hold → add rows and
+	 * Every newly created grid, once: tip 1 points at a column name (right-click / press and hold → add rows and
 	 * columns), tip 2 at a row name (drag to move). Then the Creator Grid View box appears, then every other
 	 * waiting tip follows (plugin.endGridTour).
 	 */
@@ -696,11 +710,16 @@ export class StorygridView extends ItemView {
 			if (!steps.length) { finish(); return; }
 			showCoachMarkChain(steps, finish, finish);
 		}, 500); };
-		// A grid made from a template with a beat guide explains its beats first; the two tips follow
-		// once that window is closed.
-		const guide = beatGuideFor(this.gridData?.templateId, this.plugin.settings.customTemplates);
-		if (guide) new BeatGuideModal(this.app, guide, startTips).open();
-		else startTips();
+		// The beat guide no longer opens a window here: its explanations sit behind the small "i"s in the grid.
+		startTips();
+	}
+
+	/** The quiet "Start of your book" (under the guide column's name) / "End of your book" (under the guide column) line. */
+	private renderGuideCue(parent: HTMLElement, end: 'start' | 'end'): void {
+		if (!SHOW_DRAFT_BEAT_WORDS) return; // draft words, not approved yet
+		const cue = parent.createDiv({ cls: 'sg-guide-cue sg-guide-cue--' + end });
+		setPhosphorIcon(cue.createSpan({ cls: 'sg-guide-cue-icon' }), end === 'start' ? 'caret-down' : 'flag', end === 'start' ? '↓' : '⚑');
+		cue.createSpan({ cls: 'sg-guide-cue-text', text: i18n(end === 'start' ? 'grid.beatGuide.cueStart' : 'grid.beatGuide.cueEnd') });
 	}
 
 	private renderGridOnly(): void {
@@ -709,6 +728,7 @@ export class StorygridView extends ItemView {
 		// back where they were, so a redraw never leaves them looking at blank space.
 		const sc = this.scrollContainerEl;
 		const { scrollTop, scrollLeft } = sc;
+		closeInfoPopover(sc);
 		sc.empty();
 		this.renderGrid(sc);
 		this.applyZoom();
@@ -865,6 +885,9 @@ export class StorygridView extends ItemView {
 
 		const rows = sortByOrder(this.gridData.rows);
 		const cols = sortByOrder(this.gridData.columns);
+		// The beat guide column (a template's guide cards): its name gets an "i", and a quiet
+		// "Start of your book" / "End of your book" marks its top and bottom.
+		const guideCols = guideColumnIds(this.gridData.cards);
 
 		// An armed empty cell survives re-renders, unless it has gained a card or its row/column is gone.
 		if (this.armedEmptyCellKey) {
@@ -898,7 +921,9 @@ export class StorygridView extends ItemView {
 			// Column header always uses the default header color (same as row headers);
 			// the column's color shows on its cells, not the header.
 
-			const label = th.createDiv({ cls: 'sg-header-label', text: col.label });
+			const isGuideCol = guideCols.has(col.id);
+			const labelHost = isGuideCol ? th.createDiv({ cls: 'sg-guide-head' }) : th;
+			const label = labelHost.createDiv({ cls: 'sg-header-label', text: col.label });
 			label.addEventListener('click', () => {
 				this.makeHeaderEditable(label, col.label, (newLabel) => {
 					if (!this.gridData) return;
@@ -906,6 +931,15 @@ export class StorygridView extends ItemView {
 					this.scheduleSave();
 				});
 			});
+			if (isGuideCol) {
+				th.addClass('sg-col-header--guide');
+				createInfoButton(labelHost, 'sg-guide-col-info', i18n('grid.beatGuide.lineAria'), (box) => {
+					const guide = this.currentBeatGuide();
+					const liveLabel = this.gridData?.columns.find((c) => c.id === col.id)?.label ?? col.label;
+					if (guide) fillBeatGuideBox(box, guide, guide.name || liveLabel);
+				}, true);
+				this.renderGuideCue(th, 'start');
+			}
 
 			// Edge-detection resize: no separate handle div — detect right-edge mousedown
 			this.bindColEdgeResize(th, col);
@@ -1002,6 +1036,16 @@ export class StorygridView extends ItemView {
 
 			});
 		});
+
+		// Under the beat guide column: "End of your book" (a quiet line under the grid; no row, no cards).
+		if (guideCols.size > 0 && rows.length > 0) {
+			const footRow = table.createEl('tfoot', { cls: 'sg-guide-foot' }).createEl('tr');
+			footRow.createEl('td');
+			for (const col of cols) {
+				const td = footRow.createEl('td');
+				if (guideCols.has(col.id)) this.renderGuideCue(td, 'end');
+			}
+		}
 
 		// ── Keyboard navigation ──────────────────────────────────────────────
 		// Remove any prior listener before attaching a fresh one (renderGrid may
@@ -1157,6 +1201,17 @@ export class StorygridView extends ItemView {
 		// Title
 		const titleEl = headerEl.createDiv({ cls: 'sg-card-title' });
 		titleEl.textContent = (card.title && card.title.trim()) ? card.title : '';
+
+		// Beat guide cards: a small "i" right after the percentage opens the beat's box
+		// (where it falls, the beat's name, the card's own words, read fresh each time).
+		if (card.guide) {
+			titleEl.addClass('sg-card-title--guide');
+			createInfoButton(headerEl, 'sg-card-guide-info', i18n('grid.beatGuide.cardInfoAria', { name: rowData?.label || card.title || '' }), (box) => {
+				const live = this.gridData?.cards.find((c) => c.id === card.id) ?? card;
+				const liveRow = this.gridData?.rows.find((r) => r.id === live.rowId);
+				fillBeatBox(box, live.title ?? '', liveRow?.label ?? '', live.synopsis ?? '');
+			});
+		}
 
 		// Setups planned on this card: a small view-only marker beside the title
 		this.drawSetupMarker(cardEl, headerEl, card.id);

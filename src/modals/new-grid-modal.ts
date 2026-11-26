@@ -38,7 +38,7 @@ export class NewGridModal extends Modal {
 	}
 
 	onOpen(): void {
-		this.modalEl.addClass('sg-new-grid-modal');
+		this.modalEl.addClass('sg-new-grid-modal', 'sg-wizard-modal');
 		switch (this.step) {
 			case 1:
 				this.renderStep1();

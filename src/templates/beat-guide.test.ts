@@ -1,5 +1,5 @@
-import type { StorygridTemplate } from '../grid-data';
-import { beatGuideFor, beatWhere, findTemplate } from './beat-guide';
+import type { GridRow, SceneCard, StorygridTemplate } from '../grid-data';
+import { beatGuideFor, beatGuideFromGrid, beatWhere, findTemplate, guideColumnIds, isBookPosition } from './beat-guide';
 import { getTemplateById } from './story-templates';
 
 const custom = (over: Partial<StorygridTemplate>): StorygridTemplate => ({
@@ -87,5 +87,49 @@ describe('beatGuideFor', () => {
 		const broken = custom({ name: undefined as unknown as string, rows: [null, { label: 7, hint: 'x · y' }] as unknown as StorygridTemplate['rows'] });
 		expect(beatGuideFor('custom-1', [broken])).toEqual({ name: '', beats: [{ where: '', label: '' }, { where: 'x', label: '' }] });
 		expect(beatGuideFor('custom-1', [custom({ rows: 'junk' as unknown as StorygridTemplate['rows'] })])).toBeNull();
+	});
+});
+
+describe('beatGuideFromGrid', () => {
+	const rows = [
+		{ id: 'r2', label: 'End', order: 1 },
+		{ id: 'r1', label: 'Start', order: 0 },
+	] as GridRow[];
+	const card = (over: Partial<SceneCard>): SceneCard => ({ id: 'c', rowId: 'r1', colId: 'g', title: '', ...over } as SceneCard);
+
+	it('reads the rows in order with each guide card’s title as where it falls', () => {
+		const cards = [card({ rowId: 'r1', title: ' ~4% ', guide: true }), card({ rowId: 'r2', colId: 'hero', title: 'Not a guide' })];
+		expect(beatGuideFromGrid(rows, cards)).toEqual({
+			name: '',
+			beats: [{ where: '~4%', label: 'Start' }, { where: '', label: 'End' }],
+		});
+	});
+
+	it('gives nothing when the grid has no guide cards', () => {
+		expect(beatGuideFromGrid(rows, [card({})])).toBeNull();
+		expect(beatGuideFromGrid(rows, [])).toBeNull();
+	});
+});
+
+describe('guideColumnIds', () => {
+	it('finds the columns holding guide cards', () => {
+		const cards = [
+			{ id: 'a', rowId: 'r', colId: 'g', guide: true },
+			{ id: 'b', rowId: 'r', colId: 'hero' },
+		] as SceneCard[];
+		expect([...guideColumnIds(cards)]).toEqual(['g']);
+		expect(guideColumnIds([]).size).toBe(0);
+	});
+});
+
+describe('isBookPosition', () => {
+	it('is true for a place in the book', () => {
+		for (const s of ['~10%', '0–1%', '99–100%', '10 – 20 %', '~4 %']) expect(isBookPosition(s)).toBe(true);
+	});
+
+	it('is false for other titles', () => {
+		for (const s of ['', 'Catalyst', '%', 'Act one']) expect(isBookPosition(s)).toBe(false);
+		expect(isBookPosition(undefined)).toBe(false);
+		expect(isBookPosition(10)).toBe(false);
 	});
 });

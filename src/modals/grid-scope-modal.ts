@@ -60,7 +60,11 @@ export class GridScopeModal extends Modal {
 		this.plugin = plugin;
 		this.onComplete = onComplete;
 		this.author = plugin.settings.authorName ?? '';
-		this.askDashboard = shouldAskDashboardStartup(plugin.settings);
+		// Emma 2026-11-26: the "Open your Dashboard when Obsidian starts?" question
+		// interrupted making a grid. Switched off here for now; the step, its words
+		// and shouldAskDashboardStartup stay so it can come back somewhere better.
+		void shouldAskDashboardStartup;
+		this.askDashboard = false;
 	}
 
 	/** "Written by" field, shared by both step-2 variants. */
@@ -85,6 +89,8 @@ export class GridScopeModal extends Modal {
 	}
 
 	onOpen(): void {
+		// Same window frame as the template step (NewGridModal), so steps 1-3 match.
+		this.modalEl.addClass('sg-wizard-modal');
 		this.render();
 	}
 

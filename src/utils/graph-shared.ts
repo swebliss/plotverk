@@ -2,7 +2,10 @@
 // controllers (Connections Map, Story Tree, Timeline) — extracted so they
 // stop drifting out of sync with byte-identical copies of the same code.
 
-/** Node fill color per Codex entity kind, used by both graph renderers. */
+import { CODEX_GROUPS } from '../entities/worldbuilding-kinds';
+
+/** Node fill color per Codex entity kind. The Story Tree still uses it; the
+ *  Connections Map draws its nodes by family instead (see nodeFamily below). */
 export const KIND_COLORS: Record<string, string> = {
 	character: '#7c5fd3',
 	location:  '#1f9d6b',
@@ -12,6 +15,79 @@ export const KIND_COLORS: Record<string, string> = {
 	research:  '#0d9488',
 	scene:     '#6b7280',
 };
+
+// ─── Connections Map node shapes ────────────────────────────────────────────
+// One shape per Codex family, not per kind (Emma 2026-11-26, sketch v2):
+// characters stay today's round dot; places a soft triangle, groups a hexagon,
+// items a diamond, everything else a grey rounded square. User-made kinds have
+// no family of their own, so they are "everything else".
+
+export type NodeFamily = 'character' | 'place' | 'item' | 'group' | 'other';
+
+/** Key order at the bottom of the map. */
+export const NODE_FAMILIES: readonly NodeFamily[] = ['character', 'place', 'item', 'group', 'other'];
+
+const FAMILY_BY_CODEX_GROUP = new Map<string, NodeFamily>([
+	['characters', 'character'],
+	['places', 'place'],
+	['groups', 'group'],
+	['items', 'item'],
+]);
+
+/** Retired kinds that are no longer in CODEX_GROUPS but still sit on older sheets. */
+const RETIRED_KIND_FAMILY = new Map<string, NodeFamily>([
+	['location', 'place'],
+]);
+
+/** The map family (and so the shape and colour) of a Codex kind. */
+export function nodeFamily(kind: string): NodeFamily {
+	const group = CODEX_GROUPS.find((g) => g.kinds.includes(kind));
+	if (group) return FAMILY_BY_CODEX_GROUP.get(group.id) ?? 'other';
+	return RETIRED_KIND_FAMILY.get(kind) ?? 'other';
+}
+
+/** Theme colour per family (CSS value). The variables are set on .sg-rg-root in
+ *  styles.css from Obsidian's own --color-* theme colours. */
+export const NODE_FAMILY_COLOR: Record<NodeFamily, string> = {
+	character: 'var(--sg-rg-node-character)',
+	place: 'var(--sg-rg-node-place)',
+	item: 'var(--sg-rg-node-item)',
+	group: 'var(--sg-rg-node-group)',
+	other: 'var(--sg-rg-node-other)',
+};
+
+/** Hovered / dragged nodes grow to this radius, as the round dot always has. */
+export const NODE_HOVER_R = 10;
+
+/**
+ * The visible outline of a non-character node, centred on 0,0, for a node
+ * whose round dot would have radius `r` (6–9px by connection count). Every
+ * shape stays inside that dot (the triangle's tip reaches 1.08 × r), so lines
+ * still stop at the same distance from the centre as before.
+ * Characters are a plain circle and have no entry here.
+ */
+export function nodeShapeOutline(
+	family: Exclude<NodeFamily, 'character'>,
+	r: number,
+): { tag: 'polygon'; points: string } | { tag: 'rect'; x: number; y: number; size: number; rx: number } {
+	const pts = (list: Array<[number, number]>): string =>
+		list.map(([x, y]) => `${+x.toFixed(2)},${+y.toFixed(2)}`).join(' ');
+	if (family === 'place') {
+		const R = r * 1.08;
+		return { tag: 'polygon', points: pts([[0, -R], [R * 0.866, R * 0.5], [-R * 0.866, R * 0.5]]) };
+	}
+	if (family === 'group') {
+		const R = r * 0.86;
+		return { tag: 'polygon', points: pts([[0, -R], [R * 0.866, -R * 0.5], [R * 0.866, R * 0.5], [0, R], [-R * 0.866, R * 0.5], [-R * 0.866, -R * 0.5]]) };
+	}
+	if (family === 'item') {
+		const R = r * 0.98;
+		const W = R * 0.78;
+		return { tag: 'polygon', points: pts([[0, -R], [W, 0], [0, R], [-W, 0]]) };
+	}
+	const h = r * 0.74;
+	return { tag: 'rect', x: -h, y: -h, size: 2 * h, rx: 1.4 };
+}
 
 export function makeSvg(tag: string, attrs: Record<string, string> = {}): Element {
 	const el = createSvg(tag as keyof SVGElementTagNameMap);
