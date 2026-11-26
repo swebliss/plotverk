@@ -199,7 +199,7 @@ export default class StorygridPlugin extends Plugin {
 	}
 
 	/**
-	 * Render the standard quick-launch icon row (Connections Map / Dashboard / Grid / Codex) —
+	 * Render the standard quick-launch icon row (Dashboard / Grid / Codex / Social Maps / Timeline) —
 	 * same icons, same order, same visibility rules — into a view header. Used identically by
 	 * the Codex, Writers Panel, and Dashboard headers so no view can drift out of sync with the
 	 * others or with Settings → Quick-links. Pass `gridFile` when the caller already knows which
@@ -210,11 +210,13 @@ export default class StorygridPlugin extends Plugin {
 	renderQuickLaunchRow(container: HTMLElement, where: 'top' | 'panel', gridFile?: TFile, omit: readonly QuickLinkKey[] = []): void {
 		const show = (key: QuickLinkKey) => !omit.includes(key) && this.quickLinkVisible(key, where);
 		const defs: Array<{ key: QuickLinkKey; icon: string; fallback: string; label: string; onClick: () => void }> = [
-			{ key: 'connectionsMap', icon: CONNECTIONS_MAP_ICON, fallback: '⬡', label: 'Open Social Maps', onClick: () => void this.openSocialMaps() },
+			// Emma's order (2026-11-26), same as the Plot Grid toolbar: Dashboard,
+			// Plot Grid, Codex, Social Maps, then Timeline.
 			{ key: 'dashboard', icon: DASHBOARD_ICON, fallback: '▦', label: 'Open Dashboard', onClick: () => void this.openDashboard() },
 			{ key: 'grid', icon: GRID_VIEW_ICON, fallback: '▦', label: 'Open Plot Grid', onClick: () => gridFile ? void this.openGridFile(gridFile) : void this._openCurrentGrid() },
 			// The row knows its grid: open that story's Codex, not the last-opened one.
 			{ key: 'codex', icon: CODEX_ICON, fallback: '◎', label: 'Open Codex', onClick: () => void this.openCodex(gridFile ? projectRootFromGridPath(gridFile.path) : undefined) },
+			{ key: 'connectionsMap', icon: CONNECTIONS_MAP_ICON, fallback: '⬡', label: 'Open Social Maps', onClick: () => void this.openSocialMaps() },
 			{ key: 'timeline', icon: TIMELINE_ICON, fallback: '📅', label: 'Open Timeline', onClick: () => void this.openOrCreateTimeline() },
 		];
 		let firstBtn: HTMLElement | null = null;
@@ -1192,10 +1194,11 @@ export default class StorygridPlugin extends Plugin {
 		const show = (key: QuickLinkKey) => this.quickLinkVisible(key, 'top');
 
 		const defs: Array<{ key: QuickLinkKey; icon: string; fallback: string; label: string; onClick: () => void }> = [
-			{ key: 'connectionsMap', icon: CONNECTIONS_MAP_ICON, fallback: '⬡', label: 'Open Social Maps', onClick: () => void this.openSocialMaps() },
+			// Same order as renderQuickLaunchRow and the Plot Grid toolbar.
 			{ key: 'dashboard',      icon: DASHBOARD_ICON,       fallback: '▦', label: 'Open Dashboard',        onClick: () => void this.openDashboard() },
 			{ key: 'grid',           icon: GRID_VIEW_ICON,        fallback: '▦', label: 'Open Plot Grid',        onClick: () => void this._openCurrentGrid() },
 			{ key: 'codex',          icon: CODEX_ICON,            fallback: '◎', label: 'Open Codex',      onClick: () => void this.openCodex() },
+			{ key: 'connectionsMap', icon: CONNECTIONS_MAP_ICON, fallback: '⬡', label: 'Open Social Maps', onClick: () => void this.openSocialMaps() },
 			{ key: 'timeline',       icon: TIMELINE_ICON,         fallback: '📅', label: 'Open Timeline',   onClick: () => void this.openOrCreateTimeline() },
 		];
 

@@ -354,8 +354,10 @@ describe('classifyRelation', () => {
 		expect(classifyRelation('')).toBe(RELATIONSHIP_TYPE_OTHER);
 	});
 
-	test('every registry entry has a valid hex color and positive weight', () => {
-		const hexColor = /^#[0-9a-f]{6}$/i;
+	test('every registry entry has a valid color and positive weight', () => {
+		// A hex colour, or one of the two theme line colours set in styles.css
+		// (--sg-rg-line-family / --sg-rg-line-other: grey in dark, soft blue in light).
+		const hexColor = /^(#[0-9a-f]{6}|var\(--sg-rg-line-(family|other)\))$/i;
 		for (const rt of RELATIONSHIP_TYPES) {
 			expect(rt.color).toMatch(hexColor);
 			expect(rt.weight).toBeGreaterThan(0);
@@ -568,10 +570,10 @@ describe('registry v2 — the five relationship categories', () => {
 	test('the exact colours and line styles of each type', () => {
 		const expected: Record<string, [string, string]> = {
 			'partner':         ['#E91E63', 'solid'],
-			'sibling':         ['#757575', 'solid'],
+			'sibling':         ['var(--sg-rg-line-family)', 'solid'],
 			'ally':            ['#2E7D32', 'dotted'],
 			'ex-partner':      ['#FF9800', 'solid'],
-			'parent':          ['#757575', 'solid'],
+			'parent':          ['var(--sg-rg-line-family)', 'solid'],
 			'mentor':          ['#008080', 'solid'],
 			'ruler':           ['#FFD700', 'solid'],
 			'benefactor':      ['#3F51B5', 'solid'],

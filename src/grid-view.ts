@@ -789,29 +789,9 @@ export class StorygridView extends ItemView {
 		// ── Zone 3: create & navigate ───────────────────────────────────────
 		const navGroup = toolbar.createDiv({ cls: 'sg-toolbar-group' });
 
-		// New ▾ — a single creation menu replaces three separate buttons
-		mkBtn(navGroup, {
-			icon: 'plus', fallback: '+', label: i18n('grid.toolbar.new'), tooltip: i18n('grid.toolbar.newTooltip'),
-			cls: 'sg-toolbar-btn--accent', caret: true,
-			onClick: (e) => {
-				const menu = new Menu();
-				menu.addItem((i) => i.setTitle(i18n('grid.toolbar.newCharacter')).setIcon('user').onClick(() => this.createCharacterDocument()));
-				menu.addItem((i) => i.setTitle(i18n('grid.toolbar.newScene')).setIcon('film').onClick(() => this.createSceneDocument()));
-				menu.addItem((i) => i.setTitle(i18n('grid.toolbar.newLocation')).setIcon('map-pin').onClick(() => this.createLocationDocument()));
-				menu.showAtMouseEvent(e);
-			},
-		});
-
-		// Standard quick-launch destinations — same order as the Codex/Writers Panel/
-		// Dashboard headers (Connections Map, Dashboard, Codex; Grid is skipped here
-		// since it's the view already open), each gated by Settings → Quick-links.
-		if (this.plugin.quickLinkVisible('connectionsMap', 'panel')) {
-			mkBtn(navGroup, {
-				icon: CONNECTIONS_MAP_ICON, fallback: '⬡', label: i18n('grid.toolbar.connections'), tooltip: i18n('grid.toolbar.connectionsTooltip'),
-				onClick: () => { void this.plugin.openRelGraph(); },
-			});
-		}
-
+		// Quick-launch destinations, Emma's order (2026-11-26): Dashboard, Codex,
+		// Social Maps, then "New" on the right. Grid is skipped here since it's the
+		// view already open; each is gated by Settings → Quick-links.
 		if (this.plugin.quickLinkVisible('dashboard', 'panel')) {
 			mkBtn(navGroup, {
 				icon: DASHBOARD_ICON, fallback: '◎', label: i18n('grid.toolbar.dashboard'), tooltip: i18n('grid.toolbar.dashboardTooltip'),
@@ -825,6 +805,29 @@ export class StorygridView extends ItemView {
 				onClick: () => { runSafely(this.plugin.openCodex(projectRootFromGridPath(this.filePath))); },
 			});
 		}
+
+		// Social Maps (Story Tree + Connections Map). The button predates the
+		// Social Maps section, which is why its settings/i18n keys still say
+		// "connections".
+		if (this.plugin.quickLinkVisible('connectionsMap', 'panel')) {
+			mkBtn(navGroup, {
+				icon: CONNECTIONS_MAP_ICON, fallback: '⬡', label: i18n('grid.toolbar.connections'), tooltip: i18n('grid.toolbar.connectionsTooltip'),
+				onClick: () => { void this.plugin.openSocialMaps(undefined, projectRootFromGridPath(this.filePath)); },
+			});
+		}
+
+		// New ▾ — a single creation menu replaces three separate buttons
+		mkBtn(navGroup, {
+			icon: 'plus', fallback: '+', label: i18n('grid.toolbar.new'), tooltip: i18n('grid.toolbar.newTooltip'),
+			cls: 'sg-toolbar-btn--accent', caret: true,
+			onClick: (e) => {
+				const menu = new Menu();
+				menu.addItem((i) => i.setTitle(i18n('grid.toolbar.newCharacter')).setIcon('user').onClick(() => this.createCharacterDocument()));
+				menu.addItem((i) => i.setTitle(i18n('grid.toolbar.newScene')).setIcon('film').onClick(() => this.createSceneDocument()));
+				menu.addItem((i) => i.setTitle(i18n('grid.toolbar.newLocation')).setIcon('map-pin').onClick(() => this.createLocationDocument()));
+				menu.showAtMouseEvent(e);
+			},
+		});
 
 		// No Export button here: export lives on the Dashboard and in the Writers Panel,
 		// so the grid's bar stays simple.

@@ -25703,3 +25703,517 @@ body:not(.theme-dark) .sg-sheet .sg-sheet-footer {
 	border-top-color: var(--sgx-edge);
 }
 /* [/sg-lt-sheet] */
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LIGHT THEME — PLOT GRID, FRESH + BRIGHT (v2)       [sg-lt-grid-v2]
+   Goes AFTER the 1.1.2 Plot Grid light rules (it overrides a few of them).
+   Every rule starts with  body:not(.theme-dark)  so dark never changes.
+
+   Emma (2026-11-26): the tinted page behind the grid reads dark/dull; the
+   older white look felt fresher. She keeps the brighter (white) cards.
+   So: a white page, near-white empty cells, very light grid lines, and the
+   white cards + coloured cards lift off it with one soft shadow.
+
+   NOT touched: card size, card flow, fold-out, the writer's own colours on
+   cards / rows / columns (.sg-card--filled, .sg-axis-tinted), the card
+   editor, dark.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Shared names for this block, mixed from theme colours only. */
+body:not(.theme-dark) .sg-view-root {
+	/* grid lines: a whisper, so the cards lead, not the table */
+	--sg-lt-grid-line: color-mix(in srgb, var(--text-normal) 8%, transparent);
+	/* the line under the column names / beside the row names: one step firmer */
+	--sg-lt-grid-line-head: color-mix(in srgb, var(--text-normal) 12%, transparent);
+	/* a lighter lift than the Dashboard's: on a white page a big shadow reads grey */
+	--sg-lt-lift-soft: 0 1px 2px color-mix(in srgb, var(--text-normal) 6%, transparent),
+	                   0 4px 14px -6px color-mix(in srgb, var(--text-normal) 14%, transparent);
+
+	/* Empty cells: near-white (was a grey 5% tint). */
+	--sg-cell-bg: color-mix(in srgb, var(--text-normal) 1.5%, var(--sg-lt-surface));
+
+	/* Row/column name dividers drawn by the headers themselves. */
+	--sg-header-divider:        var(--sg-lt-grid-line);
+	--sg-header-divider-strong: var(--sg-lt-grid-line);
+	--sg-row-divider:           var(--sg-lt-grid-line);
+	--sg-row-divider-strong:    var(--sg-lt-grid-line);
+}
+
+/* -- Page behind the grid: white (was the soft accent tint). -- */
+body:not(.theme-dark) .sg-view-root,
+body:not(.theme-dark) .sg-view-root .sg-wrapper {
+	background: var(--sg-lt-surface);
+}
+
+/* -- Tool bar: stays a white panel; on the white page it needs a visible
+   hairline and only a light lift. -- */
+body:not(.theme-dark) .sg-view-root .sg-toolbar {
+	border-color: var(--sg-lt-hairline);
+	box-shadow: var(--sg-lt-lift-soft);
+}
+
+/* -- Grid frame: a flat white sheet with one hairline, no floating shadow
+   (like the older look) - the cards carry the depth now. -- */
+body:not(.theme-dark) .sg-view-root .sg-scroll-container {
+	border-color: var(--sg-lt-hairline);
+	box-shadow: none;
+}
+
+/* -- Grid lines between cells: very light. Cells that carry the writer's
+   row/column colour keep their own darker line (.sg-axis-tinted). -- */
+body:not(.theme-dark) .sg-view-root .sg-grid :is(th, td):not(.sg-axis-tinted) {
+	border-color: var(--sg-lt-grid-line);
+}
+
+/* -- Column names: white band, one firmer line underneath so the header
+   still reads as the top of the sheet. -- */
+body:not(.theme-dark) .sg-view-root .sg-corner,
+body:not(.theme-dark) .sg-view-root .sg-col-header:not(.sg-axis-tinted) {
+	border-bottom-color: var(--sg-lt-grid-line-head);
+}
+
+/* -- Row names: white, one firmer line on their right so the names read as
+   their own column. -- */
+body:not(.theme-dark) .sg-view-root .sg-corner,
+body:not(.theme-dark) .sg-view-root .sg-row-header:not(.sg-axis-tinted) {
+	border-right-color: var(--sg-lt-grid-line-head);
+}
+body:not(.theme-dark) .sg-view-root .sg-row-header .sg-header-label {
+	color: var(--text-normal);
+}
+
+/* -- Cards (all, coloured or not): the lighter lift so they sit ON the white
+   sheet. Framed / status-frame / editing / dragging / live-swap cards keep
+   their own rings (same list as the 1.1.2 rule). -- */
+body:not(.theme-dark) .sg-view-root .sg-card:not(.sg-card--framed, .sg-card--status-frame, .sg-card--editing, .sg-dragging, .sg-card--live-swap) {
+	box-shadow: var(--sg-lt-lift-soft);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LIGHT THEME — STORY TIMELINE, STORY TREE, CONNECTIONS MAP   [sg-lt-maps]
+   Emma approved 2026-11-26 (Fable sketch v2 + lines v3). Light only.
+   Needs [sg-lt-shared] (--sg-lt-*).
+   Every rule starts with  body:not(.theme-dark)  so dark never changes.
+
+   The idea in one line: the clean look of the Codex sheet - a white page,
+   the tools sitting straight on it (no bar box, no outlines, no shadow),
+   icon-only buttons, the accent only as touches, a key row like a footnote.
+
+   NOT touched: node shapes, line colours and line strength on the
+   Connections Map, node click / drag, every word and button, the writer's
+   own colours (events, eras, families, factions), dark.
+   Shapes: 6px corners or round only. Colours: theme colours only.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Shared names for this block (the lighter lift Plot Grid v2 uses on white). */
+body:not(.theme-dark) :is(.sg-tl-root, .sg-st-root, .sg-rg-root, .sg-sm-root) {
+	--sg-lt-lift-soft: 0 1px 2px color-mix(in srgb, var(--text-normal) 6%, transparent),
+	                   0 4px 14px -6px color-mix(in srgb, var(--text-normal) 14%, transparent);
+	--sg-lt-lift-side: -1px 0 2px color-mix(in srgb, var(--text-normal) 5%, transparent),
+	                   -12px 0 28px -14px color-mix(in srgb, var(--text-normal) 22%, transparent);
+}
+
+/* ── 1 · Page: white behind every canvas (as Plot Grid v2) ───────────────── */
+body:not(.theme-dark) :is(.sg-tl-root, .sg-st-root, .sg-rg-root, .sg-sm-root) {
+	background: var(--sg-lt-surface);
+}
+/* Names drawn on the canvas carry a halo in the page colour: it follows the
+   white page (matters for themes whose own page is not white). */
+body:not(.theme-dark) :is(.sg-tl-svg-wrap, .sg-st-svg-wrap, .sg-rg-svg-wrap) {
+	--background-primary: var(--sg-lt-surface);
+}
+
+/* ── 2 · Social Maps tabs: soft line, accent icon on the open tab ────────── */
+body:not(.theme-dark) .sg-sm-root .sg-flat-tabs {
+	margin: 6px 12px 0;
+	border-bottom-color: var(--sg-lt-edge);
+}
+body:not(.theme-dark) .sg-sm-root .sg-flat-tab.is-active .sg-flat-tab-icon {
+	color: var(--sg-ink-accent);
+}
+
+/* ── 3 · Tool bars: no bar at all, the tools sit straight on the white page
+   (as on the Codex sheet). No box, no outline, no shadow. ───────────────── */
+body:not(.theme-dark) :is(.sg-tl-toolbar, .sg-st-toolbar, .sg-rg-toolbar, .sg-st-focus-bar) {
+	background: var(--sg-lt-surface);
+	border-bottom-color: transparent;
+}
+/* The Timeline alone keeps one very quiet line: its coloured era bands run
+   right up to the tools and would otherwise look cut off. The two maps have
+   the tab line just above and a white canvas below, so they need none. */
+body:not(.theme-dark) .sg-tl-toolbar {
+	border-bottom-color: var(--sg-lt-edge);
+}
+/* A little more air on desktop and tablet (phones keep their own spacing). */
+@media (min-width: 769px) {
+	body:not(.theme-dark) :is(.sg-st-toolbar, .sg-rg-toolbar) {
+		padding: 10px 16px 6px;
+	}
+	body:not(.theme-dark) .sg-tl-toolbar {
+		padding-left: 16px;
+		padding-right: 16px;
+	}
+}
+/* The project name: a real title, not grey small print. */
+body:not(.theme-dark) :is(.sg-st-scope-name, .sg-rg-scope-name) {
+	margin: 0 8px 0 0;
+	font-size: 14px;
+	font-weight: 650;
+	letter-spacing: -0.005em;
+	color: var(--text-normal);
+}
+
+/* ── 4 · Quiet icon buttons: just the icon in grey, no box at rest;
+   hover = a soft accent tint behind an accent icon
+   (zoom, fit, refresh / reset layout, the gear; the Timeline's four) ─────── */
+body:not(.theme-dark) :is(.sg-st-root, .sg-rg-root) button:is(.sg-st-zoom-btn, .sg-st-refresh-btn, .sg-rg-zoom-btn, .sg-rg-refresh-btn, .sg-rg-settings-btn),
+body:not(.theme-dark) .sg-tl-root button.sg-tl-btn:not(.sg-tl-btn-primary) {
+	background-color: transparent;
+	border: 1px solid transparent;
+	box-shadow: none;
+	color: var(--text-muted);
+	--text-color: var(--text-muted);
+}
+body:not(.theme-dark) :is(.sg-st-root, .sg-rg-root) button:is(.sg-st-zoom-btn, .sg-st-refresh-btn, .sg-rg-zoom-btn, .sg-rg-refresh-btn, .sg-rg-settings-btn) {
+	width: 28px;
+	height: 28px;
+}
+body:not(.theme-dark) :is(.sg-st-root, .sg-rg-root) button:is(.sg-st-zoom-btn, .sg-st-refresh-btn, .sg-rg-zoom-btn, .sg-rg-refresh-btn, .sg-rg-settings-btn):hover,
+body:not(.theme-dark) .sg-tl-root button.sg-tl-btn:not(.sg-tl-btn-primary):hover {
+	background-color: var(--sg-lt-chip-bg);
+	color: var(--sg-btn-soft-ink);
+	--text-color: var(--sg-btn-soft-ink);
+}
+/* "Appearance" keeps dark words; only its icon is the accent touch. */
+body:not(.theme-dark) .sg-tl-root button.sg-tl-btn.sg-tl-btn-labeled:not(.sg-tl-btn-primary) {
+	color: var(--text-normal);
+	--text-color: var(--text-normal);
+	font-weight: 500;
+}
+body:not(.theme-dark) .sg-tl-root button.sg-tl-btn.sg-tl-btn-labeled:not(.sg-tl-btn-primary) svg {
+	color: var(--sg-ink-accent);
+}
+/* The gear while its panel is open: a soft accent chip, no outline. */
+body:not(.theme-dark) :is(.sg-st-root, .sg-rg-root) button.sg-rg-settings-btn.is-active {
+	background-color: var(--sg-lt-chip-bg);
+	color: var(--sg-ink-accent);
+	--text-color: var(--sg-ink-accent);
+}
+body:not(.theme-dark) :is(.sg-tl-root, .sg-st-root, .sg-rg-root) button:is(.sg-tl-btn, .sg-st-zoom-btn, .sg-st-refresh-btn, .sg-st-mode-btn, .sg-rg-zoom-btn, .sg-rg-refresh-btn, .sg-rg-settings-btn, .sg-rg-filter-pill, .sg-st-focus-pill, .sg-st-focus-select, .sg-rg-settings-close, .sg-tl-info-close, .sg-tl-appearance-reset):focus-visible {
+	outline: none;
+	box-shadow: var(--sg-btn-focus-ring);
+}
+
+/* ── 5 · Story Tree: "Family tree / Faction hierarchy" switch ──────────────
+   Two plain words, no track and no box round them. The open one is a soft
+   accent chip with accent words; the other is quiet grey. */
+body:not(.theme-dark) .sg-st-root .sg-st-mode-toggle {
+	gap: 2px;
+	padding: 0;
+	border-color: transparent;
+	background: transparent;
+}
+body:not(.theme-dark) .sg-st-root button.sg-st-mode-btn {
+	padding: 5px 11px;
+	border-radius: 6px;
+	background-color: transparent;
+	box-shadow: none;
+	color: var(--text-muted);
+	--text-color: var(--text-muted);
+}
+body:not(.theme-dark) .sg-st-root button.sg-st-mode-btn:hover {
+	background-color: var(--sg-lt-tint-hover);
+	color: var(--text-normal);
+	--text-color: var(--text-normal);
+}
+body:not(.theme-dark) .sg-st-root button.sg-st-mode-btn.is-active {
+	background-color: var(--sg-lt-chip-bg);
+	color: var(--sg-ink-accent);
+	--text-color: var(--sg-ink-accent);
+	font-weight: 600;
+}
+
+/* ── 6 · Connections Map: the "Perspective" box and other small fields ───── */
+body:not(.theme-dark) :is(.sg-st-root, .sg-rg-root, .sg-tl-root) :is(select.sg-rg-perspective-select, select.sg-rg-settings-select, select.sg-tl-appearance-select, input.sg-tl-range-year, input.sg-st-depth-input, button.sg-st-focus-select, button.sg-rg-group-btn) {
+	background-color: var(--sg-lt-surface);
+	border: 1px solid var(--sg-lt-hairline);
+	box-shadow: none;
+}
+body:not(.theme-dark) :is(.sg-st-root, .sg-rg-root, .sg-tl-root) :is(select.sg-rg-perspective-select, select.sg-rg-settings-select, select.sg-tl-appearance-select, button.sg-st-focus-select, button.sg-rg-group-btn):hover {
+	background-color: var(--sg-lt-tint-hover);
+	border-color: var(--sg-btn-soft-border);
+}
+
+/* ── 7 · Key rows under each canvas: on the white page, with one very quiet
+   line above, like the rule over a footnote (was a grey strip) ─────────── */
+body:not(.theme-dark) :is(.sg-st-legend, .sg-rg-legend, .sg-tl-key, .sg-tl-shelf) {
+	background: var(--sg-lt-surface);
+	border-top: 1px solid var(--sg-lt-edge);
+}
+body:not(.theme-dark) .sg-tl-key {
+	gap: 6px 18px;
+	padding-top: 8px;
+	padding-left: 16px;
+	padding-right: 16px;
+}
+body:not(.theme-dark) :is(.sg-st-legend, .sg-rg-legend) {
+	padding-top: 8px;
+	padding-bottom: 8px;
+}
+body:not(.theme-dark) .sg-st-couple-key {
+	background: var(--sg-lt-surface);
+}
+
+/* ── 8 · Side panels (the gear's panel on both maps, the Timeline's
+   "Appearance"): white, a hairline, one soft shadow toward the canvas ────── */
+body:not(.theme-dark) :is(.sg-rg-settings-panel, .sg-tl-appearance-panel) {
+	background: var(--sg-lt-surface);
+	border-left-color: var(--sg-lt-hairline);
+	box-shadow: var(--sg-lt-lift-side);
+}
+/* The gear panel waits just off the right edge while closed: no shadow then,
+   or it would spill a grey edge onto the canvas. */
+body:not(.theme-dark) .sg-rg-settings-panel:not(.is-open) {
+	box-shadow: none;
+}
+body:not(.theme-dark) .sg-rg-settings-header {
+	padding: 14px 14px 12px;
+	border-bottom-color: var(--sg-lt-edge);
+}
+body:not(.theme-dark) :is(.sg-rg-settings-title, .sg-tl-panel-title) {
+	font-size: 15px;
+	font-weight: 650;
+	color: var(--text-normal);
+}
+/* Close: just the cross, a soft tint on hover (was a boxed button). */
+body:not(.theme-dark) button:is(.sg-rg-settings-close, .sg-tl-info-close) {
+	background-color: transparent;
+	border: none;
+	box-shadow: none;
+	color: var(--text-muted);
+	--text-color: var(--text-muted);
+}
+body:not(.theme-dark) button:is(.sg-rg-settings-close, .sg-tl-info-close):hover {
+	background-color: var(--sg-lt-tint-press);
+	color: var(--sg-ink-accent);
+	--text-color: var(--sg-ink-accent);
+}
+/* Sections: a strong title in normal letters, one hairline between sections
+   (was small grey CAPITALS and no line). */
+body:not(.theme-dark) .sg-rg-settings-body {
+	gap: 0;
+	padding: 2px 14px 14px;
+}
+body:not(.theme-dark) .sg-rg-settings-section {
+	gap: 8px;
+	padding: 11px 0;
+}
+body:not(.theme-dark) .sg-rg-settings-section + .sg-rg-settings-section {
+	border-top: 1px solid var(--sg-lt-edge);
+}
+body:not(.theme-dark) .sg-rg-settings-section-title {
+	font-size: 13px;
+	font-weight: 650;
+	letter-spacing: 0;
+	text-transform: none;
+	color: var(--text-normal);
+}
+body:not(.theme-dark) .sg-rg-settings-section:not(.is-collapsed) .sg-rg-settings-chevron {
+	color: var(--sg-ink-accent);
+}
+body:not(.theme-dark) .sg-rg-settings-section-header:hover .sg-rg-settings-section-title {
+	color: var(--sg-ink-accent);
+}
+body:not(.theme-dark) .sg-rg-filter-group {
+	gap: 6px;
+}
+body:not(.theme-dark) .sg-rg-filter-label {
+	font-weight: 600;
+}
+/* Show / Relations buttons and the tree's "Partners": white with a hairline;
+   switched on = soft accent chip (was a solid accent block). */
+body:not(.theme-dark) :is(.sg-rg-root, .sg-st-root) button:is(.sg-rg-filter-pill, .sg-st-focus-pill) {
+	background-color: var(--sg-lt-surface);
+	border: 1px solid var(--sg-lt-hairline);
+	box-shadow: none;
+	color: var(--text-normal);
+	--text-color: var(--text-normal);
+}
+body:not(.theme-dark) :is(.sg-rg-root, .sg-st-root) button:is(.sg-rg-filter-pill, .sg-st-focus-pill):hover {
+	background-color: var(--sg-lt-tint-hover);
+	border-color: var(--sg-btn-soft-border);
+}
+body:not(.theme-dark) :is(.sg-rg-root, .sg-st-root) button:is(.sg-rg-filter-pill, .sg-st-focus-pill).is-active {
+	background-color: var(--sg-lt-chip-bg);
+	border-color: var(--sg-btn-soft-border);
+	color: var(--sg-ink-accent);
+	--text-color: var(--sg-ink-accent);
+	font-weight: 600;
+}
+/* Switched off: clearly "off" without fading the words away. */
+body:not(.theme-dark) .sg-rg-root button.sg-rg-filter-pill.is-hidden {
+	opacity: 1;
+	background-color: var(--sg-lt-inset);
+	border-style: dashed;
+	color: var(--text-faint);
+	--text-color: var(--text-faint);
+}
+body:not(.theme-dark) .sg-rg-root button.sg-rg-filter-pill.is-hidden :is(.sg-rg-shape-icon, .sg-rg-pill-swatch) {
+	opacity: 0.35;
+}
+/* Timeline "Appearance": the same quiet white controls. */
+body:not(.theme-dark) .sg-tl-appearance-panel {
+	padding: 16px;
+}
+body:not(.theme-dark) .sg-tl-range {
+	border-bottom-color: var(--sg-lt-edge);
+}
+body:not(.theme-dark) .sg-tl-appearance-label {
+	color: var(--text-normal);
+}
+body:not(.theme-dark) .sg-tl-appearance-value {
+	color: var(--sg-ink-accent);
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+}
+body:not(.theme-dark) .sg-tl-root button.sg-tl-appearance-reset {
+	background-color: var(--sg-lt-surface);
+	border: 1px solid var(--sg-lt-hairline);
+	box-shadow: none;
+}
+body:not(.theme-dark) .sg-tl-root button.sg-tl-appearance-reset:hover {
+	background-color: var(--sg-lt-tint-hover);
+	border-color: var(--sg-btn-soft-border);
+}
+
+/* ── 9 · Story Tree canvas: person cards rest on the white page ────────────
+   A lighter hairline and one soft shadow (was a darker outline, no lift). */
+body:not(.theme-dark) .sg-st-root .sg-st-node-card {
+	fill: var(--sg-lt-surface);
+	stroke: var(--sg-lt-hairline);
+	filter: drop-shadow(0 1px 1.5px color-mix(in srgb, var(--text-normal) 9%, transparent))
+	        drop-shadow(0 5px 7px color-mix(in srgb, var(--text-normal) 7%, transparent));
+}
+body:not(.theme-dark) .sg-st-root .sg-st-node:hover:not(.is-focus) .sg-st-node-card {
+	stroke: var(--sg-btn-soft-ink);
+	stroke-width: 1.25;
+}
+/* Family / faction names above each group: a strong title. */
+body:not(.theme-dark) .sg-st-root .sg-st-block-title {
+	font-weight: 700;
+	letter-spacing: 0.01em;
+}
+/* The connecting lines: one step lighter so the cards lead. */
+body:not(.theme-dark) .sg-st-root .sg-st-svg .sg-st-edge:not(.sg-st-couple, .sg-st-couple-slash) {
+	stroke: color-mix(in srgb, var(--text-muted) 70%, var(--sg-lt-surface));
+}
+body:not(.theme-dark) .sg-st-legend-deceased {
+	border-color: var(--sg-lt-hairline);
+	border-radius: 3px;
+}
+
+/* ── 10 · Story Timeline canvas ───────────────────────────────────────────── */
+/* Year labels on the main line: white with a hairline (were grey boxes). */
+body:not(.theme-dark) .sg-tl-root .sg-tl-year-chip-bg {
+	fill: var(--sg-lt-surface);
+	stroke: var(--sg-lt-hairline);
+}
+body:not(.theme-dark) .sg-tl-root .sg-tl-year-chip-text {
+	fill: var(--text-normal);
+}
+/* The main line when the writer has not picked a colour: a softer grey, so
+   the events' own colours lead. A colour chosen by the writer is untouched
+   (it is set on the line itself). */
+body:not(.theme-dark) .sg-tl-root :is(.sg-tl-spine, .sg-tl-cap-dot, .sg-tl-key-spine) {
+	fill: color-mix(in srgb, var(--text-muted) 42%, var(--sg-lt-surface));
+}
+/* Event badges: the outline around the white ring, lighter, plus a soft lift. */
+body:not(.theme-dark) .sg-tl-root .sg-tl-node-halo {
+	stroke: color-mix(in srgb, var(--text-normal) 16%, transparent);
+	filter: drop-shadow(0 2px 3px color-mix(in srgb, var(--text-normal) 14%, transparent));
+}
+/* Empty state: a real title. */
+body:not(.theme-dark) :is(.sg-tl-empty, .sg-st-no-connections, .sg-rg-no-connections) h3 {
+	margin-top: 8px;
+	font-size: 18px;
+	font-weight: 650;
+	letter-spacing: -0.01em;
+}
+body:not(.theme-dark) :is(.sg-tl-empty-body, .sg-st-no-connections p, .sg-rg-no-connections p) {
+	font-size: 14px;
+}
+body:not(.theme-dark) .sg-tl-empty-hints {
+	gap: 4px;
+	margin: 4px 0 6px;
+}
+body:not(.theme-dark) .sg-tl-empty-hint {
+	font-size: 12.5px;
+	color: var(--text-muted);
+}
+body:not(.theme-dark) :is(.sg-st-example-line, .sg-rg-example-line) {
+	background: var(--sg-lt-inset);
+}
+/* Undated events row: white chips with a hairline. */
+body:not(.theme-dark) .sg-tl-root .sg-tl-shelf-chip {
+	background: var(--sg-lt-surface);
+	border-color: var(--sg-lt-hairline);
+}
+/* [/sg-lt-maps] */
+
+/* ── 12 · Connections Map lines [sg-lt-maps-lines] ─────────────────────────
+   At rest every line is quiet so the nodes lead; the kinds that have no colour
+   of their own (Parent, Child, Siblings, "Other", Unspecified — grey today)
+   are a soft periwinkle: the theme's own blue with a little of its purple, so
+   they sit with the purple character dots and stay apart from the sky-blue
+   "Resident Of" line. Pointing at a node brings
+   its lines up to full colour and full weight; the rest step back.
+   Those kinds read their colour from --sg-rg-line-family (Parent, Child,
+   Siblings, great-grand…) and --sg-rg-line-other ("Other") — set in
+   src/utils/relations.ts. Both themes start from today's greys, so dark (and
+   the Codex relation bars in dark) stay exactly as before. ── */
+body {
+	--sg-rg-line-family: #757575;
+	--sg-rg-line-other: #98a0ad;
+}
+body:not(.theme-dark) {
+	--sg-rg-line-strong: color-mix(in srgb, var(--color-blue) 55%, var(--color-purple));
+	--sg-rg-line-default: color-mix(in srgb, var(--sg-rg-line-strong) 58%, var(--background-primary));
+	--sg-rg-line-family: var(--sg-rg-line-default);
+	--sg-rg-line-other: var(--sg-rg-line-default);
+}
+body:not(.theme-dark) .sg-rg-edge {
+	stroke-opacity: 0.42;
+	/* Thick kinds slimmed: 3 draws 1.25px (was 1.8), 2 draws 1.05 (was 1.2), 1.5 stays 0.95. Thicker still means closer. */
+	stroke-width: max(0.8px, calc(0.65px + var(--sg-rg-w) * 0.2px));
+}
+body:not(.theme-dark) .sg-rg-edge--bare {
+	stroke: var(--sg-rg-line-default);
+	stroke-width: 0.8px;
+	stroke-opacity: 0.8;
+}
+/* Dotted lines (Allies) are mostly gaps, so they keep a little more ink. */
+body:not(.theme-dark) .sg-rg-edge[data-style="dotted"] {
+	stroke-opacity: 0.72;
+}
+/* Pointing at a node: its own lines in full colour, a little heavier. */
+body:not(.theme-dark) .sg-rg-edge.is-highlighted {
+	--sg-rg-line-default: var(--sg-rg-line-strong);
+	--sg-rg-line-family: var(--sg-rg-line-strong);
+	--sg-rg-line-other: var(--sg-rg-line-strong);
+	stroke-opacity: 1;
+	stroke-width: max(1.3px, calc(var(--sg-rg-w) * 0.8px));
+}
+/* …and every other line steps back (still there, so the map keeps its shape). */
+body:not(.theme-dark) .sg-rg-edge.is-dimmed {
+	opacity: 0.32;
+}
+/* Key at the bottom: swatches as soft as the lines they explain. */
+body:not(.theme-dark) .sg-rg-legend-swatch {
+	opacity: 0.54;
+	max-height: 2px;
+}
+body:not(.theme-dark) .sg-rg-legend-swatch--bare {
+	background: var(--sg-rg-line-default);
+	opacity: 0.68;
+}
+/* [/sg-lt-maps-lines] */

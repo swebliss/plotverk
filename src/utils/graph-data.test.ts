@@ -52,7 +52,7 @@ describe('buildGraphData', () => {
 		const motherEdge = data.edges.find((e) => e.label === 'Mother');
 		const rivalEdge = data.edges.find((e) => e.label === 'Rival');
 		expect(motherEdge?.relType.id).toBe('parent');
-		expect(motherEdge?.relType.color).toBe('#757575');
+		expect(motherEdge?.relType.color).toBe('var(--sg-rg-line-family)');
 		expect(motherEdge?.relType.weight).toBeGreaterThan(2);
 		expect(rivalEdge?.relType.id).toBe('rival');
 		expect(rivalEdge?.relType.color).toBe('#C62828');
